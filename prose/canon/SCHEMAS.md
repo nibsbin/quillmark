@@ -376,7 +376,7 @@ Scalar → content is the lossy direction: the stored string enters the codec's 
 
 A card groups fields by declaring a top-level `object`: its properties share one
 address segment, and its `title` and `description` label the group for an
-editor and the blueprint. A card carries no grouping construct of its own.
+editor and the blueprint.
 
 ```yaml
 main:
@@ -1029,7 +1029,7 @@ is the `overlay = None` case.
 
 - Field types, constraints, and `enum`/`default` annotations
 - `title` on fields and cards: a literal label, which the blueprint prints wherever it prints the description, and which no `ui` key carries, since `ui` never reaches the blueprint
-- `ui` hints on fields (`group`, `compact`, `multiline`, `blank_title`, `layout`) and on cards (`groups`), as authored ([Grouping](#grouping)). Field display order is not a hint: it is the key order of the emitted `fields`/`properties` maps (declaration order)
+- `ui` hints on fields (`group`, `compact`, `multiline`, `blank_title`, `layout`) and on cards (`groups`), as settled at load ([Grouping](#grouping)). Field display order is not a hint: it is the key order of the emitted `fields`/`properties` maps (declaration order)
 - `body` blocks on cards (`enabled`)
 - `seed` on a card kind that declares one, in the `$seed.<kind>` shape
 

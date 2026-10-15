@@ -156,13 +156,6 @@ struct CardSchemaDef {
     pub seed: Option<serde_json::Value>,
 }
 
-/// A card's field declarations.
-struct DeclaredFields {
-    fields: IndexMap<String, FieldSchema>,
-    /// Every key declared, parsed or not.
-    names: Vec<String>,
-}
-
 #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
 pub enum CoercionError {
     #[error("cannot coerce `{value}` to type `{target}` at `{path}`: {reason}")]
@@ -1868,7 +1861,9 @@ impl QuillConfig {
                     diag = diag.with_hint(
                         "A card groups fields under a top-level `object`: declare each \
                          section under `fields:` as `<id>: { type: object, title: …, \
-                         properties: { … } }`."
+                         properties: { … } }`. Documents then nest each section's keys under \
+                         its id; to keep every address, list the fields under `fields:` \
+                         instead."
                             .to_string(),
                     );
                 }
@@ -2053,19 +2048,6 @@ impl QuillConfig {
         }
 
         fields
-    }
-
-    /// Gather and parse a card's `fields:`.
-    fn declared_fields(
-        def: &CardSchemaDef,
-        context: &str,
-        errors: &mut Vec<Diagnostic>,
-    ) -> DeclaredFields {
-        let raw = def.fields.clone().unwrap_or_default();
-        DeclaredFields {
-            fields: Self::parse_fields(&raw, context, errors),
-            names: raw.keys().cloned().collect(),
-        }
     }
 
     fn deprecated_groups(label: &str) -> Diagnostic {
@@ -2454,12 +2436,16 @@ impl QuillConfig {
             }
         }
 
-        let main_def = quill_yaml_val
+        let mut main_def = quill_yaml_val
             .get("main")
             .and_then(|main_val| Self::parse_card_schema_def(main_val, "main", &mut errors))
             .unwrap_or_default();
 
-        let main_declared = Self::declared_fields(&main_def, "field schema", &mut errors);
+        let main_fields = Self::parse_fields(
+            &main_def.fields.take().unwrap_or_default(),
+            "field schema",
+            &mut errors,
+        );
 
         let main_ui = Self::parse_card_ui(main_def.ui.as_ref(), "main.ui", "main", &mut errors);
 
@@ -2493,7 +2479,7 @@ impl QuillConfig {
             name: "main".to_string(),
             title: main_def.title,
             description: main_description,
-            fields: main_declared.fields,
+            fields: main_fields,
             ui: main_ui.or(ui_section),
             body: main_body,
             seed: None,
@@ -2547,14 +2533,15 @@ impl QuillConfig {
                         }
 
                         let label = format!("card_kinds.{}", card_name);
-                        let card_def =
+                        let mut card_def =
                             match Self::parse_card_schema_def(card_value, &label, &mut errors) {
                                 Some(d) => d,
                                 None => continue,
                             };
 
-                        let declared = Self::declared_fields(
-                            &card_def,
+                        let raw_fields = card_def.fields.take().unwrap_or_default();
+                        let fields = Self::parse_fields(
+                            &raw_fields,
                             &format!("card_kind '{}' field", card_name),
                             &mut errors,
                         );
@@ -2583,15 +2570,15 @@ impl QuillConfig {
                             name: card_name.clone(),
                             title: card_def.title,
                             description: card_def.description,
-                            fields: declared.fields,
+                            fields,
                             ui: card_ui,
                             body: card_body,
                             seed: None,
                         };
                         if let Some(seed) = card_def.seed {
-                            let unparsed: Vec<String> = declared
-                                .names
+                            let unparsed: Vec<String> = raw_fields
                                 .into_iter()
+                                .map(|(key, _)| key)
                                 .filter(|key| !card.fields.contains_key(key))
                                 .collect();
                             kind_seeds.push((card_kinds.len(), seed, unparsed));
@@ -2748,23 +2735,23 @@ fn settle_groups(card: &mut CardSchema) {
     let Some(GroupRegistry(registry)) = card.ui.as_mut().and_then(|ui| ui.groups.take()) else {
         return;
     };
-    let section_of = |field: &FieldSchema| field.ui.as_ref().and_then(|ui| ui.group.clone());
-    let (mut fields, mut sectioned): (IndexMap<_, _>, IndexMap<_, _>) =
+    let group_of = |field: &FieldSchema| field.ui.as_ref().and_then(|ui| ui.group.clone());
+    let (mut fields, mut grouped): (IndexMap<_, _>, IndexMap<_, _>) =
         std::mem::take(&mut card.fields)
             .into_iter()
-            .partition(|(_, field)| section_of(field).is_none());
+            .partition(|(_, field)| group_of(field).is_none());
     let mut kept = Vec::new();
-    for section in registry {
-        let held: Vec<String> = sectioned
+    for group in registry {
+        let held: Vec<String> = grouped
             .iter()
-            .filter(|(_, field)| section_of(field).as_ref() == Some(&section.id))
+            .filter(|(_, field)| group_of(field).as_ref() == Some(&group.id))
             .map(|(name, _)| name.clone())
             .collect();
         if held.is_empty() {
             continue;
         }
         if let [only] = held.as_slice() {
-            let field = &mut sectioned[only];
+            let field = &mut grouped[only];
             if field.r#type == FieldType::Object {
                 field
                     .ui
@@ -2774,12 +2761,12 @@ fn settle_groups(card: &mut CardSchema) {
             }
         }
         for name in held {
-            let (name, field) = sectioned.shift_remove_entry(&name).expect("held above");
+            let (name, field) = grouped.shift_remove_entry(&name).expect("held above");
             fields.insert(name, field);
         }
-        kept.push(section);
+        kept.push(group);
     }
-    fields.extend(sectioned);
+    fields.extend(grouped);
     card.fields = fields;
     card.ui = (!kept.is_empty()).then(|| UiCardSchema {
         groups: Some(GroupRegistry(kept)),

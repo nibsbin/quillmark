@@ -35,9 +35,13 @@ main:
           default: draft
 card_kinds:
   indorsement:
+    ui:
+      groups:
+        closing: { title: Closing }
     fields:
       signature_block:
         type: string
+        ui: { group: closing }
 "#;
 
     #[test]
