@@ -766,16 +766,28 @@ It labels the blank, never a member: `values:` carries no entry for it. Consumer
 
 ### `compact`
 
-When `true`, the UI renders this field in a compact style (smaller vertical footprint).
+Asks an editor to set a card-level field beside its neighbours in one row, where it would take a row of its own. Absent, the field's type decides:
+
+| Packs by default | Full row by default |
+|---|---|
+| `date`, `datetime`, `enum` (without `variants:`), `integer`, `number`, `boolean` | `string`, `plaintext`, `richtext`, `array`, `object`, `matrix` |
+
+A text field packs only under `compact: true`, since its type cannot say whether a value is a rank or a subject line; `compact: false` keeps a packing type on its own row.
 
 ```yaml
 main:
   fields:
-    tag:
+    rank:
       type: string
       ui:
         compact: true
+    due:
+      type: date
+      ui:
+        compact: false
 ```
+
+It is a request: an editor grants it only where a neighbour packs too, so a packing field alone between full-row fields still takes its row. An `array`, an `object`, an `enum` with `variants:` and a block `plaintext` or `richtext` never pack, whatever the key says, since their height grows with the document; a one-line (`inline`) `plaintext` or `richtext` packs like a `string`. On a `matrix`, `compact: true` sets the roster's members side by side instead. The properties of an `object` and the cells of a typed table are laid out by their container and read no `compact`.
 
 ### `multiline`
 
