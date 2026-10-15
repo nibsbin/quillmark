@@ -114,6 +114,11 @@ pub struct QuillConfig {
     /// selector a document's `$quill` carries.
     pub version: String,
     pub author: String,
+    /// `quill.license`: an SPDX license expression.
+    pub license: Option<String>,
+    /// `quill.homepage`: an absolute `http` or `https` URL where the quill's
+    /// source or docs live.
+    pub homepage: Option<String>,
     /// The top-level YAML section whose key matches `backend`.
     #[serde(default)]
     pub backend_config: HashMap<String, QuillValue>,
@@ -121,7 +126,8 @@ pub struct QuillConfig {
 
 impl QuillConfig {
     /// The four fields `Quill.yaml` requires. `description`, `author`,
-    /// `card_kinds`, and `backend_config` start empty.
+    /// `card_kinds`, and `backend_config` start empty; `license` and `homepage`
+    /// start absent.
     ///
     /// This bypasses [`Self::from_yaml_with_warnings`] and its validation, so a
     /// config built here can hold shapes the parser refuses. Loading a quill
@@ -136,6 +142,8 @@ impl QuillConfig {
             backend,
             version,
             author: String::new(),
+            license: None,
+            homepage: None,
             backend_config: HashMap::new(),
         }
     }
@@ -2165,6 +2173,63 @@ impl QuillConfig {
         Ok(())
     }
 
+    /// `quill.license`: `None` when absent, else an SPDX license expression as
+    /// `spdx::Expression::parse` reads it in strict mode, each id on the SPDX
+    /// license list that crate ships.
+    fn parse_license(
+        quill_section: &serde_json::Value,
+        errors: &mut Vec<Diagnostic>,
+    ) -> Option<String> {
+        let value = quill_section.get("license")?;
+        let (reason, listed) = match value.as_str() {
+            Some(raw) => match spdx::Expression::parse(raw) {
+                Ok(_) => return Some(raw.to_string()),
+                Err(e) => {
+                    let term = raw.get(e.span).unwrap_or_default();
+                    let reason = if term.is_empty() || term == raw {
+                        e.reason.to_string()
+                    } else {
+                        format!("{} at '{term}'", e.reason)
+                    };
+                    (reason, listed_license_spelling(term))
+                }
+            },
+            None => ("not a string".to_string(), None),
+        };
+        let hint = match listed {
+            Some(id) => format!("Did you mean '{id}'? Write the id as the SPDX list spells it."),
+            None => "Write an SPDX license expression from https://spdx.org/licenses/, such as \
+                     'MIT' or 'Apache-2.0 OR MIT'; a license off that list is \
+                     'LicenseRef-<name>'."
+                .to_string(),
+        };
+        errors.push(invalid_quill_value("license", value, &reason, "quill::invalid_license", hint));
+        None
+    }
+
+    /// `quill.homepage`: `None` when absent, else an absolute `http` or
+    /// `https` URL.
+    fn parse_homepage(
+        quill_section: &serde_json::Value,
+        errors: &mut Vec<Diagnostic>,
+    ) -> Option<String> {
+        let value = quill_section.get("homepage")?;
+        let reason = match value.as_str() {
+            Some(raw) if is_web_url(raw) => return Some(raw.to_string()),
+            Some(_) => "not an absolute http or https URL",
+            None => "not a string",
+        };
+        errors.push(invalid_quill_value(
+            "homepage",
+            value,
+            reason,
+            "quill::invalid_homepage",
+            "Write an absolute http or https URL, such as 'https://github.com/org/quills'."
+                .to_string(),
+        ));
+        None
+    }
+
     /// Parse QuillConfig from YAML content while collecting non-fatal warnings.
     ///
     /// Returns `Ok((config, warnings))` on success, or `Err(errors)` containing all
@@ -2222,6 +2287,8 @@ impl QuillConfig {
             "description",
             "version",
             "author",
+            "license",
+            "homepage",
             "ui",
             "requires",
         ];
@@ -2380,6 +2447,9 @@ impl QuillConfig {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
             .unwrap_or_else(|| "Unknown".to_string());
+
+        let license = Self::parse_license(quill_section, &mut errors);
+        let homepage = Self::parse_homepage(quill_section, &mut errors);
 
         let body_hint = format!(
             "Valid keys under 'body' are: {}.",
@@ -2710,11 +2780,57 @@ impl QuillConfig {
                 backend,
                 version,
                 author,
+                license,
+                homepage,
                 backend_config,
             },
             warnings,
         ))
     }
+}
+
+/// A refused `quill:` value: a string shown quoted, anything else as JSON.
+fn invalid_quill_value(
+    key: &str,
+    value: &serde_json::Value,
+    reason: &str,
+    code: &str,
+    hint: String,
+) -> Diagnostic {
+    let shown = match value.as_str() {
+        Some(raw) => format!("'{raw}'"),
+        None => value.to_string(),
+    };
+    Diagnostic::new(
+        Severity::Error,
+        format!("Invalid '{key}' value {shown} in 'quill' section: {reason}"),
+    )
+    .with_code(code.to_string())
+    .with_hint(hint)
+}
+
+/// The SPDX list's spelling of `term` when it differs from `term` only in
+/// case, and the license it names is not deprecated.
+fn listed_license_spelling(term: &str) -> Option<&'static str> {
+    spdx::identifiers::LICENSES
+        .iter()
+        .find(|license| license.name != term && license.name.eq_ignore_ascii_case(term))
+        .filter(|license| license.flags & spdx::flags::IS_DEPRECATED == 0)
+        .map(|license| license.name)
+}
+
+/// An `http` or `https` URL naming a host, free of whitespace and control
+/// characters.
+fn is_web_url(raw: &str) -> bool {
+    let Some((scheme, rest)) = raw.split_once("://") else {
+        return false;
+    };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    let host = authority.rsplit_once('@').map_or(authority, |(_, host)| host);
+    (scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https"))
+        && !raw.chars().any(|c| c.is_whitespace() || c.is_control())
+        && !host.is_empty()
+        && !host.starts_with(':')
 }
 
 /// Whether a card spells the legacy group syntax: a field's `ui.group`, or the

@@ -141,6 +141,10 @@ export interface QuillMetadata {
     backend: string;
     author: string;
     description: string;
+    /** An SPDX license expression; absent when the quill declares none. */
+    license?: string;
+    /** An absolute `http(s)` URL; absent when the quill declares none. */
+    homepage?: string;
 }
 "#;
 
@@ -712,13 +716,19 @@ impl Quill {
     pub fn metadata(&self) -> Result<JsValue, JsValue> {
         let config = self.inner.config();
 
-        let value = serde_json::json!({
+        let mut value = serde_json::json!({
             "name": config.name,
             "version": config.version,
             "backend": config.backend,
             "author": config.author,
             "description": config.description,
         });
+        if let Some(license) = &config.license {
+            value["license"] = license.as_str().into();
+        }
+        if let Some(homepage) = &config.homepage {
+            value["homepage"] = homepage.as_str().into();
+        }
 
         serialize_or_throw(&value, "metadata")
     }

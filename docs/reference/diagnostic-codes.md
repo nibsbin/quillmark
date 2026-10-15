@@ -71,6 +71,8 @@ Loading a quill: `Quill.yaml`, its files, its seeds.
 - `quill::invalid_card_schema`
 - `quill::invalid_field_name`
 - `quill::invalid_group_id`
+- `quill::invalid_homepage`
+- `quill::invalid_license`
 - `quill::invalid_matrix_member`
 - `quill::invalid_name`
 - `quill::invalid_requires`

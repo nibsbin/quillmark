@@ -43,6 +43,8 @@ Every Quill.yaml must have a `quill` section with format metadata.
 | `description`    | string | yes      | Human-readable description of the quill itself (non-empty). Independent of `main.description`, which is the optional schema description authored under `main:`. One line: a line break fails the load with `quill::description_multiline`. |
 | `version`        | string | yes      | Semantic version (`MAJOR.MINOR` or `MAJOR.MINOR.PATCH`) |
 | `author`         | string | no       | Creator of the Quill (defaults to `"Unknown"`) |
+| `license`        | string | no       | The quill's license, as an SPDX license expression |
+| `homepage`       | string | no       | Where the quill's source or docs live, as an absolute `http` or `https` URL |
 | `ui`             | object | no       | Document-level UI metadata |
 | `requires`       | string | no       | The oldest Quillmark this quill loads on, as `">=MAJOR.MINOR"` or `">=MAJOR.MINOR.PATCH"` |
 
@@ -51,6 +53,17 @@ than it refuses the quill with one `quill::engine_too_old` error, ahead of every
 other check, so keys it has not learned yet do not read as typos; an engine from
 before `requires` existed reports `requires` itself as `quill::unknown_key`. Any
 other spelling, whitespace included, is `quill::invalid_requires`.
+
+`license` is an SPDX license expression, such as `MIT`, `Apache-2.0 OR MIT` or
+`GPL-3.0-or-later WITH Classpath-exception-2.0`, each id spelled as the
+[SPDX License List](https://spdx.org/licenses/) spells it. A license off that
+list is `LicenseRef-<name>`. A deprecated id such as `GPL-3.0`, `/` for `OR`, or
+a value that is not a string fails the load with `quill::invalid_license`.
+`homepage` is an absolute `http` or `https` URL; anything else is
+`quill::invalid_homepage`. Neither reaches the plate or the blueprint; both
+surface on `Quill.metadata` and `quillmark info`. An engine older than 0.126
+reports either key as `quill::unknown_key`, so a quill that sets one also sets
+`requires: ">=0.126"`.
 
 A backend's own settings live under its backend-named section, not in `quill:`.
 The Typst template, for example, is declared as `typst.plate_file` (see the

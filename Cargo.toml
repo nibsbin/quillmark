@@ -47,6 +47,10 @@ indexmap = { version = "2", features = ["serde"] }
 # Char-level diff (Myers/LCS) for richtext edit deltas.
 similar = "3.1"
 
+# Ships the SPDX license list `quill.license` is checked against: an id SPDX
+# lists after this version's copy refuses until a bump.
+spdx = "0.13.6"
+
 pulldown-cmark = "0.13.0"
 time = { version = "0.3.44", features = ["formatting", "parsing"] }
 # Pinned to the version the Typst toolchain (typst-pdf → krilla) already forces,

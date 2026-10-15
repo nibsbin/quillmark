@@ -85,6 +85,15 @@ and a WASM trap rejects coded.
   `[a-z][a-z0-9_]*`, at most 64 characters, so `$quill` no longer admits a
   leading `_`. `QuillReference` carries `collection`. (#2198, #2205)
 
+### Quill metadata
+
+- feat(core): **`quill.license` names a quill's license as an SPDX expression,
+  and `quill.homepage` where its source or docs live.** Both are optional and
+  surface on `Quill.metadata` and `quillmark info`, absent when undeclared. A
+  license off the SPDX grammar or list fails `quill::invalid_license`, and a
+  homepage that is not an absolute `http` or `https` URL fails
+  `quill::invalid_homepage`. (#2218)
+
 ### Bindings
 
 - fix(wasm)!: **a render that traps rejects as `runtime::backend_trapped`**,

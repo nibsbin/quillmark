@@ -60,7 +60,7 @@ quill = Quill.from_path("path/to/quill")  # pure config load: no backend resolve
 quill.backend_id            # "typst" (declared backend)
 quill.blueprint             # auto-generated annotated Markdown blueprint
 quill.schema                # structured dict of the quill's document schema
-quill.metadata              # `name`, `version`, `backend`, `author`, `description`, extras sorted
+quill.metadata              # `name`, `version`, `backend`, `author`, `description`, then `license`, `homepage` when declared
 quill.quill_ref             # "name@version"
 
 doc     = quill.parse(markdown)           # the bound door: parse + conform, the primary ingestion path

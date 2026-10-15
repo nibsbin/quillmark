@@ -87,12 +87,20 @@ Field names must be `snake_case` (match `[a-z][a-z0-9_]*`). Capitalized or `$`-p
 A field may not be named `body`: it is the body terminal of every card's `DocPath` (`main.body`, `cards.<kind>[i].body`), so the name is refused with `quill::reserved_field_name`. Standalone `object` fields require a `properties` map. Every `array` field requires an `items:` element schema: use `items: { type: string }` (or `integer`, `richtext`, …) for a list of scalars, and `items: { type: object, properties: … }` for a list of objects.
 
 Identity resolution:
-- `name`, `description`, `backend`, `version`, `author` are direct struct fields on `QuillConfig`. `description` (required, non-empty in the `quill:` section) describes the quill itself; it is independent of `QuillConfig.main.description`, which is the optional schema description authored under `main:` like any other card kind.
+- `name`, `description`, `backend`, `version`, `author`, `license`, `homepage` are direct struct fields on `QuillConfig`. `description` (required, non-empty in the `quill:` section) describes the quill itself; it is independent of `QuillConfig.main.description`, which is the optional schema description authored under `main:` like any other card kind.
+- `license` and `homepage` are optional package metadata, `None` when absent,
+  and omitting them is never a diagnostic. Neither reaches the plate or the
+  blueprint; both surface on `quill.metadata` and `quillmark info`.
+- `license` is an SPDX license expression as the `spdx` crate's strict mode
+  parses it: each id on the SPDX license list that crate ships, spelled in its
+  case, none deprecated. Any other value is `quill::invalid_license`.
+- `homepage` is an absolute `http` or `https` URL naming a host. Any other value
+  is `quill::invalid_homepage`.
 - The `quill:` section accepts only `name`, `backend`, `description`, `version`,
-  `author`, `ui`, and `requires`; an unknown key is a `quill::unknown_key` error. A
-  backend's own settings (e.g. the Typst plate) live under the backend-named
-  section, never in `quill:`, and reach a backend as
-  `QuillConfig::backend_config`.
+  `author`, `license`, `homepage`, `ui`, and `requires`; an unknown key is a
+  `quill::unknown_key` error. A backend's own settings (e.g. the Typst plate)
+  live under the backend-named section, never in `quill:`, and reach a backend
+  as `QuillConfig::backend_config`.
 - `quill.requires` (`">=MAJOR.MINOR[.PATCH]"`) is a floor on the engine's
   crate version. It is read before anything else in the file, and a floor above
   the running engine is the load's only error, `quill::engine_too_old`: strict
