@@ -20,6 +20,24 @@ def test_quill_properties(engine, taro_quill_dir):
     assert OutputFormat.PDF in engine.supported_formats(quill)
 
 
+def test_metadata_carries_a_declared_license_and_homepage(tmp_path):
+    (tmp_path / "Quill.yaml").write_text(
+        "quill:\n"
+        "  name: licensed\n"
+        "  version: '1.0'\n"
+        "  backend: typst\n"
+        "  description: A licensed quill\n"
+        "  license: Apache-2.0 OR MIT\n"
+        "  homepage: https://example.com/quills\n"
+    )
+    metadata = Quill.from_path(str(tmp_path)).metadata
+    assert list(metadata) == [
+        "name", "version", "backend", "author", "description", "license", "homepage",
+    ]
+    assert metadata["license"] == "Apache-2.0 OR MIT"
+    assert metadata["homepage"] == "https://example.com/quills"
+
+
 def test_registered_backends(engine):
     """The engine's backend roster: which backends this build compiled in, as
     opposed to which formats a given quill supports (`supported_formats`)."""

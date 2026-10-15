@@ -30,39 +30,6 @@ fn skipped_path(path: &Path, err: impl std::fmt::Display) -> Diagnostic {
     .with_hint("Rename it to a plain relative path.".to_string())
 }
 
-/// The keys under `typst:` in `Quill.yaml` this backend reads. Core stores the
-/// section verbatim, so every other key would otherwise vanish unremarked.
-const CONFIG_KEYS: &[&str] = &["plate_file"];
-
-fn unread_config_keys(source: &Quill, warnings: &mut Vec<Diagnostic>) {
-    let mut unread: Vec<&str> = source
-        .config()
-        .backend_config
-        .keys()
-        .map(String::as_str)
-        .filter(|key| !CONFIG_KEYS.contains(key))
-        .collect();
-    unread.sort_unstable();
-    for key in unread {
-        let hint = if key == "packages" {
-            "Quillmark never downloads a package: vendor each one under `packages/<dir>/` \
-             with its `typst.toml`, and delete `typst.packages`."
-                .to_string()
-        } else {
-            format!("Valid keys under 'typst' are: {}.", CONFIG_KEYS.join(", "))
-        };
-        warnings.push(
-            Diagnostic::new(
-                Severity::Warning,
-                format!("Ignoring 'typst.{key}' in Quill.yaml: the Typst backend does not read it"),
-            )
-            .with_code("typst::unknown_key".to_string())
-            .with_arg("key", serde_json::Value::String(key.to_string()))
-            .with_hint(hint),
-        );
-    }
-}
-
 /// Typst 0.15 routes file ids through [`RootedPath`]: project-local files use
 /// [`VirtualRoot::Project`], package files use [`VirtualRoot::Package`].
 fn file_id(spec: Option<PackageSpec>, vpath: VirtualPath) -> FileId {
@@ -120,7 +87,7 @@ pub(crate) struct QuillWorld {
     book: LazyHash<FontBook>,
     fonts: Vec<Font>,
     source: Source,
-    plate_file: Option<String>,
+    plate_file: String,
     sources: HashMap<FileId, Source>,
     binaries: HashMap<FileId, Bytes>,
     /// Non-fatal defects from loading the quill's assets and packages. Without
@@ -138,7 +105,6 @@ impl QuillWorld {
         let mut sources = HashMap::new();
         let mut binaries = HashMap::new();
         let mut load_warnings = Vec::new();
-        unread_config_keys(source, &mut load_warnings);
 
         let mut book = FontBook::new();
         let mut fonts = Vec::new();
@@ -204,9 +170,11 @@ impl QuillWorld {
     /// by its virtual path.
     pub(crate) fn display_path(&self, id: FileId) -> String {
         let path = id.vpath().get_without_slash();
-        match (&self.plate_file, id.root()) {
-            (Some(file), _) if id == self.source.id() => file.clone(),
-            (_, VirtualRoot::Package(spec)) => format!("{spec}/{path}"),
+        if id == self.source.id() {
+            return self.plate_file.clone();
+        }
+        match id.root() {
+            VirtualRoot::Package(spec) => format!("{spec}/{path}"),
             _ => path.to_string(),
         }
     }
@@ -643,20 +611,16 @@ mod tests {
             ),
             ("packages/inner/lib.typ", "#let word = \"there\"\n"),
         ]);
-        let plate = crate::Plate::undeclared(
-            "#import \"@preview/outer:1.2.0\": greet\n#greet\n".to_string(),
-        );
+        let plate = crate::Plate {
+            text: "#import \"@preview/outer:1.2.0\": greet\n#greet\n".to_string(),
+            ..crate::read_plate(&quill).expect("plate")
+        };
         let world = QuillWorld::new(&quill, &plate).expect("world");
         crate::compile::compile_document(&world).expect("the vendored chain resolves");
     }
 
     /// `extra` files are inserted under their `/`-joined tree paths.
     fn quill_with(extra: &[(&str, &str)]) -> quillmark_core::quill::Quill {
-        quill_with_typst_section("  plate_file: plate.typ\n", extra)
-    }
-
-    /// `typst` is the indented body of the `typst:` section.
-    fn quill_with_typst_section(typst: &str, extra: &[(&str, &str)]) -> quillmark_core::quill::Quill {
         use quillmark_core::quill::{FileTreeNode, Quill};
         let mut root = FileTreeNode::Directory {
             files: HashMap::new(),
@@ -664,13 +628,11 @@ mod tests {
         root.insert(
             "Quill.yaml",
             FileTreeNode::File {
-                contents: format!(
-                    "quill:\n  name: warn\n  version: 0.1.0\n  backend: typst\n  \
-                     description: load-warning probe\ntypst:\n{typst}\
-                     main:\n  fields:\n    title:\n      type: string\n      \
-                     description: title\n"
-                )
-                .into_bytes(),
+                contents: b"quill:\n  name: warn\n  version: 0.1.0\n  backend: typst\n  \
+                    description: load-warning probe\n\
+                    main:\n  fields:\n    title:\n      type: string\n      \
+                    description: title\n"
+                    .to_vec(),
             },
         )
         .expect("insert Quill.yaml");
@@ -817,24 +779,6 @@ mod tests {
             codes.contains(&"typst::package_entrypoint_missing"),
             "expected an entrypoint warning, got {codes:?}"
         );
-    }
-
-    #[test]
-    fn a_typst_key_the_backend_does_not_read_warns() {
-        let quill = quill_with_typst_section(
-            "  plate_file: plate.typ\n  packages:\n    - \"@preview/bubble:0.2.2\"\n",
-            &[],
-        );
-        let plate = crate::Plate::undeclared("// probe".to_string());
-        let world = QuillWorld::new(&quill, &plate).expect("world");
-        let flagged: Vec<&str> = world
-            .load_warnings()
-            .iter()
-            .filter(|d| d.code.as_deref() == Some("typst::unknown_key"))
-            .map(|d| d.message.as_str())
-            .collect();
-        assert_eq!(flagged.len(), 1, "only `packages` is unread: {flagged:?}");
-        assert!(flagged[0].contains("typst.packages"), "{}", flagged[0]);
     }
 
 }

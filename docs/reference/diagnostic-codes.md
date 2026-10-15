@@ -56,6 +56,7 @@ Loading a quill: `Quill.yaml`, its files, its seeds.
 - `quill::default_over_max`
 - `quill::default_type_mismatch`
 - `quill::deprecated_groups`
+- `quill::deprecated_license`
 - `quill::description_multiline`
 - `quill::duplicate_group`
 - `quill::empty_description`
@@ -65,12 +66,15 @@ Loading a quill: `Quill.yaml`, its files, its seeds.
 - `quill::field_parse_error`
 - `quill::format_literal_reserved_char`
 - `quill::implicit_group`
+- `quill::invalid_backend_section`
 - `quill::invalid_body`
 - `quill::invalid_card_kinds`
 - `quill::invalid_card_name`
 - `quill::invalid_card_schema`
 - `quill::invalid_field_name`
 - `quill::invalid_group_id`
+- `quill::invalid_homepage`
+- `quill::invalid_license`
 - `quill::invalid_matrix_member`
 - `quill::invalid_name`
 - `quill::invalid_requires`
@@ -110,6 +114,7 @@ Loading a quill: `Quill.yaml`, its files, its seeds.
 - `quill::title_on_items`
 - `quill::title_template`
 - `quill::too_many_fields`
+- `quill::unknown_backend_key`
 - `quill::unknown_group`
 - `quill::unknown_key`
 - `quill::unknown_section`
@@ -174,7 +179,6 @@ Opening a Typst quill and compiling its plate.
 - `typst::png_encoding`
 - `typst::type_error`
 - `typst::unclosed_region`
-- `typst::unknown_key`
 - `typst::unknown_variable`
 - `typst::unregistered_element`
 - `typst::world_creation`

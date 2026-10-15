@@ -26,7 +26,7 @@ typst:        # Optional: backend-specific configuration
 
 Root-level `fields:` is not supported; define the main document's field schemas under `main.fields`.
 
-`Quill.yaml` is parsed strictly. Unknown keys in the `quill:` section, unknown top-level sections, malformed `ui:` blocks, and field schemas that can't be parsed all produce errors: they are never silently dropped. Every error is collected in a single pass, so authors see all problems at once; the one exception is a [`requires`](#quill-section) floor the engine is below, which is reported alone. Run `quillmark validate <quill_dir>` to surface them.
+`Quill.yaml` is parsed strictly. Unknown keys in the `quill:` section or the backend's section, unknown top-level sections, malformed `ui:` blocks, and field schemas that can't be parsed all produce errors: they are never silently dropped. Every error is collected in a single pass, so authors see all problems at once; the one exception is a [`requires`](#quill-section) floor the engine is below, which is reported alone. Run `quillmark validate <quill_dir>` to surface them.
 
 ---
 
@@ -40,9 +40,11 @@ Every Quill.yaml must have a `quill` section with format metadata.
 |------------------|--------|----------|-------------|
 | `name`           | string | yes      | Unique identifier for the Quill |
 | `backend`        | string | yes      | Rendering backend (e.g. `typst`) |
-| `description`    | string | yes      | Human-readable description of the quill itself (non-empty). Independent of `main.description`, which is the optional schema description authored under `main:`. One line: a line break fails the load with `quill::description_multiline`. |
+| `description`    | string | yes      | Human-readable description of the quill package, for a gallery or a quill picker (non-empty). The blueprint never prints it: the root card's label is `main`'s own `title` and `description`. One line: a line break fails the load with `quill::description_multiline`. |
 | `version`        | string | yes      | `MAJOR.MINOR.PATCH`, bumped by what the change costs a stored document ([Quill Versioning](versioning.md)) |
 | `author`         | string | no       | Creator of the Quill (defaults to `"Unknown"`) |
+| `license`        | string | no       | The quill's license, as an SPDX license expression |
+| `homepage`       | string | no       | Where the quill's source or docs live, as an absolute `http` or `https` URL |
 | `ui`             | object | no       | Document-level UI metadata |
 | `requires`       | string | no       | The oldest Quillmark this quill loads on, as `">=MAJOR.MINOR"` or `">=MAJOR.MINOR.PATCH"` |
 
@@ -52,9 +54,29 @@ other check, so keys it has not learned yet do not read as typos; an engine from
 before `requires` existed reports `requires` itself as `quill::unknown_key`. Any
 other spelling, whitespace included, is `quill::invalid_requires`.
 
+`license` is an SPDX license expression on one line, such as `MIT`,
+`Apache-2.0 OR MIT` or `GPL-3.0-or-later WITH Classpath-exception-2.0`. Each id
+is spelled as the [SPDX License List](https://spdx.org/licenses/) spells it, and
+the operators `AND`, `OR` and `WITH` are uppercase. A license off that list is
+`LicenseRef-<name>`. Anything else fails the load with `quill::invalid_license`:
+`/` for `OR`, `NOASSERTION`, a line break, or a value that is not a string. The
+hint names the fix where one is plain, such as `GPL-2.0-or-later` for
+`GPL-2.0+`. A deprecated id such as `GPL-3.0` loads, with a
+`quill::deprecated_license` warning. Spaces around the expression are dropped.
+
+`homepage` is an absolute `http` or `https` URL naming a host, such as
+`https://github.com/org/quills`. A user name or password before the host, a
+port past 65535, and an invisible formatting character such as a zero-width
+space each fail the load with `quill::invalid_homepage`, as anything else does.
+
+Neither key reaches the plate or the blueprint; both surface on
+`Quill.metadata` and `quillmark info`. They arrive in the same release as
+`requires`, so an older engine reports them as `quill::unknown_key` whether or
+not the quill sets `requires`.
+
 A backend's own settings live under its backend-named section, not in `quill:`.
-The Typst template, for example, is declared as `typst.plate_file` (see the
-[`typst` Section](#typst-section) below).
+The Typst plate's path, for example, is `typst.plate_file`, which defaults to
+`plate.typ` (see the [`typst` Section](#typst-section) below).
 
 ```yaml
 quill:
@@ -63,9 +85,6 @@ quill:
   backend: typst
   description: Typesetted USAF Official Memorandum
   author: TongueToQuill
-
-typst:
-  plate_file: plate.typ
 ```
 
 ### Example document
@@ -107,7 +126,7 @@ The cutover rehearsal slipped a week while the data owners review the mapping.
 
 ## `main` Section
 
-The main document card holds **root-block field schemas** under `main.fields`. Optional `main.description` describes the schema itself (independent of `quill.description`, which describes the quill package), and optional `main.title` labels the card as a [card kind's `title`](#title_1) does. Optional `main.ui` sets container-level UI for that card. `quill.ui` is a fallback for `main.ui`, not a merge: any `main.ui` (even an empty `ui: {}`) wins wholesale, and `quill.ui` applies only when `main.ui` is absent.
+The main document card holds **root-block field schemas** under `main.fields`. Optional `main.description` describes the root card, printed on the blueprint's `$kind: main` line (`quill.description` describes the package and is never printed there), and optional `main.title` labels the card as a [card kind's `title`](#title_1) does. Optional `main.ui` sets container-level UI for that card. `quill.ui` is a fallback for `main.ui`, not a merge: any `main.ui` (even an empty `ui: {}`) wins wholesale, and `quill.ui` applies only when `main.ui` is absent.
 
 Field order under `main.fields` **is** display order in UIs: the declaration order of the keys is carried structurally through parsing and schema emission, so consumers walk the fields in key order. There is no `ui.order` knob: to reorder fields, reorder them in `Quill.yaml`. Related fields group under a top-level `object` (see [Grouping](#grouping)).
 
@@ -773,16 +792,34 @@ It labels the blank, never a member: `values:` carries no entry for it. Consumer
 
 ### `compact`
 
-When `true`, the UI renders this field in a compact style (smaller vertical footprint).
+Asks an editor to set a card-level field beside its neighbours in one row, where it would take a row of its own. Absent, the field's type decides:
+
+| Packs by default | Full row by default |
+|---|---|
+| `date`, `datetime`, `enum` (without `variants:`), `integer`, `number`, `boolean` | `string`, `plaintext`, `richtext`, `array`, `object`, `matrix` |
+
+A text field packs only under `compact: true`, since its type cannot say whether a value is a rank or a subject line; `compact: false` keeps a packing type on its own row.
 
 ```yaml
 main:
   fields:
-    tag:
+    rank:
       type: string
       ui:
         compact: true
+    due:
+      type: date
+      ui:
+        compact: false
 ```
+
+It is a request: an editor grants it only where a neighbour packs too, so a packing field alone between full-row fields still takes its row.
+
+- An `array`, an `object`, an `enum` with `variants:` and a block `plaintext` or `richtext` never pack, whatever the key says, since their height grows with the document.
+- A one-line (`inline`) `plaintext` or `richtext` packs like a `string`.
+- On a `matrix`, `compact: true` sets the roster's members side by side instead.
+- The properties of a card-level `object`, and of an `object` nested in it, follow the same rule, so a field moved into a group keeps its row.
+- The cells of an array's records, a variant, a matrix member and a typed table are laid out by their container and read no `compact`.
 
 ### `multiline`
 
@@ -1046,20 +1083,29 @@ Card kinds defined here are authored as `~~~` blocks (with a `$kind: <kind>` lin
 
 ## `typst` Section
 
-Backend-specific configuration for the Typst renderer.
+The Typst backend compiles `plate.typ` at the quill root, found by name as `example.md` is. The optional `typst` section moves the plate elsewhere.
+
+```
+my_quill/1.0.0/
+├── Quill.yaml
+├── plate.typ      # the plate, with no `typst` section
+└── example.md
+```
 
 | Key          | Type   | Required | Description |
 |--------------|--------|----------|-------------|
-| `plate_file` | string | no       | Path from the quill root to the Typst template the backend compiles, steps separated by `/` |
+| `plate_file` | string | no       | Path from the quill root to the Typst template the backend compiles, steps separated by `/`. Default `plate.typ` |
 
 ```yaml
 typst:
-  plate_file: plate.typ
+  plate_file: tpl/main.typ
 ```
 
-A quill declaring no `plate_file` compiles an empty plate and renders a blank page, with no diagnostic. A `.` step or an empty one drops, so `./plate.typ` names `plate.typ` and `tpl//layout.typ` names `tpl/layout.typ`, the path every diagnostic and `quillmark workspace` give. A leading `/` or a `..` step is refused as `typst::plate_missing`, its hint naming the spelling from the quill root, and so is a `plate_file` naming no file. A `plate_file` naming a file at a path holding a `\`, which Typst refuses, fails as `typst::plate_path_invalid`: separate the path with `/`, and rename a file whose own name holds a `\`.
+A quill holding no `plate.typ` and declaring no `plate_file` fails to render as `typst::plate_missing`, its hint naming both. Core reads no backend file at load: the backend resolves the plate when it opens a session, and `quillmark validate` checks it.
 
-Any other key under `typst` is ignored, with a `typst::unknown_key` warning on each render. Packages are not declared here: a quill vendors them under `packages/`, as the [Typst Backend Guide](typst-backend.md#typst-packages) describes.
+A `.` step or an empty one drops, so `./plate.typ` names `plate.typ` and `tpl//layout.typ` names `tpl/layout.typ`, the path every diagnostic and `quillmark workspace` give. A leading `/` or a `..` step is refused as `typst::plate_missing`, its hint naming the spelling from the quill root, and so is a `plate_file` naming no file. A `plate_file` naming a file at a path holding a `\`, which Typst refuses, fails as `typst::plate_path_invalid`: separate the path with `/`, and rename a file whose own name holds a `\`. So does a `plate_file` that is not a string, or that names no path once its `.` and empty steps drop, such as `""` or `./`.
+
+Any other key under `typst` fails the load as `quill::unknown_backend_key`, its hint listing the valid keys. A `typst` section that is a scalar or a sequence fails as `quill::invalid_backend_section`, and an empty one, `typst:` alone or holding only comments, reads as no keys. A quill using a key a later release adds declares that release in [`requires`](#quill-section), so an older engine reports `quill::engine_too_old` rather than the key. Packages are not declared here: a quill vendors them under `packages/`, as the [Typst Backend Guide](typst-backend.md#typst-packages) describes.
 
 ---
 
@@ -1085,9 +1131,6 @@ quill:
   backend: typst
   description: Monthly project status report
   author: Engineering Team
-
-typst:
-  plate_file: plate.typ
 
 main:
   fields:

@@ -161,7 +161,9 @@ quillmark blueprint ./my-quill > blueprint.md
 Validate quill configuration and structure, and compile the plate against the
 three canonical documents: the empty document, the blueprint, and the seeded
 document. A plate that renders the seeded document and not the empty one fails
-here, which is the quill authoring contract every plate is bound by.
+here, which is the quill authoring contract every plate is bound by. A Typst
+quill's plate is found as a render finds it, under `--no-render` too, so a
+quill holding no plate fails as `typst::plate_missing`.
 
 A quill with an `example.md` at its root has that example document read,
 validated, and rendered too. Any diagnostic on it fails the quill, a warning
@@ -228,7 +230,7 @@ document changes.
 Before the command, `workspace` prints the parse warnings, each warning for
 input the page leaves out, and the warnings a render raises loading the quill
 (`typst::package_manifest`, `typst::package_entrypoint_missing`,
-`typst::path_skipped`, `typst::unknown_key`). It compiles nothing, so the
+`typst::path_skipped`). It compiles nothing, so the
 plate's own warnings and errors are the printed command's to report.
 
 ```bash
@@ -246,7 +248,7 @@ quillmark workspace [OPTIONS] <QUILL_PATH> [MARKDOWN_FILE]
 - `--today <YYYY-MM-DD>`: The render date (default: the local date). A `today` date field renders as it, and the printed command passes it as `--creation-timestamp`, noon UTC of that date, so the plate's `datetime.today()` returns it too.
 - `--quiet`: Suppress warnings and the command line; errors still print
 
-**Failures:** besides `typst::wrong_backend`, the command refuses each plate a render refuses, before writing anything: `typst::plate_missing` when `typst.plate_file` names no file in the quill, `typst::plate_path_invalid` when it names one at a path Typst cannot load, `typst::invalid_utf8` when the plate is not UTF-8, and `typst::helper_import` when a plate source imports the helper any way but `as qm`. A quill declaring no `typst.plate_file`, which a render compiles as an empty plate, has no plate to export and fails as `typst::plate_missing`.
+**Failures:** besides `typst::wrong_backend`, the command refuses each plate a render refuses, before writing anything: `typst::plate_missing` when the quill holds no `plate.typ` and declares no `typst.plate_file`, or `typst.plate_file` names no file in the quill, `typst::plate_path_invalid` when `typst.plate_file` is not a string, names no path, or names a file at a path Typst cannot load, `typst::invalid_utf8` when the plate is not UTF-8, and `typst::helper_import` when a plate source imports the helper any way but `as qm`.
 
 **Examples:**
 

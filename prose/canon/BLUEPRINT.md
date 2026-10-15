@@ -174,8 +174,9 @@ so dropping it is not an error. The card's label rides the `$kind`
 line's inline slot, for every card, in the field's form:
 `$kind: <kind> # <title> — <description>`, or whichever one is declared. An
 own-line `# …` there would read as a leading annotation for the field below
-it, and an inline comment belongs to its own line. The root falls back to
-`quill.description` where `main.description` is absent. A composable card's kind is carried in its
+it, and an inline comment belongs to its own line. The root's label is
+`main`'s own: `quill.description` describes the package and never reaches the
+blueprint. A composable card's kind is carried in its
 `$kind: <card_kind>` metadata line. Its `composable (0..N)` role is
 emitted as an own-line `# composable (0..N)` comment directly under the
 `$kind` line: that comment carries the

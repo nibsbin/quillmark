@@ -67,9 +67,10 @@ Validation rules:
 3. File paths use `/` separators and are resolved relative to root
 
 Core reads no backend-specific assets at load time. A backend resolves its own
-inputs from the file bundle when it opens a session (the Typst backend reads its
-`typst.plate_file`; the acroform backend reads `form.pdf` / `form.yaml`), so a
-missing or malformed template surfaces as a render-time error, not a load error.
+inputs from the file bundle when it opens a session (the Typst backend reads
+`plate.typ` at the quill root, or the file `typst.plate_file` names; the
+acroform backend reads `form.pdf` / `form.yaml`), so a missing or malformed
+template surfaces as a render-time error, not a load error.
 
 ## `Quill.yaml` Rules
 
@@ -87,12 +88,26 @@ Field names must be `snake_case` (match `[a-z][a-z0-9_]*`). Capitalized or `$`-p
 A field may not be named `body`: it is the body terminal of every card's `DocPath` (`main.body`, `cards.<kind>[i].body`), so the name is refused with `quill::reserved_field_name`. Standalone `object` fields require a `properties` map. Every `array` field requires an `items:` element schema: use `items: { type: string }` (or `integer`, `richtext`, …) for a list of scalars, and `items: { type: object, properties: … }` for a list of objects.
 
 Identity resolution:
-- `name`, `description`, `backend`, `version`, `author` are direct struct fields on `QuillConfig`. `description` (required, non-empty in the `quill:` section) describes the quill itself; it is independent of `QuillConfig.main.description`, which is the optional schema description authored under `main:` like any other card kind.
+- `name`, `description`, `backend`, `version`, `author`, `license`, `homepage` are direct struct fields on `QuillConfig`. `description` (required, non-empty in the `quill:` section) describes the quill itself; it is independent of `QuillConfig.main.description`, which is the optional schema description authored under `main:` like any other card kind.
+- `license` and `homepage` are optional package metadata, `None` when absent,
+  and omitting them is never a diagnostic. Neither reaches the plate or the
+  blueprint; both surface on `quill.metadata` and `quillmark info`.
+- `license` is one line holding an SPDX license expression, stored trimmed:
+  each id on the SPDX license list the `spdx` crate ships, spelled in the
+  list's case, and `AND`, `OR`, `WITH` uppercase. Any other value is
+  `quill::invalid_license`, `NOASSERTION` and an empty `LicenseRef-` included.
+- A deprecated id loads with `quill::deprecated_license`. The list rides a
+  caret dependency, so a deprecation arriving in a patch release cannot refuse
+  on one build a quill another loads.
+- `homepage` is an absolute `http` or `https` URL naming a host and no user
+  name, its port, IPv6 brackets and host code points held to what a WHATWG URL
+  parser accepts; a Unicode host is not run through IDNA. Any other value is
+  `quill::invalid_homepage`.
 - The `quill:` section accepts only `name`, `backend`, `description`, `version`,
-  `author`, `ui`, and `requires`; an unknown key is a `quill::unknown_key` error. A
-  backend's own settings (e.g. the Typst plate) live under the backend-named
-  section, never in `quill:`, and reach a backend as
-  `QuillConfig::backend_config`.
+  `author`, `license`, `homepage`, `ui`, and `requires`; an unknown key is a
+  `quill::unknown_key` error. A backend's own settings (e.g. the Typst plate)
+  live under the backend-named section, never in `quill:`, and reach a backend
+  as `QuillConfig::backend_config`.
 - `quill.requires` (`">=MAJOR.MINOR[.PATCH]"`) is a floor on the engine's
   crate version. It is read before anything else in the file, and a floor above
   the running engine is the load's only error, `quill::engine_too_old`: strict
@@ -134,6 +149,7 @@ example's `$quill`.
 
 - Unknown keys in the `quill:` section error with `quill::unknown_key` (typos like `platefile` are not silently captured).
 - Unknown top-level sections error with `quill::unknown_section` (typos like `card_kind:` are not silently ignored). Root-level `fields:` gets a targeted hint pointing to `main.fields:`.
+- The backend-named section is a mapping of the keys its backend reads, the table `quillmark_core::backend::config_keys` holds per backend id. Any other key errors with `quill::unknown_backend_key`, its hint listing the valid keys, and a scalar or sequence section with `quill::invalid_backend_section`; an empty section reads as no keys. A backend id the table does not name loads its section unchecked: the render refuses the id itself.
 - `main:` and each `card_kinds.<name>:` entry parse under one card-schema shape, which accepts `title`, `description`, `fields`, `ui`, `body`, and `seed` only (`seed` on a card kind alone, [SCHEMAS.md](SCHEMAS.md#kind-seeds-and-document-overlays)): an unknown key (`feilds:`, or `sections:`, whose hint names the top-level `object` per [SCHEMAS.md](SCHEMAS.md#grouping)), or a `fields:` that is not a mapping errors with `quill::invalid_card_schema` rather than loading as a card with no fields. A `card_kinds:` that is not a mapping errors with `quill::invalid_card_kinds`.
 - Field schemas that fail to parse (e.g. a missing `type:`, or `ui.title`, whose hint names the top-level `title:`) error with `quill::field_parse_error` and an actionable hint where applicable, rather than being dropped from the schema.
 - A `title` is a literal: a `{field}` token in one errors with `quill::title_template`, and a `title` on an array's `items` with `quill::title_on_items`.
