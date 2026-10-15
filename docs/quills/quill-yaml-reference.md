@@ -42,7 +42,7 @@ Every Quill.yaml must have a `quill` section with format metadata.
 |------------------|--------|----------|-------------|
 | `name`           | string | yes      | Unique identifier for the Quill |
 | `backend`        | string | yes      | Rendering backend (e.g. `typst`) |
-| `description`    | string | yes      | Human-readable description of the quill itself (non-empty). Independent of `main.description`, which is the optional schema description authored under `main:`. One line: a line break fails the load with `quill::description_multiline`. |
+| `description`    | string | yes      | Human-readable description of the quill package, for a gallery or a quill picker (non-empty). The blueprint never prints it: the root card's label is `main.description`. One line: a line break fails the load with `quill::description_multiline`. |
 | `version`        | string | yes      | Semantic version (`MAJOR.MINOR` or `MAJOR.MINOR.PATCH`) |
 | `author`         | string | no       | Creator of the Quill (defaults to `"Unknown"`) |
 | `ui`             | object | no       | Document-level UI metadata |
@@ -108,7 +108,7 @@ The cutover rehearsal slipped a week while the data owners review the mapping.
 
 ## `main` Section
 
-The main document card holds **root-block field schemas** under `main.fields`. Optional `main.description` describes the schema itself (independent of `quill.description`, which describes the quill package), and optional `main.title` labels the card as a [card kind's `title`](#title_1) does. Optional `main.ui` sets container-level UI for that card. `quill.ui` is a fallback for `main.ui`, not a merge: any `main.ui` (even an empty `ui: {}`) wins wholesale, and `quill.ui` applies only when `main.ui` is absent.
+The main document card holds **root-block field schemas** under `main.fields`. Optional `main.description` describes the root card, printed on the blueprint's `$kind: main` line (`quill.description` describes the package and is never printed there), and optional `main.title` labels the card as a [card kind's `title`](#title_1) does. Optional `main.ui` sets container-level UI for that card. `quill.ui` is a fallback for `main.ui`, not a merge: any `main.ui` (even an empty `ui: {}`) wins wholesale, and `quill.ui` applies only when `main.ui` is absent.
 
 Field order under `main.fields` **is** display order in UIs: the declaration order of the keys is carried structurally through parsing and schema emission, so consumers walk the fields in key order. There is no `ui.order` knob: to reorder fields, reorder them in `Quill.yaml`. Fields can also sit in titled panels, under [`sections`](#sections).
 

@@ -16,6 +16,12 @@ and a WASM trap rejects coded.
   `acroform::invalid_form_spec`, located in `form.yaml`, and
   `acroform::missing_form_json` is `acroform::missing_form_spec`. (#2210)
 
+### Blueprint
+
+- feat(core)!: **a blueprint's `$kind: main` line carries `main.title` and
+  `main.description` alone**, where it fell back to `quill.description`, which
+  describes the package and never reaches the blueprint. (#2215)
+
 ### Formats that grow
 
 - feat(acroform): **a field spec tagged with a later `0.x` than `0.2`

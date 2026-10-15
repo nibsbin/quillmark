@@ -31,14 +31,7 @@ impl QuillConfig {
     ///
     /// [`Document`]: crate::document::Document
     pub fn blueprint(&self) -> String {
-        let main_desc = collapse_opt(self.main.description.as_deref())
-            .or_else(|| collapse_opt(Some(self.description.as_str())));
-
-        let main = build_main_card(
-            &self.main,
-            &format!("{}@{}", self.name, self.version),
-            label_line(self.main.title.as_deref(), main_desc.as_deref()),
-        );
+        let main = build_main_card(&self.main, &format!("{}@{}", self.name, self.version));
         let cards = self.card_kinds.iter().map(build_card).collect();
 
         Document::from_main_and_cards(main, cards).to_markdown()
@@ -104,7 +97,7 @@ impl CardItems {
 /// Build the root card: `$quill` (with the `# keep verbatim` inline reminder),
 /// `$kind: main` carrying the optional [`label_line`] inline, the fields, then
 /// the [`push_body_line`]. Inline, the label cannot read as the first field's.
-fn build_main_card(card: &CardSchema, quill_ref: &str, label: Option<String>) -> Card {
+fn build_main_card(card: &CardSchema, quill_ref: &str) -> Card {
     let reference = quill_ref
         .parse()
         .expect("quill name@version is always a valid QuillReference");
@@ -114,7 +107,7 @@ fn build_main_card(card: &CardSchema, quill_ref: &str, label: Option<String>) ->
     items.push(PayloadItem::Kind {
         value: "main".into(),
     });
-    if let Some(label) = label {
+    if let Some(label) = label_line(card.title.as_deref(), card.description.as_deref()) {
         items.push(PayloadItem::comment_inline(label));
     }
     append_fields(&mut items, card);
@@ -811,19 +804,21 @@ main:
     #[test]
     fn root_header_carries_quill_reminder_and_no_role_comment() {
         let t = cfg(r#"
-quill: { name: taro, version: 0.1.0, backend: typst, description: x }
+quill: { name: taro, version: 0.1.0, backend: typst, description: A taro order form. }
 main:
   fields:
     flavor: { type: string, default: taro }
 "#)
         .blueprint();
-        assert!(t.starts_with(
-            "~~~\n$quill: taro@0.1.0 # keep verbatim\n$kind: main # x\nflavor: taro # string\n"
-        ));
+        assert!(
+            t.starts_with(
+                "~~~\n$quill: taro@0.1.0 # keep verbatim\n$kind: main\nflavor: taro # string\n"
+            ),
+            "{t}"
+        );
+        assert!(!t.contains("A taro order form."), "{t}");
     }
 
-    /// A description that collapses to nothing is no description: the main card
-    /// falls through to the quill's own rather than emitting an empty comment.
     #[test]
     fn a_whitespace_only_main_description_emits_no_empty_comment() {
         let t = cfg(r#"
@@ -835,12 +830,9 @@ main:
 "#)
         .blueprint();
         assert!(
-            t.starts_with(
-                "~~~\n$quill: taro@0.1.0 # keep verbatim\n$kind: main # A taro order form.\n"
-            ),
+            t.starts_with("~~~\n$quill: taro@0.1.0 # keep verbatim\n$kind: main\nflavor:"),
             "{t}"
         );
-        assert!(!t.contains("\n#\n") && !t.contains("\n# \n"), "{t}");
     }
 
     #[test]
@@ -884,7 +876,7 @@ card_kinds:
 "#)
         .blueprint();
         for line in [
-            "$kind: main # Memorandum — x\n",
+            "$kind: main # Memorandum\n",
             "# Point of contact — Who answers questions.\ncontact: # string\n",
             "# Office symbol\noffice: # string\n",
             "  # City\n  city: # string\n",
