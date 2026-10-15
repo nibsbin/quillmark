@@ -42,7 +42,7 @@ def test_quill_from_path_bad_backend_loads_then_fails_at_render(tmp_path):
     quill_dir = tmp_path / "test_quill"
     quill_dir.mkdir()
     (quill_dir / "Quill.yaml").write_text(
-        'quill:\n  name: "test"\n  version: "1.0"\n  backend: "nonexistent"\n  description: "Test"\n'
+        'quill:\n  name: "test"\n  version: "1.0.0"\n  backend: "nonexistent"\n  description: "Test"\n'
     )
 
     # Engine-free load succeeds: the config is valid, the backend is not resolved.
@@ -64,7 +64,7 @@ def test_warnings_carry_the_loads_advisories(taro_quill_dir, tmp_path):
     quill_dir = tmp_path / "warn_quill"
     quill_dir.mkdir()
     (quill_dir / "Quill.yaml").write_text(
-        'quill:\n  name: "warn"\n  version: "1.0"\n  backend: "typst"\n  description: "W"\n'
+        'quill:\n  name: "warn"\n  version: "1.0.0"\n  backend: "typst"\n  description: "W"\n'
         "main:\n  fields:\n    title: { type: string }\n"
         "card_kinds:\n  skills:\n    body:\n      enabled: false\n"
         "    fields:\n      items: { type: array, items: { type: string } }\n"

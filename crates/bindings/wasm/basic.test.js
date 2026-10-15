@@ -191,7 +191,7 @@ describe('Quill.fromTree + engine.render', () => {
   it('a load warning and a render warning carry their args as plain objects', () => {
     const NOTES_QUILL_YAML = `quill:
   name: notes
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: A quill holding a list of richtext notes
 
@@ -1068,7 +1068,7 @@ card_kinds:
 describe('quill.validate', () => {
   const QUILL_YAML = `quill:
   name: validate_smoke_test
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: Smoke test for validate
 
@@ -1126,7 +1126,7 @@ describe('value schema model', () => {
   // `qm.data.subtitle` if present, so one quill carries both cell states.
   const SCHEMA_QUILL_YAML = `quill:
   name: schema_test
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: value coverage
 

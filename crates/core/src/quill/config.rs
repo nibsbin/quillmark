@@ -110,7 +110,7 @@ pub struct QuillConfig {
     /// Names the backend that renders this quill: a registered
     /// [`Backend::id`](crate::backend::Backend::id).
     pub backend: String,
-    /// The quill's own semantic version, checked at render against the
+    /// The quill's own `MAJOR.MINOR.PATCH`, checked at render against the
     /// selector a document's `$quill` carries.
     pub version: String,
     pub author: String,
@@ -2111,24 +2111,6 @@ impl QuillConfig {
         crate::version::is_quill_name(fixed).then(|| fixed.to_string())
     }
 
-    /// `quill.version` as written. A plain `1.10` is the number 1.1 once
-    /// parsed into a `Value`; asked for a string, saphyr hands back the scalar's
-    /// source text instead.
-    fn version_source_text(yaml_content: &str) -> Option<String> {
-        #[derive(serde::Deserialize)]
-        struct Header {
-            version: Option<String>,
-        }
-        #[derive(serde::Deserialize)]
-        struct Root {
-            quill: Header,
-        }
-        crate::value::parse_yaml::<Root>(yaml_content)
-            .ok()?
-            .quill
-            .version
-    }
-
     /// `quill.requires` is `>=MAJOR.MINOR[.PATCH]`, a floor on this crate's
     /// version, which every engine crate shares.
     fn check_engine_floor(requires: &serde_json::Value) -> Result<(), Diagnostic> {
@@ -2320,47 +2302,38 @@ impl QuillConfig {
         };
 
         let version = match quill_section.get("version") {
-            Some(version_val) => {
-                // A tagged number (`!!float 1.10`) has no source-text reading,
-                // and its parsed value has already lost the text.
-                let raw = if let Some(s) = version_val.as_str() {
-                    Some(s.to_string())
-                } else if version_val.is_number() {
-                    Self::version_source_text(yaml_content)
-                } else {
-                    None
+            Some(serde_json::Value::String(raw)) => {
+                use std::str::FromStr;
+                let error = match raw.split('.').count() {
+                    3 => crate::version::Version::from_str(raw).err(),
+                    _ => Some("expected MAJOR.MINOR.PATCH".to_string()),
                 };
-                match raw {
-                    Some(raw) => {
-                        use std::str::FromStr;
-                        if let Err(e) = crate::version::Version::from_str(&raw) {
-                            errors.push(
-                                Diagnostic::new(
-                                    Severity::Error,
-                                    format!("Invalid version '{}': {}", raw, e),
-                                )
-                                .with_code("quill::invalid_version".to_string())
-                                .with_hint("Use semver format: '1.0' or '1.0.0'.".to_string()),
-                            );
-                        }
-                        raw
-                    }
-                    None => {
-                        errors.push(
-                            Diagnostic::new(
-                                Severity::Error,
-                                "Invalid 'version' field format".to_string(),
-                            )
+                if let Some(e) = error {
+                    errors.push(
+                        Diagnostic::new(Severity::Error, format!("Invalid version '{raw}': {e}"))
                             .with_code("quill::invalid_version".to_string())
                             .with_hint(
-                                "Write the version as untagged text in semver format: '1.0' \
-                                 or '1.0.0'."
+                                "Write all three segments, MAJOR.MINOR.PATCH, such as '1.0.0'."
                                     .to_string(),
                             ),
-                        );
-                        String::new()
-                    }
+                    );
                 }
+                raw.clone()
+            }
+            Some(_) => {
+                errors.push(
+                    Diagnostic::new(
+                        Severity::Error,
+                        "Invalid 'version' field: expected MAJOR.MINOR.PATCH text".to_string(),
+                    )
+                    .with_code("quill::invalid_version".to_string())
+                    .with_hint(
+                        "Write MAJOR.MINOR.PATCH, such as '1.10.0': YAML reads an unquoted \
+                         '1.10' as a number."
+                            .to_string(),
+                    ),
+                );
+                String::new()
             }
             None => {
                 errors.push(
@@ -2369,7 +2342,7 @@ impl QuillConfig {
                         "Missing required 'version' field in 'quill' section".to_string(),
                     )
                     .with_code("quill::missing_version".to_string())
-                    .with_hint("Add 'version: 1.0' under the 'quill:' section.".to_string()),
+                    .with_hint("Add 'version: 1.0.0' under the 'quill:' section.".to_string()),
                 );
                 String::new()
             }

@@ -6,7 +6,8 @@ Upgrade path: [0.125 → 0.126](docs/migrations/0.125-to-0.126.md). Script
 links, runaway YAML expansion and bodies nested past 12 levels are refused, a
 quill's font collections load, an acroform quill's field spec is `form.yaml`,
 a card groups fields under a top-level `object` where it declared `sections:`,
-and a WASM trap rejects coded.
+a quill's `version` is `MAJOR.MINOR.PATCH` and a `$quill` selector
+`@MAJOR.MINOR` or exact, and a WASM trap rejects coded.
 
 ### PDF forms
 
@@ -84,6 +85,17 @@ and a WASM trap rejects coded.
   the name after the `.`. A quill name and a collection name are each
   `[a-z][a-z0-9_]*`, at most 64 characters, so `$quill` no longer admits a
   leading `_`. `QuillReference` carries `collection`. (#2198, #2205)
+
+### Versioning
+
+- feat(core)!: **a quill's `version` is `MAJOR.MINOR.PATCH`**: a two-segment
+  `version: "1.2"`, or an unquoted `1.10`, fails `quill::invalid_version`. A
+  bump is ranked by what it costs a stored document to migrate: PATCH needs no
+  change, MINOR migrates mechanically, MAJOR loses data or function. (#2221)
+- feat(core)!: **a `$quill` selector is `@MAJOR.MINOR` or
+  `@MAJOR.MINOR.PATCH`**, the compatibility boundary being `MAJOR.MINOR`:
+  `$quill: memo@1` fails `parse::invalid_quill_reference`, where it matched any
+  `1.x.x`. `VersionSelector::Major` is removed. (#2221)
 
 ### Bindings
 

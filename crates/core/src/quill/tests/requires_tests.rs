@@ -2,7 +2,7 @@ use super::*;
 
 fn load(requires: &str, extra: &str) -> Result<(QuillConfig, Vec<Diagnostic>), Vec<Diagnostic>> {
     QuillConfig::from_yaml_with_warnings(&format!(
-        "quill:\n  name: memo\n  version: \"1.0\"\n  backend: typst\n  description: memo\n  requires: {requires}\n{extra}"
+        "quill:\n  name: memo\n  version: \"1.0.0\"\n  backend: typst\n  description: memo\n  requires: {requires}\n{extra}"
     ))
 }
 

@@ -86,7 +86,7 @@ describe('@quillmark/wasm/core surface', () => {
     expect(doc.warnings).toEqual([])
 
     try {
-      withExample('~~~\n$quill: core_test@1\n~~~\n').exampleDocument()
+      withExample('~~~\n$quill: core_test@1.0\n~~~\n').exampleDocument()
       expect.unreachable('a pinned example throws')
     } catch (err) {
       expect(err.diagnostics[0].code).toBe('quill::example_reference')

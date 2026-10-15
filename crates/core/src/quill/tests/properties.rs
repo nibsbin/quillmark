@@ -91,7 +91,7 @@ fn config_with_one_field(schema: FieldSchema) -> QuillConfig {
     QuillConfig::new(
         "test".to_string(),
         "typst".to_string(),
-        "1.0".to_string(),
+        "1.0.0".to_string(),
         main,
     )
 }

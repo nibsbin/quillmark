@@ -2,7 +2,7 @@
 
 ## Version Field in `Quill.yaml`
 
-Each Quill declares a semantic version:
+Each Quill declares its version as `MAJOR.MINOR.PATCH`:
 
 ```yaml
 quill:
@@ -12,21 +12,25 @@ quill:
   version: "1.2.0"
 ```
 
-The value reads as written, quoted or not: an unquoted `1.10` is version
-`1.10`, not YAML's number `1.1`. `version` is required, and an invalid or
-missing value fails at load.
+`version` is required, and a missing or invalid value fails at load. A
+two-segment `1.2` fails with `quill::invalid_version`: write `1.2.0`. An
+unquoted `1.10` is YAML's number `1.1`, never a version.
 
-Use semantic versioning (`MAJOR.MINOR.PATCH`, or two-segment `MAJOR.MINOR`) to
-communicate compatibility:
+## Choosing the Bump
 
-- **MAJOR**: breaking changes to fields, cards, or expected document shape —
-  including an `enum` member removed or renamed, which stops a stored document
-  validating
-- **MINOR**: backward-compatible additions (new optional fields, a new enum
-  member, non-breaking behavior)
-- **PATCH**: fixes and small improvements without shape changes
+Bump by what the change costs a document already stored against the quill:
 
-Reordering a field's `values:` is neither: a field's blank is `""` rather than
+| Bump | A stored document | Changes |
+|---|---|---|
+| **PATCH** | needs no change | Fixes, presentation changes, a new optional field, a new enum member, a `values:` reorder |
+| **MINOR** | migrates mechanically | A field renamed, a type changed with a lossless mapping (`string` → `richtext`), an enum member renamed |
+| **MAJOR** | migrates with loss of data or function | A field or enum member removed with no counterpart, a field's meaning changed |
+
+This is not standard semver. The compatibility boundary is `MAJOR.MINOR`: every
+patch in one series reads the documents an earlier patch stored, unchanged. The
+rule is the same below and above `1.0.0`, so `0.x` promises no less than `1.x`.
+
+Reordering a field's `values:` is PATCH: a field's blank is `""` rather than
 `values[0]`, so no document's rendered output changes. It still moves picker
 order, the blueprint's `enum` annotation, and acroform dropdown order.
 
@@ -47,12 +51,12 @@ Supported selectors:
 | Selector | Meaning |
 |---|---|
 | `my_quill` | Any version |
-| `my_quill@1` | Any 1.x.x |
 | `my_quill@1.2` | Any 1.2.x |
 | `my_quill@1.2.0` | Exact version |
 
-A selector is digits only. There is no `@latest`: `my_quill@latest` fails to
-parse; the bare name matches any version.
+A selector is digits only. `my_quill@1` fails to parse: a major spans MINOR
+bumps, across which stored documents migrate, so it selects no compatible
+series. There is no `@latest` either: the bare name matches any version.
 
 ## Compatibility Checks
 
@@ -63,9 +67,9 @@ checks that Quill against the reference and rejects a mismatch —
 the names agree and the version falls outside the selector.
 
 Fix either by rendering with the Quill the document targets, or by amending the
-`$quill` line: correct the name, or widen the selector (`@3`, or drop it). A bare
-name matches any version, so a document that targets its Quill
-correctly never trips these checks.
+`$quill` line: correct the name, or correct the selector, or drop it to match
+any version. A bare name matches any version, so a document that targets its
+Quill correctly never trips these checks.
 
 The host picks which matching Quill to hand Quillmark; in Rust,
 `quillmark_core::version::VersionSelector::matches` tests a candidate's version
@@ -73,10 +77,13 @@ against the selector.
 
 ## Practical Guidelines
 
-1. Start at `1.0.0` for your first stable internal format release.
-2. Increase versions on every format change, even if small.
-3. Treat field renames and removals as breaking (`MAJOR`); prefer additive
-   changes (new optional fields and cards).
+1. Bump on every change to a published quill, even a fix.
+2. Prefer PATCH changes: add an optional field or an enum member rather than
+   reshaping one.
+3. Where a field has to change, prefer a rename or a lossless type change
+   (MINOR) to a removal (MAJOR).
+4. Pin documents with `@MAJOR.MINOR`: every patch in that series reads them
+   unchanged.
 
 ## Related Pages
 

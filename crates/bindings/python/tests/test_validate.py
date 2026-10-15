@@ -15,7 +15,7 @@ from conftest import field
 
 QUILL_YAML_CONTENT = """quill:
   name: py_validate_smoke
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: Python validate smoke test
 
@@ -77,7 +77,7 @@ def test_empty_document_is_the_blank_document_under_the_quill_reference(tmp_path
 
     empty = quill.empty_document()
 
-    assert empty.to_markdown() == Document("py_validate_smoke@1.0").to_markdown()
+    assert empty.to_markdown() == Document("py_validate_smoke@1.0.0").to_markdown()
     assert empty.cards == []
 
 
@@ -128,7 +128,7 @@ def test_seed_overlay_round_trip(tmp_path):
 
 BOUND_QUILL_YAML = """quill:
   name: py_bound_smoke
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: Python bound-door smoke test
 
@@ -214,10 +214,10 @@ def test_example_document_is_pinned_none_without_one_and_raises_coded(tmp_path):
     doc = with_example(
         "~~~\n$quill: py_validate_smoke\ntitle: A made-up title\n~~~\n", "clean"
     ).example_document()
-    assert doc.quill_ref == "py_validate_smoke@1.0"
+    assert doc.quill_ref == "py_validate_smoke@1.0.0"
     assert field(doc.main, "title") == "A made-up title"
     assert doc.warnings == []
 
     with pytest.raises(QuillmarkError) as excinfo:
-        with_example("~~~\n$quill: py_validate_smoke@1\n~~~\n", "pinned").example_document()
+        with_example("~~~\n$quill: py_validate_smoke@1.0\n~~~\n", "pinned").example_document()
     assert excinfo.value.diagnostics[0].code == "quill::example_reference"

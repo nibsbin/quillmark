@@ -59,7 +59,7 @@ fn the_example_is_the_root_file_by_name_and_never_refuses_a_load() {
 
 #[test]
 fn the_example_names_its_quill_with_no_selector() {
-    for reference in ["memo@1", "memo@1.2.0", "letter", "borb.memo"] {
+    for reference in ["memo@1.2", "memo@1.2.0", "letter", "borb.memo"] {
         let errors = load(&format!("~~~\n$quill: {reference}\n~~~\n"))
             .example_document()
             .expect("present")

@@ -19,7 +19,7 @@ fn quill_from_yaml(yaml: &str) -> Quill {
 const SIMPLE: &str = r#"
 quill:
   name: validate_test
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: Validate surface test
 
@@ -63,7 +63,7 @@ fn validate_warns_on_unknown_card_kind_naming_the_declared_ones() {
 const LENIENT: &str = r#"
 quill:
   name: lenient
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: Render-floor leniencies
 
@@ -198,7 +198,7 @@ fn validate_reports_a_refused_element_without_mistyping_its_siblings() {
         r#"
 quill:
   name: elems
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: element-wise conformance
 main:
@@ -252,7 +252,7 @@ fn validate_reports_a_bare_variant_scalar_at_the_path_its_author_wrote() {
         r#"
 quill:
   name: variants
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: variant-bearing enum
 main:

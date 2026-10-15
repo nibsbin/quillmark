@@ -1,10 +1,11 @@
-//! Semantic versioning (MAJOR.MINOR.PATCH) for Quill template references.
-//! Two-segment (`MAJOR.MINOR`) versions are also accepted; patch defaults to 0.
+//! Quill versions (`MAJOR.MINOR.PATCH`) and the `$quill` references that
+//! select them.
 
 use std::fmt;
 use std::str::FromStr;
 
-/// Semantic version number. Two-segment input defaults patch to 0.
+/// A `MAJOR.MINOR.PATCH` version. [`FromStr`] also reads two-segment
+/// `MAJOR.MINOR`, patch 0; a quill's own `version` is held to all three.
 ///
 /// Field order is the comparison order: the derived `Ord` is semver precedence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -76,8 +77,6 @@ pub enum VersionSelector {
     Exact(Version),
     /// Match any patch in this minor series (e.g., "@2.1")
     Minor(u32, u32),
-    /// Match any version in this major series (e.g., "@2")
-    Major(u32),
     /// Match any version: the bare name, with no selector written
     Any,
 }
@@ -89,13 +88,13 @@ impl VersionSelector {
         match self {
             VersionSelector::Exact(want) => *want == v,
             VersionSelector::Minor(major, minor) => v.major == *major && v.minor == *minor,
-            VersionSelector::Major(major) => v.major == *major,
             VersionSelector::Any => true,
         }
     }
 
-    /// The selector as written after `@`, unprefixed: `2`, `2.1` or `2.1.0`.
-    /// Empty is the typo `name@`, not a spelling of the bare name.
+    /// The selector as written after `@`, unprefixed: `2.1` or `2.1.0`.
+    /// Empty is the typo `name@`, not a spelling of the bare name. A lone
+    /// `MAJOR` is refused: the compatibility boundary is `MAJOR.MINOR`.
     pub(crate) fn from_token(token: &str) -> Result<Self, String> {
         if token.is_empty() {
             return Err(
@@ -110,29 +109,16 @@ impl VersionSelector {
             );
         }
 
-        let parts: Vec<&str> = token.split('.').collect();
-
-        match parts.len() {
-            2 | 3 => {
-                let version = Version::from_str(token)?;
-                Ok(if parts.len() == 3 {
-                    VersionSelector::Exact(version)
-                } else {
-                    VersionSelector::Minor(version.major, version.minor)
-                })
-            }
-            1 => {
-                let major = parse_segment(token, "major").map_err(|_| {
-                    format!(
-                        "Invalid version selector '{}': expected MAJOR, MAJOR.MINOR, or MAJOR.MINOR.PATCH",
-                        token
-                    )
-                })?;
-                Ok(VersionSelector::Major(major))
-            }
+        match token.split('.').count() {
+            2 => Version::from_str(token).map(|v| VersionSelector::Minor(v.major, v.minor)),
+            3 => Version::from_str(token).map(VersionSelector::Exact),
+            1 if token.bytes().all(|b| b.is_ascii_digit()) => Err(format!(
+                "Invalid version selector '{token}': a major alone selects no compatible \
+                 series; write `@{token}.MINOR` for one minor series, or \
+                 `@{token}.MINOR.PATCH` for one version"
+            )),
             _ => Err(format!(
-                "Invalid version selector '{}': expected MAJOR, MAJOR.MINOR, or MAJOR.MINOR.PATCH",
-                token
+                "Invalid version selector '{token}': expected MAJOR.MINOR or MAJOR.MINOR.PATCH"
             )),
         }
     }
@@ -157,9 +143,9 @@ const QUILL_REF_HINT: &str = "A $quill reference is `<name>` or `<name>@<selecto
 `<name>` is a quill name or `<collection>.<name>`. Each name segment matches `[a-z][a-z0-9_]*` \
 (a lowercase letter, then lowercase letters, digits, or underscores), at most 64 characters. \
 The optional version selector is \
-`@MAJOR.MINOR.PATCH` (exactly that version), `@MAJOR.MINOR` (any patch in that minor series), \
-or `@MAJOR` (any version in that major series), each segment plain digits. The bare `<name>` \
-matches any version; there is no `@latest`.";
+`@MAJOR.MINOR` (any patch in that series) or `@MAJOR.MINOR.PATCH` (exactly that version), each \
+segment plain digits. The bare `<name>` matches any version; there is no `@MAJOR` and no \
+`@latest`.";
 
 /// Single source of truth for the grammar [`QuillReference::from_str`] enforces:
 /// bindings surface it and it rides as the `hint` on the
@@ -256,7 +242,6 @@ impl fmt::Display for QuillReference {
         match self.selector {
             VersionSelector::Exact(v) => write!(f, "@{}", v),
             VersionSelector::Minor(major, minor) => write!(f, "@{}.{}", major, minor),
-            VersionSelector::Major(m) => write!(f, "@{}", m),
             VersionSelector::Any => Ok(()),
         }
     }
@@ -301,7 +286,7 @@ mod tests {
         assert!(Version::from_str("2.+1").is_err());
         assert!(Version::from_str("2.1.+0").is_err());
         assert!(QuillReference::from_str("memo@+2.+1").is_err());
-        assert!(VersionSelector::from_str("@+2").is_err());
+        assert!(VersionSelector::from_str("@+2.1").is_err());
     }
 
     /// `memo@` is a typo for `memo`, not a spelling of it: an absent selector
@@ -334,9 +319,6 @@ mod tests {
 
         let minor = VersionSelector::from_str("2.1").unwrap();
         assert_eq!(minor, VersionSelector::Minor(2, 1));
-
-        let major = VersionSelector::from_str("2").unwrap();
-        assert_eq!(major, VersionSelector::Major(2));
     }
 
     #[test]
@@ -356,11 +338,6 @@ mod tests {
         assert!(minor.matches(v2_1_3));
         assert!(!minor.matches(v2_2_0));
         assert!(!minor.matches(v3_0_0));
-
-        let major = VersionSelector::Major(2);
-        assert!(major.matches(v2_1_0));
-        assert!(major.matches(v2_2_0));
-        assert!(!major.matches(v3_0_0));
 
         let any = VersionSelector::Any;
         assert!(any.matches(v2_1_0));
@@ -409,7 +386,6 @@ mod tests {
         for (selector, written) in [
             (VersionSelector::Exact(Version::new(2, 1, 0)), "resume@2.1.0"),
             (VersionSelector::Minor(2, 1), "resume@2.1"),
-            (VersionSelector::Major(2), "resume@2"),
             (VersionSelector::Any, "resume"),
         ] {
             let reference = QuillReference::new("resume".to_string(), selector);

@@ -67,7 +67,7 @@ fn a_today_cell_renders_the_supplied_date_at_every_depth() {
 fn today_is_a_date_value_only() {
     let with_default = |field: &str| {
         QuillConfig::from_yaml(&format!(
-            "quill:\n  name: q\n  version: \"1.0\"\n  backend: typst\n  description: q\n\
+            "quill:\n  name: q\n  version: \"1.0.0\"\n  backend: typst\n  description: q\n\
              main:\n  fields:\n    f: {field}\n"
         ))
     };

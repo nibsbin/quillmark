@@ -17,7 +17,7 @@ use crate::{document::Document, quill::Quill, value::QuillValue};
 const QUILL_YAML: &str = r#"
 quill:
   name: conform_properties
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: Conform properties
 main:

@@ -117,7 +117,7 @@ describe('@quillmark/wasm: surface', () => {
 describe('@quillmark/wasm: DocumentWriter / CardWriter (bind the quill once)', () => {
   const EDITOR_QUILL_YAML = `quill:
   name: editor_test
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: Typed writer sugar test
 
@@ -312,7 +312,7 @@ card_kinds:
 describe('@quillmark/wasm: DocumentReader / CardReader (the schema-plane read)', () => {
   const VIEW_QUILL_YAML = `quill:
   name: view_test
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: Typed reader sugar test
 
@@ -501,7 +501,7 @@ card_kinds:
 describe('@quillmark/wasm: reader.resolve (the resolved-value view)', () => {
   const QUILL_YAML = `quill:
   name: field_states_test
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: Resolved-field view coverage
 
@@ -1403,7 +1403,7 @@ describe('@quillmark/wasm: handles from another copy (duplicate install)', () =>
 describe('@quillmark/wasm: today (the render date a host supplies)', () => {
   const QUILL_YAML = `quill:
   name: dated
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: A field dated by the day it renders
 

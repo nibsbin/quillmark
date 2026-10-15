@@ -21,7 +21,7 @@ fn plaintext_quill(temp_dir: &TempDir) -> std::path::PathBuf {
         quill_path.join("Quill.yaml"),
         r#"quill:
   name: "plain_quill"
-  version: "1.0"
+  version: "1.0.0"
   backend: "typst"
   description: "plaintext lowering"
 

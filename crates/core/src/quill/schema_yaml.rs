@@ -18,7 +18,7 @@ mod tests {
     const FULL: &str = r#"
 quill:
   name: full
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: Full
 main:
@@ -47,7 +47,7 @@ card_kinds:
     #[test]
     fn schema_keys_emit_in_declaration_order() {
         let schema = cfg(r#"
-quill: { name: order, version: "1.0", backend: typst, description: x }
+quill: { name: order, version: "1.0.0", backend: typst, description: x }
 main:
   fields:
     zeta:

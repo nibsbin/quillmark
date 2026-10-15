@@ -41,7 +41,7 @@ Every Quill.yaml must have a `quill` section with format metadata.
 | `name`           | string | yes      | Unique identifier for the Quill |
 | `backend`        | string | yes      | Rendering backend (e.g. `typst`) |
 | `description`    | string | yes      | Human-readable description of the quill itself (non-empty). Independent of `main.description`, which is the optional schema description authored under `main:`. One line: a line break fails the load with `quill::description_multiline`. |
-| `version`        | string | yes      | Semantic version (`MAJOR.MINOR` or `MAJOR.MINOR.PATCH`) |
+| `version`        | string | yes      | `MAJOR.MINOR.PATCH`, bumped by what the change costs a stored document ([Quill Versioning](versioning.md)) |
 | `author`         | string | no       | Creator of the Quill (defaults to `"Unknown"`) |
 | `ui`             | object | no       | Document-level UI metadata |
 | `requires`       | string | no       | The oldest Quillmark this quill loads on, as `">=MAJOR.MINOR"` or `">=MAJOR.MINOR.PATCH"` |
@@ -59,7 +59,7 @@ The Typst template, for example, is declared as `typst.plate_file` (see the
 ```yaml
 quill:
   name: usaf_memo
-  version: "0.1"
+  version: "0.1.0"
   backend: typst
   description: Typesetted USAF Official Memorandum
   author: TongueToQuill
@@ -704,14 +704,14 @@ A group is data. The document nests its keys under the group's id, and a plate r
 
 ```markdown
 ~~~
-$quill: memo@1
+$quill: memo@1.0
 subject: Annual Records Management Review
 addressing:
   memo_for: [123 OG/CC, 123 MXG/CC]
 ~~~
 ```
 
-So moving a field between groups is an address change, a MAJOR version like a rename. Fields beside the objects stay ungrouped. Nothing requires grouping: a flat questionnaire stays a flat `fields:` map. A card has no `sections:` key; one is `quill::invalid_card_schema`, its hint naming this form.
+So moving a field between groups is an address change, a MINOR bump like a rename. Fields beside the objects stay ungrouped. Nothing requires grouping: a flat questionnaire stays a flat `fields:` map. A card has no `sections:` key; one is `quill::invalid_card_schema`, its hint naming this form.
 
 #### Legacy `ui.group`
 
@@ -1080,7 +1080,7 @@ Quillmark emits a public schema contract derived from `Quill.yaml`. Accessors:
 ```yaml
 quill:
   name: project_report
-  version: "1.0"
+  version: "1.0.0"
   backend: typst
   description: Monthly project status report
   author: Engineering Team

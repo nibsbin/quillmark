@@ -391,7 +391,7 @@ main:
 
 - **The group is data.** The document stores `letterhead: { letterhead_title: … }`
   and a plate reads `data.letterhead.letterhead_title`, so moving a field
-  between groups is an address change, the same MAJOR a rename is.
+  between groups is an address change, the same MINOR bump a rename is.
 - **`sections:` is not a card key** (`quill::invalid_card_schema`, its hint
   naming the top-level `object`).
 
