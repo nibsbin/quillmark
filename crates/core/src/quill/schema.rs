@@ -39,7 +39,7 @@ pub const QUILLMARK_BLANK_TITLE_KEY: &str = "quillmark:blank_title";
 /// trail it sorted.
 pub const QUILLMARK_ROSTER_KEY: &str = "quillmark:roster";
 
-/// The `{type: string, enum: ["", …] }` an enum projects to: a plain enum's own
+/// The `{type: string, enum: ["", …]}` an enum projects to: a plain enum's own
 /// cell, and the discriminant cell of a variant-bearing one. That container is a
 /// mapping and therefore not a cell, so this is where its choice lands.
 fn discriminant_schema(field: &FieldSchema) -> serde_json::Value {
@@ -276,7 +276,11 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
     if config.main.body_enabled() {
         properties.insert(
             "$body".to_string(),
-            serde_json::json!({ "type": "object", "contentMediaType": CONTENT_MEDIA_TYPE }),
+            serde_json::json!({
+                "type": "object",
+                "contentMediaType": CONTENT_MEDIA_TYPE,
+                QUILLMARK_MULTILINE_KEY: true,
+            }),
         );
     }
 
@@ -289,7 +293,11 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
         if card.body_enabled() {
             card_properties.insert(
                 "$body".to_string(),
-                serde_json::json!({ "type": "object", "contentMediaType": CONTENT_MEDIA_TYPE }),
+                serde_json::json!({
+                    "type": "object",
+                    "contentMediaType": CONTENT_MEDIA_TYPE,
+                    QUILLMARK_MULTILINE_KEY: true,
+                }),
             );
         }
         defs.insert(
@@ -537,6 +545,7 @@ card_kinds:
         let main_body = &json["properties"]["$body"];
         assert_eq!(main_body["type"], "object");
         assert_eq!(main_body["contentMediaType"], CONTENT_MEDIA_TYPE);
+        assert_eq!(main_body[QUILLMARK_MULTILINE_KEY], true);
 
         for def_name in ["indorsement_card", "note_card"] {
             let card_body = &json["$defs"][def_name]["properties"]["$body"];
@@ -547,6 +556,10 @@ card_kinds:
             assert_eq!(
                 card_body["contentMediaType"], CONTENT_MEDIA_TYPE,
                 "{def_name} $body should be richtext"
+            );
+            assert_eq!(
+                card_body[QUILLMARK_MULTILINE_KEY], true,
+                "{def_name} $body should lower as a block"
             );
         }
     }

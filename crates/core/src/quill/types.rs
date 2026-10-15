@@ -1004,9 +1004,9 @@ impl FieldSchema {
             return Ok(());
         };
         if def.contains_key("inline") {
-            return Err("inline: is retired: text and richtext are one line by default, \
-                        so delete it, and declare multiline: true on a field that takes \
-                        more than one line"
+            return Err("inline: is retired: text and richtext are one line by default; \
+                        write inline: true as multiline: false on a richtext (a text \
+                        drops it), and inline: false as multiline: true"
                 .to_string());
         }
         let ui_multiline = def

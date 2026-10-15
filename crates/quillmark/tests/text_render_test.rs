@@ -1,4 +1,4 @@
-//! `plaintext` carries richtext's `contentMediaType`, so it lowers through the
+//! `text` carries richtext's `contentMediaType`, so it lowers through the
 //! shared content path with no backend-side case and surfaces geometry as any
 //! content field does. Its literal codec keeps markdown delimiters verbatim.
 //!
@@ -14,7 +14,7 @@ use tempfile::TempDir;
 
 mod common;
 
-fn plaintext_quill(temp_dir: &TempDir) -> std::path::PathBuf {
+fn text_quill(temp_dir: &TempDir) -> std::path::PathBuf {
     let quill_path = temp_dir.path().join("plain_quill");
     fs::create_dir_all(&quill_path).unwrap();
     fs::write(
@@ -23,7 +23,7 @@ fn plaintext_quill(temp_dir: &TempDir) -> std::path::PathBuf {
   name: "plain_quill"
   version: "1.0.0"
   backend: "typst"
-  description: "plaintext lowering"
+  description: "text lowering"
 
 typst:
   plate_file: plate.typ
@@ -41,7 +41,7 @@ main:
       items:
         type: text
         multiline: true
-      description: plaintext elements
+      description: text elements
 "#,
     )
     .unwrap();
@@ -57,13 +57,13 @@ main:
     quill_path
 }
 
-/// `plaintext` rests as its literal string, so these author unparsed and ride
+/// `text` rests as its literal string, so these author unparsed and ride
 /// the floor's coercion.
 const SUBJECT: &str = "a *literal* subject with _no_ markup";
 const STAR_TAG: &str = "literal *star* tag";
 
 fn session(temp_dir: &TempDir) -> LiveSession {
-    let quill = quillmark::quill_from_path(plaintext_quill(temp_dir)).expect("load quill");
+    let quill = quillmark::quill_from_path(text_quill(temp_dir)).expect("load quill");
     let md = format!(
         "~~~card-yaml\n$quill: plain_quill\n$kind: main\n\
          subject: \"{SUBJECT}\"\ntags:\n  - \"{STAR_TAG}\"\n  - \"second plain tag\"\n~~~\n"
@@ -73,7 +73,7 @@ fn session(temp_dir: &TempDir) -> LiveSession {
 }
 
 #[test]
-fn plaintext_elements_and_scalars_surface_regions() {
+fn text_elements_and_scalars_surface_regions() {
     let temp_dir = TempDir::new().unwrap();
     let session = session(&temp_dir);
     let regions = session.regions();
@@ -86,7 +86,7 @@ fn plaintext_elements_and_scalars_surface_regions() {
         let region = regions
             .iter()
             .find(|r| r.field == field)
-            .unwrap_or_else(|| panic!("a plaintext content field surfaces {field:?}: {regions:?}"));
+            .unwrap_or_else(|| panic!("a text content field surfaces {field:?}: {regions:?}"));
         assert_eq!(
             region.span,
             Some([0, len]),
@@ -100,7 +100,7 @@ fn plaintext_elements_and_scalars_surface_regions() {
 }
 
 #[test]
-fn a_plaintext_delimiter_is_one_cluster_under_click_and_caret() {
+fn a_text_delimiter_is_one_cluster_under_click_and_caret() {
     let temp_dir = TempDir::new().unwrap();
     let session = session(&temp_dir);
     let region = session

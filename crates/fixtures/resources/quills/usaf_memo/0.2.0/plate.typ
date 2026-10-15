@@ -1,12 +1,12 @@
 #import "@local/quillmark-helper:0.2.0" as qm
 #import "@local/tonguetoquill-usaf-memo:3.0.0": backmatter, date-pattern, frontmatter, indorsement, mainmatter
 
-// A memo has no "no style" state, so the blank takes the package's default.
-// Resolved once here: `frontmatter` and the date's pattern must agree.
 // The package computes with these as strings (`upper`, joins, emptiness), so
 // each `text` field reaches it through `qm.str`.
 #let strs(values) = values.map(qm.str)
 
+// A memo has no "no style" state, so the blank takes the package's default.
+// Resolved once here: `frontmatter` and the date's pattern must agree.
 #let memo_style = if qm.data.memo_style != "" { qm.data.memo_style } else { "usaf" }
 
 // A blank date is dated by hand at signing, so it renders as a text widget bound

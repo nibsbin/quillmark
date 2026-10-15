@@ -22,9 +22,9 @@ selector `@MAJOR.MINOR` or exact, a document the quill creates pins its
   this release. `schema()` emits `quillmark:multiline: true` where it emitted
   `quillmark:inline` on the opposite fields; the blueprint prints
   `text(multiline)<plain>` and `richtext(multiline)<markdown>`.
-  `validation::not_inline` and `edit::field_not_inline` are
-  `validation::not_single_line` and `edit::field_not_single_line`, and their
-  `codec` names `text`. An acroform text widget binds multiline exactly where
+  `validation::not_inline`, `edit::field_not_inline`,
+  `conform::field_not_inline` and `quill::seed_not_inline` end in
+  `not_single_line`, and their `codec` names `text`. An acroform text widget binds multiline exactly where
   its field declares it, so a block `richtext` no longer binds a one-line
   widget. (#2229, #2217)
 - feat(core)!: **`type: string` is retired in favor of `text`**, and a plate

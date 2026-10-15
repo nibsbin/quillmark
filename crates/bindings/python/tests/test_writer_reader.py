@@ -251,13 +251,12 @@ def test_reader_get_content_absence_unknown_and_non_content():
     with raises_edit_code("edit::unknown_field"):
         quill.reader(Document("sample_form@0.1.0")).get_content("nope")
 
-    taro = taro_quill()
-    tdoc = Document("taro@0.1.0")
-    taro.writer(tdoc).set("author", "Ada")
+    doc = Document("sample_form@0.1.0")
+    quill.writer(doc).set("favorite_color", "red")
     # A declared type carrying no content answers from the schema, not the
-    # payload: `author` holds a string and is still not content.
+    # payload: `favorite_color` holds a string and is still not content.
     with raises_edit_code("edit::field_not_content"):
-        taro.reader(tdoc).get_content("author")
+        quill.reader(doc).get_content("favorite_color")
 
 
 ELEMENT_QUILL_YAML = """quill:
@@ -284,7 +283,8 @@ main:
     tags:
       type: array
       items:
-        type: text
+        type: enum
+        values: [x]
     rows:
       type: array
       items:

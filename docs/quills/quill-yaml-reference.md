@@ -289,7 +289,7 @@ Then decide the shape: `text` is one line and `richtext` one paragraph, and `mul
 | `{ type: richtext, multiline: false }` | one formatted paragraph |
 | `{ type: richtext, multiline: true }` | formatted paragraphs, lists and other blocks |
 
-A name, a URL or a reference key is `text` too: the plate prints it as content, and where it computes with it (`set document(author: ..)`, `upper`, a comparison) it reads `qm.str(..)`, the verbatim string ([Text as a str](typst-backend.md#text-as-a-str)).
+A name, a URL or a reference key is `text` too: the plate prints it as content, and where it computes with it (`set document(author: ..)`, `upper`, a comparison) it reads `qm.str(..)`, the value's string ([Text as a str](typst-backend.md#text-as-a-str)).
 
 Any field the plate prints through `qm.ink`, `enum` included, gets a region and click-to-edit in editor consumers ([Print with `ink`](editor-regions.md#print-with-ink)). A content field rides the canonical content model and adds navigation inside its value: a click lands a caret in the text. `text` and `richtext` share that entire stack and the same backend lowering, so they are indistinguishable in an editor and diverge only at emit, where the codec decides whether a delimiter is markup or a character.
 

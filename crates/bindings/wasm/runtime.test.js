@@ -388,13 +388,13 @@ card_kinds:
     expect(new DocumentReader(quill, seededDoc(quill))).toBeInstanceOf(DocumentReader)
   })
 
-  it('interprets by declared type: richtext → markdown, plaintext → literal, scalar → canonical', () => {
+  it('interprets by declared type: richtext → markdown, text → literal, scalar → canonical', () => {
     const quill = buildQuill()
     const doc = seededDoc(quill)
-    quill.writer(doc).set('note', 'a *literal* line') // marks verbatim under plaintext
+    quill.writer(doc).set('note', 'a *literal* line') // marks verbatim under text
     const v = quill.reader(doc)
     expect(v.get('subject')).toBe('Q3 **results**') // richtext projects to markdown
-    expect(v.get('note')).toBe('a *literal* line') // plaintext projects verbatim
+    expect(v.get('note')).toBe('a *literal* line') // text projects verbatim
     expect(v.get('qty')).toBe(3) // scalar returns canonical
   })
 
@@ -436,7 +436,7 @@ card_kinds:
       "~~~card-yaml\n$quill: view_test\nsubject: Q3 **results**\nnote: 'a *literal* line'\n~~~\n\nBody."
     const bound = quill.parse(md)
     expect(typeof bound.getStored('subject')).toBe('object') // richtext: the Content object
-    expect(bound.getStored('note')).toBe('a *literal* line') // plaintext: the literal
+    expect(bound.getStored('note')).toBe('a *literal* line') // text: the literal
     expect(bound.warnings).toEqual([])
 
     // conform is the same walk on a document that arrived any other way, and it
@@ -563,7 +563,7 @@ Note body.
     )
     const f = resolved.main.fields
     expect(f.map((r) => r.name)).toEqual(['title', 'status', 'notes', 'count', 'author'])
-    expect(byName(f, 'title')).toEqual({ name: 'title', value: 'Hello', source: 'authored' })
+    expect(byName(f, 'title')).toMatchObject({ name: 'title', value: { text: 'Hello' }, source: 'authored' })
     expect(byName(f, 'status').source).toBe('default')
     expect(byName(f, 'notes').source).toBe('blank')
     expect(resolved.main.body.source).toBe('blank')
@@ -571,7 +571,7 @@ Note body.
     const card = resolved.cards[0]
     expect(card.kind).toBe('note')
     expect(card.index).toBe(0)
-    expect(byName(card.fields, 'label')).toMatchObject({ value: 'L', source: 'authored' })
+    expect(byName(card.fields, 'label')).toMatchObject({ value: { text: 'L' }, source: 'authored' })
   })
 })
 

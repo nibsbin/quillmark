@@ -6,7 +6,7 @@
 //! For `richtext` the emitted markdown is a lossy projection (island ids,
 //! content-only marks, and a container around a non-paragraph line do not
 //! survive), so the markdown loop is a fixed point after one pass rather than
-//! the identity. `plaintext`'s literal codec is lossless both ways.
+//! the identity. `text`'s literal codec is lossless both ways.
 
 use proptest::prelude::*;
 

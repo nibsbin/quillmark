@@ -26,5 +26,5 @@
 
 
 #if qm.data.picture != "" {
-  image(qm.data.picture)
+  image(qm.str(qm.data.picture))
 }

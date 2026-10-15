@@ -150,14 +150,14 @@ def _bound_md(*lines):
 
 def test_parse_lands_both_codecs_at_rest(tmp_path):
     """The bound door's crossing: a richtext field arrives as the canonical
-    content dict, a plaintext one as its literal string, and warnings ride the
+    content dict, a text one as its literal string, and warnings ride the
     same `doc.warnings` carrier a `from_markdown` parse uses."""
     quill = make_quill(tmp_path, BOUND_QUILL_YAML)
     doc = quill.parse(_bound_md("subject: Q3 **results**", "note: 'a *literal* line'"))
 
     assert doc.warnings == []
     assert isinstance(field(doc.main, "subject"), dict), "richtext rests as the corpus"
-    assert field(doc.main, "note") == "a *literal* line", "plaintext rests as the literal"
+    assert field(doc.main, "note") == "a *literal* line", "text rests as the literal"
 
 
 def test_conform_converges_a_transported_document(tmp_path):

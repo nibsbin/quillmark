@@ -340,6 +340,8 @@
 /// `upper`, `split`, a comparison). `none` stays `none` and a `str` is itself,
 /// so an unanswered optional cell and a blank one pass through.
 ///
-/// Lossless on `text`, whose value carries no marks. On `richtext` it is the
+/// Every character of a `text` value comes back, whitespace normalized: a tab
+/// or a no-break space reads as a space, trailing whitespace drops, and a run of
+/// blank lines reads as one. On `richtext` it is the
 /// text with the formatting dropped, and an island or element gives nothing.
 #let str(value) = _qm-str(value)

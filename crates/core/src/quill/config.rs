@@ -2980,20 +2980,23 @@ fn literal_content(
             let rt = match crate::document::Codec::Text.decode_value(json) {
                 Some(Ok(rt)) => rt.content,
                 Some(Err(e)) => {
-                    return Err(richtext_literal_error(
+                    return Err(literal_error(
+                        "text",
                         label,
-                        &format!("not a valid richtext content: {}", e.into_message()),
+                        &format!("not a valid text content: {}", e.into_message()),
                     ))
                 }
                 None => {
-                    return Err(richtext_literal_error(
+                    return Err(literal_error(
+                        "text",
                         label,
                         "expected a text string (text literals are authored as literal text)",
                     ))
                 }
             };
             if !rt.is_plain() {
-                return Err(richtext_literal_error(
+                return Err(literal_error(
+                    "text",
                     label,
                     "text carries no marks, islands, or block formatting",
                 ));
@@ -3074,11 +3077,17 @@ fn literal_content(
     }
 }
 
-/// A load diagnostic for a richtext schema literal that failed to import.
+/// A load diagnostic for a `richtext` schema literal that failed to import.
 fn richtext_literal_error(label: &str, reason: &str) -> Diagnostic {
+    literal_error("richtext", label, reason)
+}
+
+/// A load diagnostic for a content schema literal of `type` that failed to
+/// import.
+fn literal_error(r#type: &str, label: &str, reason: &str) -> Diagnostic {
     Diagnostic::new(
         Severity::Error,
-        format!("Failed to import richtext {label}: {reason}"),
+        format!("Failed to import {type} {label}: {reason}"),
     )
     .with_code("quill::richtext_default_import".to_string())
 }

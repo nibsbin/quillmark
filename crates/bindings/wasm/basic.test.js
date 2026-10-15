@@ -519,7 +519,7 @@ describe('Content codec: importMarkdown / exportMarkdown / rebase / mapPos', () 
 })
 
 describe('Content predicates: isInline / isPlain', () => {
-  it('judge the inline and plaintext constraints on a Content, throwing on a non-content', () => {
+  it('judge the single-line and plain constraints on a Content, throwing on a non-content', () => {
     expect(isInline(importMarkdown('One **bold** line.').content)).toBe(true)
     expect(isInline(importMarkdown('One.\n\nTwo.').content)).toBe(false)
     expect(isInline(importMarkdown('- item').content)).toBe(false)

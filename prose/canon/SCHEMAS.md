@@ -26,7 +26,7 @@ Supported field types:
 
 | Quill.yaml Type | Meaning |
 |---|---|
-| `enum` | Closed string domain of **choices**; requires a `values:` list. Also accepts its blank (`""`), which is never a declared member — declaring one is a load error (`quill::enum_blank_member`). Projects to JSON-Schema `{type: string, enum: ["", …] }`. A value is a stored id; display text is the plate's. `values:` on any other type, and `enum:` on any type at all, is a load error |
+| `enum` | Closed string domain of **choices**; requires a `values:` list. Also accepts its blank (`""`), which is never a declared member — declaring one is a load error (`quill::enum_blank_member`). Projects to JSON-Schema `{type: string, enum: ["", …]}`. A value is a stored id; display text is the plate's. `values:` on any other type, and `enum:` on any type at all, is a load error |
 | `number` | Numeric value (integers and decimals) |
 | `integer` | Integer-only numeric value |
 | `boolean` | `true` / `false` |
@@ -35,7 +35,7 @@ Supported field types:
 | `object` | Structured map; requires `properties:` |
 | `date` | A strict calendar date `YYYY-MM-DD`, or the keyword `today` ([The render date](#the-render-date-today)). Rejects any time component (a time-bearing string is a `datetime`, not a truncated date). The common case in a document engine, so it is the unmarked date type. Stored verbatim; lowers to a native Typst `datetime(year:, month:, day:)`, with `qm.ink(dict, key, ..)` for a click-to-edit rendering (see `PLATE_DATA.md`) |
 | `datetime` | A strict offset-less wall-clock datetime `YYYY-MM-DDThh:mm[:ss]`, seconds optional (zero-filled). Rejects timezone offsets (`Z`, `±HH:MM`), the space separator, fractional seconds, and a bare date (which is a `date`). An offset is **rejected, never dropped**: the engine does no zone math, keeping wall-clock semantics end to end. Stored verbatim; lowers the same way over the six-component `datetime(year:, .., second:)` |
-| `text` | Open **unformatted** text over the same canonical content (`Content`) as `richtext` (same media type, nav, and regions) but a **literal** codec (`from_plaintext`/`to_plaintext`): delimiters stay literal, no markup, verbatim round-trip. One line; `multiline: true` admits line breaks. Constrained mark-/island-free (`Content::is_plain`); a formatted wire content is rejected (`validation::not_plain`), not stripped. **Rests as the literal string** — in the *document*. A plate receives the content object, exactly as for `richtext` (no backend reads the `text` annotation), and a plate that computes with the value takes its `str` through `qm.str(..)` ([PLATE_DATA.md](PLATE_DATA.md)), lossless here because the value carries no marks |
+| `text` | Open **unformatted** text over the same canonical content (`Content`) as `richtext` (same media type, nav, and regions) but a **literal** codec (`from_plaintext`/`to_plaintext`): delimiters stay literal, no markup, verbatim round-trip. One line; `multiline: true` admits line breaks. Constrained mark-/island-free (`Content::is_plain`); a formatted wire content is rejected (`validation::not_plain`), not stripped. **Rests as the literal string** — in the *document*. A plate receives the content object, exactly as for `richtext` (no backend reads the `text` annotation), and a plate that computes with the value takes its `str` through `qm.str(..)` ([PLATE_DATA.md](PLATE_DATA.md)), every character recovered because the value carries no marks, whitespace normalized |
 | `richtext` | Rich **formatted** prose over a canonical content (`Content`); markdown is a projection of it. One paragraph (exactly one `Para` line, no container, no islands); `multiline: true` admits block structure (paragraphs, lists, containers). A `richtext` spells `multiline:` either way, `true` or `false`, and its absence is a load error. The pre-richtext `markdown` spelling and the retired `type: richtext(inline)` token are schema load errors (`quill::field_parse_error`). **Rests as the canonical content object** |
 
 `multiline` is the one line-shape key: coercion, `validate`, the editor and
@@ -472,7 +472,7 @@ Coercion rules per type:
   (a schema literal that violates it is a load error). Blueprint annotates a
   field declaring `multiline: true` as `text(multiline)<plain>` or
   `richtext(multiline)<markdown>`; `build_transform_schema` emits
-  `quillmark:multiline: true` on it
+  `quillmark:multiline: true` on it and on every `$body`
 - **`text` coercion and enforcement.** A `text` value rides the same
   content as `richtext`, differing only at the codec:
   - a string imports through the **literal** codec (`from_plaintext`,
@@ -488,7 +488,7 @@ Coercion rules per type:
   content) cover `text` exactly as
   `richtext`: both are content leaves (`field_contains_content`)
 - **`enum` domain validation.** An `enum` field coerces as a string; domain membership is a *value* check (`validation::enum_violation`), not a type check, so an out-of-domain string is well-typed but invalid. `type: enum` requires a non-empty `values:` list; `values:` on any other type is a load error (`quill::field_parse_error`), as is `enum:` on any type
-- **The domain rides the type token.** It is the `FieldType::Enum` payload, so a consumer that has matched the token holds it: the render floor, the acroform widget kind, the blueprint annotation, and the transform-schema projection to `{type: string, enum: […] }`. A variant-bearing branch enters through `variants:` with no token in hand and reads it through `FieldSchema::domain()`. A domain admits its members and the blank, so an empty one admits only the blank
+- **The domain rides the type token.** It is the `FieldType::Enum` payload, so a consumer that has matched the token holds it: the render floor, the acroform widget kind, the blueprint annotation, and the transform-schema projection to `{type: string, enum: […]}`. A variant-bearing branch enters through `variants:` with no token in hand and reads it through `FieldSchema::domain()`. A domain admits its members and the blank, so an empty one admits only the blank
 - **Null short-circuits coercion.** A null value (`field:`, `field: null`,
   `field: ~`) passes coercion unchanged for *every* type: null ≡ absent, so
   it carries no data to coerce. The value reaches the render floor and

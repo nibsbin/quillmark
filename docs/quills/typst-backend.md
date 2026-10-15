@@ -25,7 +25,7 @@ Plates are plain Typst code. Document metadata reaches the plate as a Typst dict
 ```typst
 #import "@local/quillmark-helper:0.2.0" as qm
 
-#qm.data.title.len()                    // a declared field: always present
+#qm.str(qm.data.title).len()            // a declared field: always present
 #qm.data.at("logo", default: none)      // an undeclared key: may be absent
 #qm.ink(qm.data, "title")               // the field printed, click-to-edit
 ```
@@ -38,7 +38,7 @@ Every field arrives at its **native** Typst type — a `date` as a `datetime`, a
 
 ### Text as a str
 
-A `text` value is content, so it prints with its click target, but a plate that computes with it needs a `str`: `set document(author: ..)` takes no content, and neither do `upper`, `split`, `len` or a comparison. `qm.str(value)` returns the value's verbatim string, markup escapes, smart quotes and line breaks undone:
+A `text` value is content, so it prints with its click target, but a plate that computes with it needs a `str`: `set document(author: ..)` takes no content, and neither do `upper`, `split`, `len` or a comparison. `qm.str(value)` returns the value's string, markup escapes, smart quotes and line breaks undone:
 
 ```typst
 #set document(author: qm.str(qm.data.author))
@@ -47,7 +47,7 @@ A `text` value is content, so it prints with its click target, but a plate that 
 #if qm.str(qm.data.status) == "final" [ … ]
 ```
 
-A blank value (`""`) and an unanswered optional one (`none`) pass through unchanged. The string is computed, so it carries no region: print the value itself, or `qm.ink(..)`, where the click target matters. On a `richtext` value `qm.str` drops the formatting.
+Whitespace comes back normalized: a tab reads as a space, a no-break space as a space, whitespace at the end drops, and a run of blank lines reads as one. A blank value (`""`, whitespace only included) and an unanswered optional one (`none`) pass through unchanged. The string is computed, so it carries no region: print the value itself, or `qm.ink(..)`, where the click target matters. On a `richtext` value `qm.str` drops the formatting.
 
 `qm.ink(dict, key)` prints a field by its address: `dict` is `qm.data`, a card, a typed dictionary or table row, or a [`roster`](#matrices) row's `value`, and `key` one or more steps from it: `#qm.ink(qm.data, "title")`, `#qm.ink(row, "org")`, `#qm.ink(qm.data, "address.city")`. It prints what the field prints and keeps the field's click target in an [editor preview](editor-regions.md#print-with-ink) however the plate passes it around. An address the schema does not have fails the render; blank content, a blank date, a typed dictionary and a matrix give `none`.
 

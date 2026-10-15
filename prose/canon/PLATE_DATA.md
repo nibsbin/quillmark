@@ -179,12 +179,14 @@ Internals keep a `_qm-` prefix.
 A `text` value reaches the plate as content, as `richtext` does, so it keeps
 nav, regions and click-to-edit. A plate that computes with it — a
 `set document(author:)`, which takes no content, an `upper`, a `split`, a
-comparison — reads it through **`qm.str(value)`**, the verbatim string. The
+comparison — reads it through **`qm.str(value)`**, the value's string. The
 projection inverts the lowering: a markup escape, a shorthand the emitter
 spelled `~` and a smart quote come back as the characters the value holds, a
-line break as `\n`. It is lossless on `text`, which carries no marks
-(`validation::not_plain`); on `richtext` it drops the formatting. A blank value
-lowers to `""` and an unanswered optional one to `none`, and `qm.str` passes
+line break as `\n`. It recovers every character of a `text` value, which
+carries no marks (`validation::not_plain`), but not every whitespace: markup
+folds a tab into a space, a no-break space reads as a space, whitespace at the
+value's end drops, and a run of blank lines reads as one. On `richtext` it
+drops the formatting. A blank value, whitespace only included, lowers to `""` and an unanswered optional one to `none`, and `qm.str` passes
 both through. The string is computed, so it carries no region: print the value
 itself, or `qm.ink`, where the click target matters.
 

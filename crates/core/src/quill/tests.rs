@@ -1177,6 +1177,26 @@ fn a_declaration_outside_the_field_grammar_is_a_field_parse_error() {
         );
     }
 }
+
+/// Each retired line-shape or type spelling names what to write instead.
+#[test]
+fn a_retired_spelling_names_its_replacement() {
+    for (field, replacement) in [
+        ("    f:\n      type: string\n", "type: text"),
+        ("    f:\n      type: plaintext\n", "type: text"),
+        ("    f:\n      type: string?\n", "type: text"),
+        ("    f:\n      type: text\n      inline: true\n", "multiline: false"),
+        ("    f:\n      type: text\n      ui: { multiline: true }\n", "multiline: true"),
+        ("    f:\n      type: richtext\n", "multiline:"),
+    ] {
+        let err = quill_with_field(field).expect_err(field);
+        assert!(
+            err.iter().any(|d| d.message.contains(replacement)),
+            "{field} should name `{replacement}`: {err:?}"
+        );
+    }
+}
+
 #[test]
 fn single_line_richtext_default_over_one_para_is_a_load_error() {
     let err = quill_with_field(

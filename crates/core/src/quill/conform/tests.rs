@@ -133,7 +133,7 @@ fn rest_is_per_codec_at_every_depth() {
     assert_eq!(
         payload.get("note").unwrap().as_json(),
         &json!("a *literal* line"),
-        "plaintext rests as the literal string, escapes and all"
+        "text rests as the literal string, escapes and all"
     );
     assert_eq!(payload.get("qty").unwrap().as_json(), &json!(3));
 
@@ -376,7 +376,7 @@ Body.
         .expect("note is present");
     let text = text
         .as_str()
-        .expect("a plaintext field reads as its literal text")
+        .expect("a text field reads as its literal text")
         .to_string();
     assert_eq!(text, r"a \*b\* line");
 
