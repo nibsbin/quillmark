@@ -588,7 +588,7 @@ declared and how absence travels:
 | Shape | Kind | Why |
 |---|---|---|
 | every leaf | cell | it is the value |
-| `array` | cell | `items` fixes the element type, never the **arity**: `default: []` and `default: [{…}]` say what no element declaration can |
+| `array` | cell | `items` fixes the element type, never the **arity**: `default: [{…}]` says what no element declaration can |
 | `matrix` | cell | the roster fixes the domain, never which members are held: `default: {}` and `default: {dco: true}` say what no column declaration can ([Matrix](#matrix)) |
 | `enum` discriminant | cell | the member is a leaf choice |
 | `object` with `properties` | namespace | the schema fixes the keys, so nothing in the value is absent from its cells |
@@ -1098,11 +1098,11 @@ A slot declares one value, its `default`: the value the *majority* of authors
 want. Because most authors want it, the field can be omitted entirely: at
 render time the default fills any field the document leaves out (an authored
 value always wins: `ladder_sourced` in core's `quill::compose`). The blueprint
-renders that concrete default value with a type-only annotation. Type-empty
-defaults (`default: ""`, `[]`, `false`, `0`) are the canonical way to mark a
-"skippable" cell; a *dictionary* is skippable by its properties each carrying
-one, since the container holds no literal
-([Cells and namespaces](#cells-and-namespaces)).
+renders that concrete default value with a type-only annotation. A blank
+`default:` (`""`, `[]`, `{}`) renders exactly as no default does, so the
+blueprint prints it as none ([BLUEPRINT.md](BLUEPRINT.md#cell-values)); `0` and
+`false` are values and print. Whether an author should answer a field is its
+`description`'s to say.
 
 A slot's `title` and `description` are text, not values: `title` labels it and
 `description` guides it, a format hint included (`description: Name as signed,

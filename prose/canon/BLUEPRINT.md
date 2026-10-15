@@ -99,9 +99,9 @@ Per field, in order:
 3. `# e.g. <members>`: emitted for a `matrix` declaring columns or `open`,
    whose empty `{}` cell shows neither the columns nor the spelling of an
    added item. It holds one member, present and so held:
-   `# e.g. {flight_cc: {detail: "", earned: date<YYYY-MM-DD | today>}}`, and on
+   `# e.g. {flight_cc: {detail: string, earned: date<YYYY-MM-DD | today>}}`, and on
    an open matrix an added item after it, keyed by the placeholder id
-   `new_item`: `# e.g. {flight_cc: {detail: ""}, new_item: {title: string, detail: ""}}`.
+   `new_item`: `# e.g. {flight_cc: {detail: string}, new_item: {title: string, detail: string}}`.
    The member is the roster's first and is illustrative only; the line exists
    to name the columns and the `title` an added item needs. Each column, and
    the added item's `title`, shows its `default:`, else its container shape,
@@ -194,7 +194,6 @@ Examples:
 | `title: "Curriculum Vitae" # string` | defaulted string: concrete value, shippable as-is (keep or override) |
 | `count: 0 # integer` | defaulted integer (type-empty default, shippable as-is) |
 | `active: false # boolean` | defaulted boolean (type-empty default, shippable as-is) |
-| `notes: "" # string` | defaulted empty string (the "skippable" cell) |
 | `bio: # richtext<markdown>` | defaultless richtext (see "Richtext fields") |
 | `recipient: # array<string>` | defaultless array of strings |
 | `date: # date<YYYY-MM-DD \| today>` | defaultless date |
@@ -209,6 +208,13 @@ Examples:
 
 A cell's value is **`default:` › empty**. An empty cell is null, emitted as a
 bare `key:` with its annotation after it (`title: # string`).
+
+A **blank** `default:` (`""`, `[]` or `{}`, the field's own blank) renders
+exactly as no default does, so it prints as none: `notes:` declaring
+`default: ""` prints `notes: # string`, and a matrix column declaring one reads
+in the `# e.g.` line as a defaultless column does. `0` and `false` are values and print
+(`count: 0 # integer`): an empty `count:` would ask for a number the quill
+already answers.
 
 Every cell of the live world renders as **live YAML**; a dormant variant world's
 cells are commented out, and only they are. The `# when <MEMBER>:` header says
@@ -244,7 +250,7 @@ classification: # enum<UNCLASSIFIED | CUI | CONFIDENTIAL | SECRET | TOP SECRET>
   # # Office or organization that designated this information as CUI.
   # controlled_by: # string
   # # CUI category from the DoD CUI Registry. Leave blank to omit.
-  # category: "" # string
+  # category: # string
 ```
 
 One builder and one emitter serve both, so a dormant world is rendered exactly
@@ -280,8 +286,8 @@ bio: # richtext<markdown>
 The LLM writes its markdown content into the cell (a quoted scalar or a block
 scalar, the consumer's choice).
 
-When a `default:` is configured, the field renders its default in the
-canonical `to_markdown` string form, a multi-line one as a literal block:
+When a non-blank `default:` is configured, the field renders its default in
+the canonical `to_markdown` string form, a multi-line one as a literal block:
 
 ```
 bio: |- # richtext<markdown>
@@ -289,9 +295,6 @@ bio: |- # richtext<markdown>
 
   <body>
 ```
-
-If the default is empty (`default: ""`), the cell is the inline empty string
-`bio: "" # richtext<markdown>`: the "skippable" richtext cell.
 
 ### Reserved characters in format and enum literals
 
@@ -305,19 +308,19 @@ fallback; authors needing these characters must reshape their values.
 ## Typed tables
 
 A field of `type: array` whose `items:` declare a `properties` map. The array is
-a **cell**, so it keeps its own literal and the cascade is the uniform one:
-`default:` (any default, including `[]`) is shippable as-is; without one:
+a **cell**, so it keeps its own literal. The outer key carries
+`# array<object>` either way:
 
 - A non-empty `default:` renders as actual rows (no per-property
-  annotations on each row). The outer key carries `# array<object>`.
-- `default: []` renders inline as `[]` with `# array<object>`: shippable
-  empty. The field leads it again, commented out and holding the synthetic row
-  of the next case: the config-file spelling of an alternative. A reader adds a
-  row by deleting the live line and uncommenting the block; leaving both live
-  is a duplicate key. A `max: 0` table holds no row, so it has none.
-- Without a `default:`, one synthetic row is emitted with each property
-  carrying its own description, inline annotation, and cell —
-  its `default:`, else empty. The outer key carries `# array<object>`.
+  annotations on each row), shippable as-is.
+- Otherwise the cell is inline `[]`: shippable empty, as an unanswered table
+  renders. The field leads it commented out, holding one synthetic row whose
+  properties each carry their own description, inline annotation, and cell —
+  its `default:`, else empty. That is the config-file spelling of an
+  alternative: a reader adds a row by deleting the live line and uncommenting
+  the block, and leaving both live is a duplicate key. The row is dormant
+  because a live one would ship an empty element into the render. A `max: 0`
+  table holds no row, so it has none.
 
 ```
 # attendees:
@@ -342,16 +345,15 @@ there is no container-level cascade to choose between:
 - Each property is emitted with its own description, inline annotation, and
   cell — `default:` › empty — exactly as a card-level field of
   that type. A property carrying a `default:` therefore renders that concrete
-  value, and a wholly skippable dictionary is spelled by each property carrying
-  a type-empty one.
+  value.
 - The outer key carries `# object`.
 
 The cells the blueprint shows are the cells the render floor fills, from the same
 declarations: an author who deletes a defaulted line gets that default back at
 render, which is what the "shippable as-is" affordance promises.
 
-An `array` differs because it is a cell: its own `default:` renders, and
-`default: []` stays inline `[]`.
+An `array` differs because it is a cell: its own `default:` renders, else
+inline `[]`.
 
 ```
 # The sender's mailing address.
@@ -361,7 +363,7 @@ address: # object
   # City name.
   city: # string
   # ZIP or postal code.
-  zip: "" # string
+  zip: # string
 ```
 
 With a `default:` on the first two properties:
@@ -417,11 +419,11 @@ recipient: # array<string>
 # The signer's information. Line 1: Name, as in First M. Last. Line 2: Title.
 signature_block: # array<string>
 # The department or organizational unit name for the letterhead.
-department: "" # string
+department: # string
 # The sender's institutional mailing address.
 address: # array<string>
 # The department or university website URL, as in www.ece.cmu.edu.
-url: "" # string
+url: # string
 # The date to appear on the letter.
 date: # date<YYYY-MM-DD | today>
 ~~~

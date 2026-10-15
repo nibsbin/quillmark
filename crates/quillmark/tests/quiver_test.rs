@@ -8,7 +8,7 @@
 //! The three documents reach a template with different cells filled, and none
 //! subsumes another. An empty document is the type-minimal valid input, so a
 //! template that renders it degrades gracefully on any valid input. The
-//! blueprint commits every `default:` and leaves every defaultless cell empty.
+//! blueprint commits every non-blank `default:` and leaves every other cell empty.
 //! The seeded document carries one card per declared kind, each body empty.
 //!
 //! A quill's example, where it has one, is the one document with values

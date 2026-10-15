@@ -611,10 +611,11 @@ main:
     );
     assert!(
         bp.contains(concat!(
-            "rows: # array<object>\n",
-            "  -\n",
-            "    # e.g. {flight_cc: {detail: Cyber}, new_item: {title: string, detail: Cyber}}\n",
-            "    quals: {} # matrix<flight_cc>\n",
+            "# rows:\n",
+            "#   -\n",
+            "#     # e.g. {flight_cc: {detail: Cyber}, new_item: {title: string, detail: Cyber}}\n",
+            "#     quals: {} # matrix<flight_cc>\n",
+            "rows: [] # array<object>\n",
         )),
         "{bp}"
     );
