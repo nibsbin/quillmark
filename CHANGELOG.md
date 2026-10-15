@@ -38,7 +38,7 @@ the load, a card groups fields under a top-level `object` where it declared
   backend's section fails the load as `quill::unknown_backend_key`, where a
   `typst:` key warned `typst::unknown_key` on every render, and a scalar or
   sequence section fails as `quill::invalid_backend_section`.
-  `quillmark::typst_plate_file` returns the path, not an `Option`. (#2220)
+  `quillmark::typst_plate_file` returns the path, not an `Option`. (#2225)
 
 ### Grouping
 
@@ -117,7 +117,7 @@ the load, a card groups fields under a top-level `object` where it declared
   it, a lowercase operator or `/` for `OR` fails `quill::invalid_license`, and
   a deprecated id warns `quill::deprecated_license`. A homepage that is not an
   absolute `http` or `https` URL naming a host and no user fails
-  `quill::invalid_homepage`. (#2218)
+  `quill::invalid_homepage`. (#2225)
 
 ### Bindings
 
