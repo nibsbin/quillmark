@@ -793,7 +793,7 @@ main:
         compact: false
 ```
 
-It is a request: an editor grants it only where a neighbour packs too, so a packing field alone between full-row fields still takes its row. An `array`, an `object`, an `enum` with `variants:` and a block `plaintext` or `richtext` never pack, whatever the key says, since their height grows with the document; a one-line (`inline`) `plaintext` or `richtext` packs like a `string`. On a `matrix`, `compact: true` sets the roster's members side by side instead. The properties of an `object` and the cells of a typed table are laid out by their container and read no `compact`.
+It is a request: an editor grants it only where a neighbour packs too, so a packing field alone between full-row fields still takes its row. An `array`, an `object`, an `enum` with `variants:` and a block `plaintext` or `richtext` never pack, whatever the key says, since their height grows with the document; a one-line (`inline`) `plaintext` or `richtext` packs like a `string`. On a `matrix`, `compact: true` sets the roster's members side by side instead. The properties of a card-level `object` follow the same rule, so a field moved into a group keeps its row. The cells of an array's records, a variant, a matrix member and a typed table are laid out by their container and read no `compact`.
 
 ### `multiline`
 
