@@ -33,8 +33,9 @@ previous version:
 
 This is not standard semver. The compatibility boundary is `MAJOR.MINOR`, the
 same below and above `1.0.0`: every patch in one `MAJOR.MINOR` series reads the
-documents an earlier patch stored unchanged, and across a MINOR bump they
-migrate.
+documents an earlier patch stored unchanged, and a MINOR bump needs each one
+rewritten, mechanically. The quill's seeded, empty and example documents and
+its blueprint pin `name@MAJOR.MINOR` (`seed::main_reference`).
 
 **A `values:` reorder is render-safe.** A field's blank is `""`, not `values[0]`,
 so reordering changes no document's rendered output. It still changes picker
@@ -57,7 +58,16 @@ A selector is `MAJOR.MINOR` or `MAJOR.MINOR.PATCH`, each segment plain digits.
 so it names no compatible series. A reference with no selector omits the `@`;
 there is no `@latest`.
 
-A name may carry a collection: `$quill: borb.my_format@2.1`. The collection is the host's, naming where to resolve the quill; a bare name leaves that choice to the host. The engine reads only the part after the `.`, so a loaded `my_format` answers a reference under any collection. A quill's own `Quill.yaml` name and its example never carry one: which collection a quill sits in is the collection's to say. A widened grammar is no storage event: a stored row naming a collection reads under the same tag, and a reader older than the grammar refuses it as an invalid quill reference.
+A name may carry a collection: `$quill: borb.my_format@2.1`. The collection is
+the host's, naming where to resolve the quill; a bare name leaves that choice to
+the host. The engine reads only the part after the `.`, so a loaded `my_format`
+answers a reference under any collection. A quill's own `Quill.yaml` name and
+its example never carry one: which collection a quill sits in is the
+collection's to say. A widened grammar is no storage event: a stored row naming
+a collection reads under the same tag, and a reader older than the grammar
+refuses it as an invalid quill reference. A narrowed grammar is a storage event
+the tag does not record: a stored row whose `$quill` it refuses, such as the
+lone major `my_format@2`, fails to load under the same tag.
 
 No registry consumes the selector: there is no collection of installed versions to pick from, so it is a pin, not a resolver. *Resolution* (matching `name@selector` against a set of installed versions) belongs to a higher layer; the engine loads one Quill and *enforces* the reference against it. Detection needs no registry (the engine has the loaded Quill's name and version and the document's reference) so `render` and `dry_run` both reject a mismatch with a single-diagnostic [`RenderError`](ERROR.md). They check in order:
 

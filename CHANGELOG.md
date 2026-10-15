@@ -7,7 +7,8 @@ links, runaway YAML expansion and bodies nested past 12 levels are refused, a
 quill's font collections load, an acroform quill's field spec is `form.yaml`,
 a card groups fields under a top-level `object` where it declared `sections:`,
 a quill's `version` is `MAJOR.MINOR.PATCH` and a `$quill` selector
-`@MAJOR.MINOR` or exact, and a WASM trap rejects coded.
+`@MAJOR.MINOR` or exact, a document the quill creates pins its `MAJOR.MINOR`,
+and a WASM trap rejects coded.
 
 ### PDF forms
 
@@ -75,8 +76,8 @@ a quill's `version` is `MAJOR.MINOR.PATCH` and a `$quill` selector
 - fix(content)!: **a body nests at most 12 levels deep, so every body that
   imports renders under Typst**, where import took 100 and Typst's show-rule
   depth refused 16 quotes or 32 lists. A body past the bound fails
-  `parse::body_import` at its `path`; `ParseError::BodyImport` holds
-  `{ path, message }`. (#2187, #2190)
+  `parse::body_import` at its `path`, and a stored row holding one fails to
+  load; `ParseError::BodyImport` holds `{ path, message }`. (#2187, #2190)
 
 ### Quill names
 
@@ -90,12 +91,17 @@ a quill's `version` is `MAJOR.MINOR.PATCH` and a `$quill` selector
 
 - feat(core)!: **a quill's `version` is `MAJOR.MINOR.PATCH`**: a two-segment
   `version: "1.2"`, or an unquoted `1.10`, fails `quill::invalid_version`. A
-  bump is ranked by what it costs a stored document to migrate: PATCH needs no
-  change, MINOR migrates mechanically, MAJOR loses data or function. (#2221)
+  bump is ranked by what it costs a stored document: PATCH needs no change,
+  MINOR a mechanical rewrite, MAJOR loses data or function. (#2221, #2224)
 - feat(core)!: **a `$quill` selector is `@MAJOR.MINOR` or
   `@MAJOR.MINOR.PATCH`**, the compatibility boundary being `MAJOR.MINOR`:
   `$quill: memo@1` fails `parse::invalid_quill_reference`, where it matched any
-  `1.x.x`. `VersionSelector::Major` is removed. (#2221)
+  `1.x.x`, and a stored row holding it fails to load. `VersionSelector::Major`
+  is removed. (#2221, #2224)
+- feat(core)!: **a document the quill creates pins `name@MAJOR.MINOR`**: the
+  seeded, empty and example documents and the blueprint carry
+  `$quill: memo@1.2`, where they carried `memo@1.2.0`, so every patch in the
+  series reads them. (#2221, #2224)
 
 ### Bindings
 

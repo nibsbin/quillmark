@@ -55,8 +55,9 @@ Supported selectors:
 | `my_quill@1.2.0` | Exact version |
 
 A selector is digits only. `my_quill@1` fails to parse: a major spans MINOR
-bumps, across which stored documents migrate, so it selects no compatible
-series. There is no `@latest` either: the bare name matches any version.
+bumps, each of which needs stored documents rewritten, so it selects no
+compatible series. There is no `@latest` either: the bare name matches any
+version.
 
 ## Compatibility Checks
 
@@ -82,7 +83,8 @@ against the selector.
    reshaping one.
 3. Where a field has to change, prefer a rename or a lossless type change
    (MINOR) to a removal (MAJOR).
-4. Pin documents with `@MAJOR.MINOR`: every patch in that series reads them
+4. Pin documents with `@MAJOR.MINOR`, as the quill's seeded, empty and example
+   documents and its blueprint do: every patch in that series reads them
    unchanged.
 
 ## Related Pages

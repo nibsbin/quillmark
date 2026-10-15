@@ -2304,18 +2304,21 @@ impl QuillConfig {
         let version = match quill_section.get("version") {
             Some(serde_json::Value::String(raw)) => {
                 use std::str::FromStr;
-                let error = match raw.split('.').count() {
-                    3 => crate::version::Version::from_str(raw).err(),
-                    _ => Some("expected MAJOR.MINOR.PATCH".to_string()),
+                let refusal = if raw.split('.').count() == 3 {
+                    crate::version::Version::from_str(raw)
+                        .err()
+                        .map(|e| (e, "Write each segment as plain digits, such as '1.0.0'."))
+                } else {
+                    Some((
+                        "expected MAJOR.MINOR.PATCH".to_string(),
+                        "Write all three segments, MAJOR.MINOR.PATCH, such as '1.0.0'.",
+                    ))
                 };
-                if let Some(e) = error {
+                if let Some((e, hint)) = refusal {
                     errors.push(
                         Diagnostic::new(Severity::Error, format!("Invalid version '{raw}': {e}"))
                             .with_code("quill::invalid_version".to_string())
-                            .with_hint(
-                                "Write all three segments, MAJOR.MINOR.PATCH, such as '1.0.0'."
-                                    .to_string(),
-                            ),
+                            .with_hint(hint.to_string()),
                     );
                 }
                 raw.clone()

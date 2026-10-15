@@ -6,12 +6,12 @@
 use quillmark_content::model::Normalized;
 
 use super::Quill;
-use crate::quill::CardSchema;
+use crate::quill::{CardSchema, QuillConfig};
 use crate::document::PayloadItem;
 use crate::{
     document::{Card, Document, Payload, SeedOverlay},
     value::QuillValue,
-    version::{QuillReference, VersionSelector},
+    version::{QuillReference, Version, VersionSelector},
 };
 
 /// Build the seeded `(payload, body)` for one card schema under an optional
@@ -65,21 +65,22 @@ fn seeded_rest(name: &str, value: &QuillValue, field: &crate::quill::FieldSchema
         .map_or_else(|_| value.clone(), |(rest, _)| rest)
 }
 
-/// `$quill` reference for the main card, as `name@version`. Falls back to a
-/// versionless reference if the configured version is unparseable (it is
-/// validated at quill load, so the fallback is defensive only).
-pub(crate) fn main_reference(quill: &Quill) -> QuillReference {
-    let config = quill.config();
-    format!("{}@{}", config.name, config.version)
-        .parse()
-        .unwrap_or_else(|_| QuillReference::new(config.name.clone(), VersionSelector::Any))
+/// `$quill` reference for a document the quill creates: `name@MAJOR.MINOR`,
+/// the series every later patch reads. Versionless if the configured version
+/// is unparseable, which a loaded quill's never is.
+pub(crate) fn main_reference(config: &QuillConfig) -> QuillReference {
+    let selector = config
+        .version
+        .parse::<Version>()
+        .map_or(VersionSelector::Any, |v| VersionSelector::Minor(v.major, v.minor));
+    QuillReference::new(config.name.clone(), selector)
 }
 
 pub(crate) fn seed_main(quill: &Quill) -> Card {
     // The main card is never seeded: `$seed` keys range over composable
     // `card_kinds`, `main` is not one of them, and it declares no `seed:`.
     let (mut payload, body) = seed_parts(&quill.config().main, None);
-    payload.set_quill(main_reference(quill));
+    payload.set_quill(main_reference(quill.config()));
     // The root block carries `$kind: main` alongside `$quill` (see the
     // markdown spec); set it so a seeded main card round-trips through
     // `to_markdown()` exactly as the parser and blueprint emit it.
@@ -104,11 +105,11 @@ fn seed_composable(schema: &CardSchema, overlay: Option<&SeedOverlay>) -> Card {
     Card::from_parts(payload, body)
 }
 
-/// The empty document: [`Document::new`] under the quill's own reference, so no
-/// caller spells `name@version` to reach the document the authoring contract
-/// binds.
+/// The empty document: [`Document::new`] under [`main_reference`], so no
+/// caller spells `name@MAJOR.MINOR` to reach the document the authoring
+/// contract binds.
 pub(crate) fn empty_document(quill: &Quill) -> Document {
-    Document::new(main_reference(quill))
+    Document::new(main_reference(quill.config()))
 }
 
 pub(crate) fn seed_document(quill: &Quill) -> Document {

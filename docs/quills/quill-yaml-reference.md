@@ -96,7 +96,8 @@ The cutover rehearsal slipped a week while the data owners review the mapping.
 - It is written like any document for the quill. A field it leaves out renders
   its default.
 - Its `$quill` is the quill's bare name, with no `@` version. The quill pins it
-  to its own `name@version` when it hands it out (`Quill.example_document()`).
+  to its own `name@MAJOR.MINOR` when it hands it out
+  (`Quill.example_document()`).
 - Only `example.md` at the root counts, spelled exactly. Loading the quill never
   reads it, and a quill without one has no example. `quillmark validate`
   renders it beside the empty document, the blueprint and the seeded document,

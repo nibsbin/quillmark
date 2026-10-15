@@ -35,13 +35,8 @@ card_kinds:
 #[test]
 fn empty_document_equals_the_hand_written_two_line_document() {
     let quill = quill_from_yaml(QUILL);
-    let config = quill.config();
-    let markdown = format!(
-        "~~~\n$quill: {}@{}\n$kind: main\n~~~\n",
-        config.name, config.version
-    );
 
-    let parsed = Document::parse(&markdown)
+    let parsed = Document::parse("~~~\n$quill: seed_test@1.0\n$kind: main\n~~~\n")
         .expect("the two-line empty document must parse")
         .document;
 

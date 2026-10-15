@@ -17,13 +17,13 @@ fn codes(diags: &[Diagnostic]) -> Vec<&str> {
 }
 
 #[test]
-fn the_example_is_handed_out_pinned_to_its_quill_version() {
+fn the_example_is_handed_out_pinned_to_its_quill_series() {
     let quill = load("~~~\n$quill: memo\nsubject: Budget review\n~~~\n\nFilled-in prose.\n");
 
     let parsed = quill.example_document().expect("present").expect("parses");
 
     assert!(parsed.warnings.is_empty(), "{:?}", parsed.warnings);
-    assert_eq!(parsed.document.quill_reference().to_string(), "memo@1.2.0");
+    assert_eq!(parsed.document.quill_reference().to_string(), "memo@1.2");
     assert_eq!(
         parsed.document.main().payload().get("subject").and_then(|v| v.as_str()),
         Some("Budget review")

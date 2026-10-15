@@ -194,7 +194,9 @@ and writes that same value.
   mark `type` or island `type` outside the vocabulary. Those are refused from
   0.113 on; see that release's migration guide. An island `loss` is not one of
   them: 0.115 drops the key, so a row spelling one opens whatever the class and
-  comes back without it.
+  comes back without it. From 0.126 on, a row whose `$quill` is a lone major,
+  `memo@1`, or whose body nests past 12 levels is refused too; rewrite it
+  before upgrading, as that release's migration guide shows.
 - **Downgrading is not.** `fromStored` rejects an *unknown* (i.e. newer)
   `schema` version rather than guessing at a format it predates. Don't feed
   documents written by a newer build back into an older one.
@@ -225,8 +227,8 @@ values from the `Document` payload: there is no separate form-view projection.
 `quill.validate(doc)` scores it without invoking the backend.
 
 `quill.exampleDocument()` returns the quill's example, a filled-in page whose
-values are made up, pinned to the quill's `name@version`; `undefined` when
-the quill has no `example.md` at its root.
+values are made up, pinned to the quill's `name@MAJOR.MINOR`; `undefined`
+when the quill has no `example.md` at its root.
 
 `quill.seedDocument()` returns a starter document: one card per kind, each
 carrying the kind's `seed` from `Quill.yaml` and no other field;

@@ -15,6 +15,7 @@ use crate::document::emit::{emit_mapping_lines, saphyr_emit_flow};
 use crate::document::prescan::NestedComment;
 use crate::document::{Card, Document, Payload, PayloadItem};
 use crate::value::{PathSegment, QuillValue};
+use crate::version::QuillReference;
 use quillmark_content::model::Normalized;
 use serde_json::{Map as JsonMap, Value as JsonValue};
 
@@ -36,7 +37,7 @@ impl QuillConfig {
 
         let main = build_main_card(
             &self.main,
-            &format!("{}@{}", self.name, self.version),
+            super::seed::main_reference(self),
             label_line(self.main.title.as_deref(), main_desc.as_deref()),
         );
         let cards = self.card_kinds.iter().map(build_card).collect();
@@ -104,10 +105,7 @@ impl CardItems {
 /// Build the root card: `$quill` (with the `# keep verbatim` inline reminder),
 /// `$kind: main` carrying the optional [`label_line`] inline, the fields, then
 /// the [`push_body_line`]. Inline, the label cannot read as the first field's.
-fn build_main_card(card: &CardSchema, quill_ref: &str, label: Option<String>) -> Card {
-    let reference = quill_ref
-        .parse()
-        .expect("quill name@version is always a valid QuillReference");
+fn build_main_card(card: &CardSchema, reference: QuillReference, label: Option<String>) -> Card {
     let mut items = CardItems::default();
     items.push(PayloadItem::Quill { reference });
     items.push(PayloadItem::comment_inline("keep verbatim"));
@@ -818,7 +816,7 @@ main:
 "#)
         .blueprint();
         assert!(t.starts_with(
-            "~~~\n$quill: taro@0.1.0 # keep verbatim\n$kind: main # x\nflavor: taro # string\n"
+            "~~~\n$quill: taro@0.1 # keep verbatim\n$kind: main # x\nflavor: taro # string\n"
         ));
     }
 
@@ -836,7 +834,7 @@ main:
         .blueprint();
         assert!(
             t.starts_with(
-                "~~~\n$quill: taro@0.1.0 # keep verbatim\n$kind: main # A taro order form.\n"
+                "~~~\n$quill: taro@0.1 # keep verbatim\n$kind: main # A taro order form.\n"
             ),
             "{t}"
         );

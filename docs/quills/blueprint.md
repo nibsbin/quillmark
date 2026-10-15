@@ -8,7 +8,7 @@ A quill's schema yields two ready-made documents: a **blueprint** (an annotated 
 
 ```
 ~~~
-$quill: cmu_letter@0.1.0 # keep verbatim
+$quill: cmu_letter@0.1 # keep verbatim
 $kind: main # A letter on CMU letterhead.
 # The recipient's name and full mailing address.
 recipient: # array<string>

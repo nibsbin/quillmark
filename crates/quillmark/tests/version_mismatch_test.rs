@@ -58,6 +58,26 @@ fn the_reference_is_checked_against_the_loaded_quill() {
     }
 }
 
+/// A document the quill creates pins its `MAJOR.MINOR`: the next patch reads
+/// it, and the next minor refuses it.
+#[test]
+fn a_created_document_pins_its_quills_series() {
+    let quill_at = |version: &str| {
+        let temp_dir = TempDir::new().unwrap();
+        quillmark::quill_from_path(make_quill(&temp_dir, version)).expect("from_path failed")
+    };
+    let created = quill_at("1.2.0");
+    let blueprint = Document::parse(&created.config().blueprint())
+        .expect("parse failed")
+        .document;
+    for doc in [created.seed_document(), blueprint] {
+        let patched = quill_at("1.2.1").dry_run(&doc);
+        assert!(patched.is_ok(), "{patched:?}");
+        let next_minor = quill_at("1.3.0").dry_run(&doc);
+        assert_eq!(next_minor.as_ref().err().and_then(code), Some("quill::version_mismatch"));
+    }
+}
+
 /// The check rides `update`, not just the open door: a session compiles every
 /// edit through its own config, so the pairing stays checkable.
 #[test]

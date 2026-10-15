@@ -77,7 +77,7 @@ def test_empty_document_is_the_blank_document_under_the_quill_reference(tmp_path
 
     empty = quill.empty_document()
 
-    assert empty.to_markdown() == Document("py_validate_smoke@1.0.0").to_markdown()
+    assert empty.to_markdown() == Document("py_validate_smoke@1.0").to_markdown()
     assert empty.cards == []
 
 
@@ -214,7 +214,7 @@ def test_example_document_is_pinned_none_without_one_and_raises_coded(tmp_path):
     doc = with_example(
         "~~~\n$quill: py_validate_smoke\ntitle: A made-up title\n~~~\n", "clean"
     ).example_document()
-    assert doc.quill_ref == "py_validate_smoke@1.0.0"
+    assert doc.quill_ref == "py_validate_smoke@1.0"
     assert field(doc.main, "title") == "A made-up title"
     assert doc.warnings == []
 

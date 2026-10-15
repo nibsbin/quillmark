@@ -251,7 +251,7 @@ fn a_quill_version_is_major_minor_patch() {
     for version in ["1.10.0", "\"1.10.0\""] {
         assert_eq!(load(version).expect(version).0.version, "1.10.0");
     }
-    for version in ["\"1.2\"", "1.10", "\"1.2.3.4\"", "\"\"", "!!float 1.10", "1.1e1"] {
+    for version in ["\"1.2\"", "1.10", "\"1.2.x\"", "\"1.2.3.4\"", "\"\"", "!!float 1.10", "1.1e1"] {
         let errors = load(version).expect_err(version);
         assert!(
             errors.iter().any(|d| d.code.as_deref() == Some("quill::invalid_version")),

@@ -735,11 +735,14 @@ structured (non-string) data of its own. Freezing it per step 1 moves that check
 into the hop.
 
 Old and new DTOs **coexist** in `dto.rs`, so a row written by any
-still-supported past version always loads. Migrations chain
-(`V0_92_0 → V0_124_0 → V0_NN_0 → …`); only the newest DTO converts to the live
-`Document`, so each migration step stays small as versions accumulate. The
-cost is one frozen type tree per schema version plus one migration function
-per version bump.
+still-supported past version loads, unless a later reader refuses what it
+holds under the same tag: a name outside a closed set (§ Content vocabularies),
+a body nested past `MAX_NESTING_DEPTH`, or a `$quill` the reference grammar
+refuses, such as the lone major `memo@1` ([VERSIONING.md](VERSIONING.md)).
+Migrations chain (`V0_92_0 → V0_124_0 → V0_NN_0 → …`); only the newest DTO
+converts to the live `Document`, so each migration step stays small as versions
+accumulate. The cost is one frozen type tree per schema version plus one
+migration function per version bump.
 
 A legacy variant may be **retired**: its DTO tree, migration, and tests
 deleted: once a product/release-history call confirms no stored population

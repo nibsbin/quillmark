@@ -17,7 +17,7 @@ empty cells and write the bodies; the structure and `$` metadata come for free.
 
 ````
 ~~~
-$quill: <name>@<version> # keep verbatim
+$quill: <name>@<MAJOR.MINOR> # keep verbatim
 $kind: main # <title> — <description>
 # <field title> — <field description>
 field: # <type>
@@ -200,7 +200,7 @@ Examples:
 | `severity: # enum<low \| medium \| high>` | defaultless enum |
 | `endorsements: # array<string>` under a leading `# up to 3` | a capped array: the cap is the leading line, the type the inline |
 | `qualifications: {} # matrix<flight_cc \| dodin_ops>` | a matrix: the whole vocabulary in the annotation, nothing ticked; a leading `# e.g.` names its columns and an open matrix's added spelling, where it has either |
-| `$quill: cmu_letter@0.1.0 # keep verbatim` | quill binding metadata, emitted verbatim; the inline reminder guards against dropping the line |
+| `$quill: cmu_letter@0.1 # keep verbatim` | quill binding metadata, emitted verbatim; the inline reminder guards against dropping the line |
 | `$kind: skill` followed by `# composable (0..N)` and `# sample card; delete if not needed` | repeat the entire `~~~` … `~~~` block per instance, or delete it if none are needed |
 | `# no body` above a closing `~~~` | the kind takes no body: write nothing after the fence |
 
@@ -409,7 +409,7 @@ document needs none of that kind.
 
 ```
 ~~~
-$quill: cmu_letter@0.1.0 # keep verbatim
+$quill: cmu_letter@0.1 # keep verbatim
 $kind: main # Typeset letters that comply with Carnegie Mellon University letterhead standards.
 # The recipient's name and full mailing address.
 recipient: # array<string>

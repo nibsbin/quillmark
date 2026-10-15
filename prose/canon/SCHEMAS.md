@@ -1135,8 +1135,9 @@ Identity fields (`name`, `version`, `backend`, `author`, `description`) live on 
 The schema response omits discriminator fields. Consumers that need to
 construct a document derive the discriminators from elsewhere:
 
-- The root block's `$quill` value is `<name>@<version>`, built from
-  `quill.metadata.name` and `quill.metadata.version`.
+- The root block's `$quill` value is `<name>@<MAJOR.MINOR>`, built from
+  `quill.metadata.name` and the first two segments of `quill.metadata.version`,
+  as a document the quill creates carries it.
 - Each composable card's `$kind` is the key under which it is declared
   in `card_kinds` (e.g. a card listed under `card_kinds.indorsement` is
   written as `$kind: indorsement`).
