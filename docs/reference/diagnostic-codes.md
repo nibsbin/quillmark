@@ -57,7 +57,6 @@ Loading a quill: `Quill.yaml`, its files, its seeds.
 - `quill::default_type_mismatch`
 - `quill::deprecated_groups`
 - `quill::description_multiline`
-- `quill::duplicate_field`
 - `quill::duplicate_group`
 - `quill::empty_description`
 - `quill::engine_too_old`

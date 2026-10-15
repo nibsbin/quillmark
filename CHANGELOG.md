@@ -21,8 +21,8 @@ and a WASM trap rejects coded.
 
 - feat(core)!: **a card groups fields under a top-level `object`, and a card
   declaring `sections:` fails `quill::invalid_card_schema`**, its hint naming
-  the `object`. `quill::empty_section`, `quill::invalid_section_id` and
-  `quill::mixed_sectioning` are retired; `ui.group` / `ui.groups` load with
+  the `object`. `quill::empty_section`, `quill::invalid_section_id`,
+  `quill::mixed_sectioning` and `quill::duplicate_field` are retired; `ui.group` / `ui.groups` load with
   `quill::deprecated_groups`, which hints the `object` rewrite. The `usaf_memo`
   fixture declares its fields ungrouped.
 
