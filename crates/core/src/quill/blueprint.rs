@@ -860,6 +860,7 @@ card_kinds:
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:
   title: Memorandum
+  description: A formal memo.
   fields:
     contact: { type: string, title: Point of contact, description: Who answers questions. }
     office: { type: string, title: Office symbol }
@@ -876,7 +877,7 @@ card_kinds:
 "#)
         .blueprint();
         for line in [
-            "$kind: main # Memorandum\n",
+            "$kind: main # Memorandum — A formal memo.\n",
             "# Point of contact — Who answers questions.\ncontact: # string\n",
             "# Office symbol\noffice: # string\n",
             "  # City\n  city: # string\n",

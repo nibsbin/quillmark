@@ -40,7 +40,7 @@ Every Quill.yaml must have a `quill` section with format metadata.
 |------------------|--------|----------|-------------|
 | `name`           | string | yes      | Unique identifier for the Quill |
 | `backend`        | string | yes      | Rendering backend (e.g. `typst`) |
-| `description`    | string | yes      | Human-readable description of the quill package, for a gallery or a quill picker (non-empty). The blueprint never prints it: the root card's label is `main.description`. One line: a line break fails the load with `quill::description_multiline`. |
+| `description`    | string | yes      | Human-readable description of the quill package, for a gallery or a quill picker (non-empty). The blueprint never prints it: the root card's label is `main`'s own `title` and `description`. One line: a line break fails the load with `quill::description_multiline`. |
 | `version`        | string | yes      | Semantic version (`MAJOR.MINOR` or `MAJOR.MINOR.PATCH`) |
 | `author`         | string | no       | Creator of the Quill (defaults to `"Unknown"`) |
 | `ui`             | object | no       | Document-level UI metadata |
@@ -793,7 +793,7 @@ main:
         compact: false
 ```
 
-It is a request: an editor grants it only where a neighbour packs too, so a packing field alone between full-row fields still takes its row. An `array`, an `object`, an `enum` with `variants:` and a block `plaintext` or `richtext` never pack, whatever the key says, since their height grows with the document; a one-line (`inline`) `plaintext` or `richtext` packs like a `string`. On a `matrix`, `compact: true` sets the roster's members side by side instead. The properties of a card-level `object` follow the same rule, so a field moved into a group keeps its row. The cells of an array's records, a variant, a matrix member and a typed table are laid out by their container and read no `compact`.
+It is a request: an editor grants it only where a neighbour packs too, so a packing field alone between full-row fields still takes its row. An `array`, an `object`, an `enum` with `variants:` and a block `plaintext` or `richtext` never pack, whatever the key says, since their height grows with the document; a one-line (`inline`) `plaintext` or `richtext` packs like a `string`. On a `matrix`, `compact: true` sets the roster's members side by side instead. The properties of a card-level `object`, and of an `object` nested in it, follow the same rule, so a field moved into a group keeps its row. The cells of an array's records, a variant, a matrix member and a typed table are laid out by their container and read no `compact`.
 
 ### `multiline`
 
