@@ -63,9 +63,6 @@ quill:
   backend: typst
   description: Typesetted USAF Official Memorandum
   author: TongueToQuill
-
-typst:
-  plate_file: plate.typ
 ```
 
 ### Example document
@@ -1063,11 +1060,11 @@ typst:
   plate_file: tpl/main.typ
 ```
 
-A quill holding no `plate.typ` and declaring no `plate_file` fails to render as `typst::plate_missing`, its hint naming both, and `quillmark validate` reports it without rendering. Loading the quill succeeds: the engine reads a backend's files only when it renders.
+A quill holding no `plate.typ` and declaring no `plate_file` fails to render as `typst::plate_missing`, its hint naming both. Core reads no backend file at load: the backend resolves the plate when it opens a session, and `quillmark validate` checks it.
 
-A `.` step or an empty one drops, so `./plate.typ` names `plate.typ` and `tpl//layout.typ` names `tpl/layout.typ`, the path every diagnostic and `quillmark workspace` give. A leading `/` or a `..` step is refused as `typst::plate_missing`, its hint naming the spelling from the quill root, and so is a `plate_file` naming no file. A `plate_file` naming a file at a path holding a `\`, which Typst refuses, fails as `typst::plate_path_invalid`: separate the path with `/`, and rename a file whose own name holds a `\`. So does a `plate_file` that is not a string.
+A `.` step or an empty one drops, so `./plate.typ` names `plate.typ` and `tpl//layout.typ` names `tpl/layout.typ`, the path every diagnostic and `quillmark workspace` give. A leading `/` or a `..` step is refused as `typst::plate_missing`, its hint naming the spelling from the quill root, and so is a `plate_file` naming no file. A `plate_file` naming a file at a path holding a `\`, which Typst refuses, fails as `typst::plate_path_invalid`: separate the path with `/`, and rename a file whose own name holds a `\`. So does a `plate_file` that is not a string, or that names no path once its `.` and empty steps drop, such as `""` or `./`.
 
-Any other key under `typst` fails the load as `quill::unknown_backend_key`, its hint listing the valid keys, and a `typst` section that is not a mapping fails as `quill::invalid_backend_section`. A quill using a key a later release adds declares that release in [`requires`](#quill-section), so an older engine reports `quill::engine_too_old` rather than the key. Packages are not declared here: a quill vendors them under `packages/`, as the [Typst Backend Guide](typst-backend.md#typst-packages) describes.
+Any other key under `typst` fails the load as `quill::unknown_backend_key`, its hint listing the valid keys. A `typst` section that is a scalar or a sequence fails as `quill::invalid_backend_section`, and an empty one, `typst:` alone or holding only comments, reads as no keys. A quill using a key a later release adds declares that release in [`requires`](#quill-section), so an older engine reports `quill::engine_too_old` rather than the key. Packages are not declared here: a quill vendors them under `packages/`, as the [Typst Backend Guide](typst-backend.md#typst-packages) describes.
 
 ---
 

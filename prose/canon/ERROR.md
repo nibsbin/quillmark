@@ -308,9 +308,10 @@ and keeps these.
 **Plate refusals** fail `open` and `workspace` before a world exists:
 `typst::plate_missing` (the quill holds no `plate.typ` at its root and
 declares no `typst.plate_file`, or `typst.plate_file` names no file in the
-quill), `typst::plate_path_invalid` (`typst.plate_file` is not a string, or
-names a file at a path Typst's `VirtualPath` refuses, such as one holding a
-`\`), and `typst::invalid_utf8`. The plate is the one file a refused path
+quill), `typst::plate_path_invalid` (`typst.plate_file` is not a string,
+names no path once its `.` and empty steps drop, or names a file at a path
+Typst's `VirtualPath` refuses, such as one holding a `\`), and
+`typst::invalid_utf8`. The plate is the one file a refused path
 cannot merely skip: the world loads it at its own path, and any stand-in name
 may belong to a file the quill holds.
 

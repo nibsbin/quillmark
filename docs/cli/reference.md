@@ -248,7 +248,7 @@ quillmark workspace [OPTIONS] <QUILL_PATH> [MARKDOWN_FILE]
 - `--today <YYYY-MM-DD>`: The render date (default: the local date). A `today` date field renders as it, and the printed command passes it as `--creation-timestamp`, noon UTC of that date, so the plate's `datetime.today()` returns it too.
 - `--quiet`: Suppress warnings and the command line; errors still print
 
-**Failures:** besides `typst::wrong_backend`, the command refuses each plate a render refuses, before writing anything: `typst::plate_missing` when the quill holds no `plate.typ` and declares no `typst.plate_file`, or `typst.plate_file` names no file in the quill, `typst::plate_path_invalid` when `typst.plate_file` is not a string or names a file at a path Typst cannot load, `typst::invalid_utf8` when the plate is not UTF-8, and `typst::helper_import` when a plate source imports the helper any way but `as qm`.
+**Failures:** besides `typst::wrong_backend`, the command refuses each plate a render refuses, before writing anything: `typst::plate_missing` when the quill holds no `plate.typ` and declares no `typst.plate_file`, or `typst.plate_file` names no file in the quill, `typst::plate_path_invalid` when `typst.plate_file` is not a string, names no path, or names a file at a path Typst cannot load, `typst::invalid_utf8` when the plate is not UTF-8, and `typst::helper_import` when a plate source imports the helper any way but `as qm`.
 
 **Examples:**
 

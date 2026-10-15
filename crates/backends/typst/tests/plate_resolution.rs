@@ -46,10 +46,18 @@ fn a_quill_with_no_plate_fails_at_open() {
 
 /// A plate the quill holds at a path Typst refuses has no name the world can
 /// load it at: taking `main.typ` would shadow the quill's own `main.typ`. A
-/// `plate_file` that is not a string names no path at all.
+/// `plate_file` that is not a string, or holds no step once its `.` and empty
+/// steps drop, names no path at all.
 #[test]
 fn a_plate_file_typst_cannot_address_fails_at_open() {
-    for (declared, plate) in [("lay\\out.typ", "lay\\out.typ"), ("5", "plate.typ"), ("~", "plate.typ")] {
+    for (declared, plate) in [
+        ("lay\\out.typ", "lay\\out.typ"),
+        ("5", "plate.typ"),
+        ("~", "plate.typ"),
+        ("\"\"", "plate.typ"),
+        (".", "plate.typ"),
+        ("./", "plate.typ"),
+    ] {
         let diags = open_err(&[
             ("Quill.yaml", &YAML.replace("plate.typ", declared)),
             (plate, "#import \"main.typ\": word\n#word\n"),

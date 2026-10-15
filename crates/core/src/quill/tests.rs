@@ -879,7 +879,7 @@ fn test_unknown_key_in_quill_section_errors() {
 }
 
 /// A backend's section holds only the keys its backend reads, and is a
-/// mapping: Typst reads `plate_file`, acroform nothing.
+/// mapping or empty: Typst reads `plate_file`, acroform nothing.
 #[test]
 fn a_backend_section_holds_only_the_keys_its_backend_reads() {
     let err = config_with_sections("typst:\n  plate_file: plate.typ\n  packages: []\n  pages: 2\n")
@@ -904,10 +904,14 @@ fn a_backend_section_holds_only_the_keys_its_backend_reads() {
     let codes: Vec<_> = err.iter().map(|d| d.code.as_deref()).collect();
     assert_eq!(codes, [Some("quill::unknown_backend_key")]);
 
-    for section in ["typst: plate.typ\n", "typst: [plate_file]\n", "typst:\n"] {
+    for section in ["typst: plate.typ\n", "typst: [plate_file]\n"] {
         let err = config_with_sections(section).unwrap_err();
         let codes: Vec<_> = err.iter().map(|d| d.code.as_deref()).collect();
         assert_eq!(codes, [Some("quill::invalid_backend_section")], "{section}");
+    }
+    for section in ["typst:\n", "typst:\n  # plate_file: tpl/main.typ\n"] {
+        let config = config_with_sections(section).expect(section);
+        assert!(config.backend_config.is_empty(), "{section}");
     }
 }
 

@@ -511,22 +511,28 @@ pub fn typst_version() -> &'static str {
 /// The plate loads at its own path, so one Typst's path grammar refuses fails
 /// here: any stand-in name may belong to a file the quill holds.
 fn read_plate(source: &Quill) -> Result<Plate, RenderError> {
+    let no_path = |shown: String| {
+        RenderError::coded_hint(
+            "typst::plate_path_invalid",
+            format!("`typst.plate_file` is {shown}, which names no path"),
+            format!(
+                "Write `typst.plate_file` as a path from the quill root, such as \
+                 `tpl/main.typ`, or delete it to read `{PLATE_FILE}`."
+            ),
+        )
+    };
     let declared = match source.config().backend_config.get("plate_file") {
         None => None,
-        Some(value) => Some(value.as_str().ok_or_else(|| {
-            RenderError::coded_hint(
-                "typst::plate_path_invalid",
-                format!("`typst.plate_file` is {}, not a path", value.as_json()),
-                "Write `typst.plate_file` as a path from the quill root, such as `tpl/main.typ`, \
-                 or delete it to read `plate.typ`.",
-            )
-        })?),
+        Some(value) => Some(value.as_str().ok_or_else(|| no_path(value.as_json().to_string()))?),
     };
     let named = declared.unwrap_or(PLATE_FILE);
     let steps: Vec<&str> = named
         .split('/')
         .filter(|step| !step.is_empty() && *step != ".")
         .collect();
+    if steps.is_empty() {
+        return Err(no_path(format!("'{named}'")));
+    }
     let plate_file = steps.join("/");
 
     let misspelled = named.starts_with('/') || steps.contains(&"..");

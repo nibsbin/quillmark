@@ -73,6 +73,52 @@ pub fn config_keys(id: &str) -> Option<&'static [&'static str]> {
     }
 }
 
+/// The hint naming what the backend `id` reads from its section, or `None`
+/// for an id [`config_keys`] does not name.
+fn config_keys_hint(id: &str) -> Option<String> {
+    config_keys(id).map(|keys| match keys {
+        [] => format!("The {id} backend reads no keys; delete the '{id}' section."),
+        _ => format!("Valid keys under '{id}' are: {}.", keys.join(", ")),
+    })
+}
+
+/// The load error for `key` in the backend `id`'s section, a key outside its
+/// [`config_keys`].
+pub(crate) fn unknown_config_key(id: &str, key: &str) -> crate::error::Diagnostic {
+    let hint = match (id, key) {
+        ("typst", "packages") => Some(
+            "Quillmark never downloads a package: vendor each one under `packages/<dir>/` \
+             with its `typst.toml`, and delete `typst.packages`."
+                .to_string(),
+        ),
+        _ => config_keys_hint(id),
+    };
+    let diag = crate::error::Diagnostic::new(
+        crate::error::Severity::Error,
+        format!("Unknown key '{key}' in '{id}:' section"),
+    )
+    .with_code("quill::unknown_backend_key".to_string())
+    .with_arg("backend", id.into())
+    .with_arg("key", key.into());
+    match hint {
+        Some(hint) => diag.with_hint(hint),
+        None => diag,
+    }
+}
+
+/// The load error for a backend `id` section that is a scalar or a sequence.
+pub(crate) fn invalid_config_section(id: &str) -> crate::error::Diagnostic {
+    let diag = crate::error::Diagnostic::new(
+        crate::error::Severity::Error,
+        format!("'{id}' section must be an object (mapping of its keys)"),
+    )
+    .with_code("quill::invalid_backend_section".to_string());
+    match config_keys_hint(id) {
+        Some(hint) => diag.with_hint(hint),
+        None => diag,
+    }
+}
+
 /// The warning a backend owes a content field holding a construct it typesets
 /// nothing for: `count` of `construct` in the field `path` anchors, from
 /// `backend`. One diagnostic per (field, construct), so a producer that sees
