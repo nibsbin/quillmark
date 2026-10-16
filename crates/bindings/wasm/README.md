@@ -535,11 +535,11 @@ call returns: `try { return engine.render(quill, doc); } finally
 { doc.free(); }`: is safe even on the first render, while the backend
 binary is still loading.
 
-The package floor is Node 24+ (`engines: { node: ">=24" }`) and current
+The package floor is Node 22+ (`engines: { node: ">=22" }`) and current
 evergreen browsers; `--weak-refs` itself only needs Node 14.6+. The `using`
-sugar ([explicit resource management][erm]) is on that floor and optional;
+sugar ([explicit resource management][erm]) needs Node 24 and is optional;
 an explicit `try` / `finally` is the equivalent, and the form that also runs
-in a browser that hasn't shipped it:
+on Node 22 and in a browser that hasn't shipped it:
 
 ```ts
 const session = await engine.open(quill, doc);

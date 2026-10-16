@@ -179,6 +179,9 @@ it declares `multiline: true`.
   uncoded `attempted to take ownership of Rust value while it was borrowed`.
   `Engine.render` / `open` and `LiveSession.update` / `render` / `paint` are
   covered; a host routes on the code and discards the realm. (#2176)
+- fix(wasm): **`@quillmark/wasm` declares `engines: { node: ">=22" }`**,
+  where it declared `>=24` and npm on Node 22 resolved 0.103.0, the last
+  release under that floor. The `using` sugar needs Node 24. (#2199)
 - fix(python): **`render` releases the GIL while the backend compiles**, and
   renders a clone of the document, so other threads run and may edit it
   meanwhile. (#2176)
