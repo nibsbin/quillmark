@@ -460,7 +460,8 @@ in a CUI block leaves those values in the document and warns
 are still there. Remove the field to drop the value for good.
 
 A variant cell is an ordinary field: any type a card field may carry, prose,
-dates and containers included, reaching the plate exactly as a card-level one
+dates and containers included, a typed dictionary (`type: object`) among them,
+reaching the plate exactly as a card-level one
 does. What it cannot carry is `variants:` of its own. `variants:` itself
 is valid on a `type: enum` field that is a card's own field or a typed
 dictionary's property — `header.classification` reads, binds and branches as
@@ -468,8 +469,9 @@ dictionary's property — `header.classification` reads, binds and branches as
 matrix column and another variant's cell each refuse one, as does an object
 inside any of them. It
 keys only on declared members (never `""`, which owns no field set), and cannot
-declare a field named `value`. Variant fields sit in the discriminant's
-`ui.group`; a `ui.group` inside a variant is an error. A field set shared by
+declare a field named `value`. Variant fields sit beside the discriminant,
+inside its [group](#grouping) `object` when it is grouped; a `ui.group` on a
+variant field is `quill::nested_group_not_supported`. A field set shared by
 several members is repeated or shared with a YAML anchor — a variant keys on one
 member — but every variant declaring a given name must declare it *identically*,
 since the name is one cell of the container whichever world brings it into play
