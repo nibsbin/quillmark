@@ -105,6 +105,9 @@ it declares `multiline: true`.
 - fix(typst): **SVG output is well-formed XML when a link's URL holds `&` or
   `<`**, where its `href` carried them raw and an XML parser refused the file.
   (#2194)
+- fix(typst): **a link whose URL holds a character XML 1.0 cannot carry, a C0
+  control but tab, LF and CR or U+FFFE or U+FFFF, renders as its text
+  alone**, where its `href` carried it raw and the whole SVG failed to parse.
 - fix(core)!: **a card-yaml block's aliases and tags expand within a budget
   linear in its source**: past twice the block's bytes plus 4 KiB of scalars,
   or its bytes plus 4 KiB of nodes, the block fails its YAML parse, with a
