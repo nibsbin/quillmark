@@ -84,6 +84,24 @@ fn test_document_insert_card() {
     );
 }
 
+/// An edit grows a document no further than the card count markdown parse
+/// admits, so its markdown always parses back.
+#[test]
+fn test_placing_a_card_past_the_card_ceiling_is_refused() {
+    use crate::error::MAX_CARD_COUNT;
+
+    let mut doc = make_doc();
+    for _ in 0..MAX_CARD_COUNT {
+        doc.push_card(Card::new("note").unwrap()).unwrap();
+    }
+    assert!(Document::parse(&doc.to_markdown()).is_ok());
+    let full = EditError::TooManyCards { max: MAX_CARD_COUNT };
+    assert_eq!(doc.push_card(Card::new("note").unwrap()), Err(full.clone()));
+    assert_eq!(doc.insert_card(0, Card::new("note").unwrap()), Err(full.clone()));
+    assert_eq!(full.code(), "edit::too_many_cards");
+    assert_eq!(doc.cards().len(), MAX_CARD_COUNT);
+}
+
 #[test]
 fn test_document_remove_card() {
     let mut doc = make_doc_with_cards(); // 2 cards: note, summary

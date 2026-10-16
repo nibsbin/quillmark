@@ -215,11 +215,6 @@ impl CoercionError {
     }
 }
 
-/// The one-line `text` refusal's reason when the value is one line plus a
-/// trailing newline, the case `EditError::FieldNotSingleLine` names apart.
-pub(crate) const TEXT_TRAILING_NEWLINE: &str =
-    "text requires a single line, and the trailing newline is a second";
-
 /// The coercion `target` a one-line `text` refusal names, distinct from the
 /// codec's own decode target so the write surface keys on it.
 pub(crate) const TEXT_SINGLE_LINE_TARGET: &str = "text(single_line)";
@@ -529,32 +524,33 @@ impl QuillConfig {
             FieldType::Text { multiline } => {
                 // The literal codec and its two rests: `SCHEMAS.md`
                 // §"Content fields rest per codec".
-                let plain_check =
-                    |rt: &quillmark_content::model::Content| -> Result<(), CoercionError> {
-                        if !rt.is_plain() {
-                            return Err(CoercionError::uncoercible(
-                                path,
-                                "<text>",
-                                "text",
-                                "text carries no marks, islands, or block \
-                                     formatting (lists, quotes, headings)",
-                            ));
-                        }
-                        if !multiline && !rt.is_inline() {
-                            let reason = if crate::document::is_line_with_trailing_newline(rt) {
-                                TEXT_TRAILING_NEWLINE
-                            } else {
-                                "text requires a single line; declare multiline: true to admit more"
-                            };
-                            return Err(CoercionError::uncoercible(
-                                path,
-                                "<text>",
-                                TEXT_SINGLE_LINE_TARGET,
-                                reason,
-                            ));
-                        }
-                        Ok(())
-                    };
+                let plain_check = |rt: quillmark_content::model::Normalized| -> Result<
+                    quillmark_content::model::Normalized,
+                    CoercionError,
+                > {
+                    if !rt.is_plain() {
+                        return Err(CoercionError::uncoercible(
+                            path,
+                            "<text>",
+                            "text",
+                            "text carries no marks, islands, or block \
+                                 formatting (lists, quotes, headings)",
+                        ));
+                    }
+                    if multiline {
+                        return Ok(rt);
+                    }
+                    let rt = crate::document::trim_line_end(rt);
+                    if !rt.is_inline() {
+                        return Err(CoercionError::uncoercible(
+                            path,
+                            "<text>",
+                            TEXT_SINGLE_LINE_TARGET,
+                            "text requires a single line; declare multiline: true to admit more",
+                        ));
+                    }
+                    Ok(rt)
+                };
                 let commit = |rt: &quillmark_content::model::Normalized| -> QuillValue {
                     match mode {
                         Leniency::Render => QuillValue::from_json(
@@ -576,8 +572,7 @@ impl QuillConfig {
                             )
                         },
                     )?;
-                    plain_check(&rt)?;
-                    return Ok(commit(&rt));
+                    return Ok(commit(&plain_check(rt)?));
                 }
                 let Some(text) = lenient_string(json_value) else {
                     return match mode {
@@ -591,8 +586,7 @@ impl QuillConfig {
                     };
                 };
                 let rt = quillmark_content::import::from_plaintext(&text);
-                plain_check(&rt)?;
-                Ok(commit(&rt))
+                Ok(commit(&plain_check(rt)?))
             }
             FieldType::RichText { multiline } => {
                 // The deliberately-lenient sibling of the strict decoders
@@ -2028,10 +2022,14 @@ impl QuillConfig {
                         format!(
                             "Invalid {context} 'body': the name is the card body's, so a \
                              field so named and the body would share one address \
-                             (`main.body`, `cards.<kind>[i].body`). Rename the field."
+                             (`main.body`, `cards.<kind>[i].body`)."
                         ),
                     )
-                    .with_code("quill::reserved_field_name".to_string()),
+                    .with_code("quill::reserved_field_name".to_string())
+                    .with_hint(
+                        "Rename the field, in the quill and in the documents that set it."
+                            .to_string(),
+                    ),
                 );
                 continue;
             }
@@ -2259,6 +2257,12 @@ impl QuillConfig {
                     .with_code("quill::invalid_name".to_string());
                     if let Some(fixed) = Self::snake_case_suggestion(n) {
                         diag = diag.with_hint(format!("Rename '{}' to '{}'", n, fixed));
+                    } else if n.chars().count() > crate::version::MAX_QUILL_NAME_LEN {
+                        diag = diag.with_hint(format!(
+                            "Shorten '{}' to at most {} characters",
+                            n,
+                            crate::version::MAX_QUILL_NAME_LEN
+                        ));
                     }
                     errors.push(diag);
                 }
@@ -3001,12 +3005,9 @@ fn literal_content(
                     "text carries no marks, islands, or block formatting",
                 ));
             }
+            let rt = if *multiline { rt } else { crate::document::trim_line_end(rt) };
             if !*multiline && !rt.is_inline() {
-                let mut diag = single_line_error(label, "text");
-                if crate::document::is_line_with_trailing_newline(&rt) {
-                    diag.hint = Some(super::validation::not_single_line_hint(true).to_string());
-                }
-                return Err(diag);
+                return Err(single_line_error(label, "text"));
             }
             Ok(Some(QuillValue::from_json(
                 quillmark_content::serial::to_canonical_value(&rt),

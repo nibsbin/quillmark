@@ -766,7 +766,6 @@ mod args_canon {
             },
             ValidationError::NotSingleLine {
                 path: "main.title".into(),
-                trailing_newline: true,
             },
             ValidationError::NotPlain {
                 path: "main.title".into(),
@@ -784,6 +783,7 @@ mod args_canon {
                 key: "$quill".into(),
             },
             EditError::IndexOutOfRange { index: 3, len: 1 },
+            EditError::TooManyCards { max: 1 },
             EditError::ValueTooDeep { max: 8 },
             EditError::Import(quillmark_content::import::ImportError::NestingTooDeep {
                 depth: 9,
@@ -803,7 +803,6 @@ mod args_canon {
             EditError::FieldNotSingleLine {
                 field: "body".into(),
                 codec: crate::document::edit::CODEC_TEXT.into(),
-                trailing_newline: true,
             },
             EditError::FieldCoercionFailed {
                 field: "n".into(),
@@ -828,7 +827,6 @@ mod args_canon {
             EditError::FieldNotSingleLine {
                 field: "body".into(),
                 codec: crate::document::edit::CODEC_RICHTEXT.into(),
-                trailing_newline: true,
             },
             EditError::FieldDecode {
                 field: "body".into(),

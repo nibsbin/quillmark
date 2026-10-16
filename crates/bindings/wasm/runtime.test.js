@@ -1153,6 +1153,48 @@ main:
     expect(err.cause).toBeInstanceOf(WebAssembly.RuntimeError)
   })
 
+  it('a RangeError or InternalError for stack exhaustion rejects as runtime::backend_trapped, any other as itself', async () => {
+    const throwingEngine = (err) =>
+      new Engine({
+        backends: {
+          typst: {
+            load: async () => {
+              const real = await import('../../../pkg/render/wasm.js')
+              class ThrowingQuillmark {
+                render() {
+                  throw err
+                }
+              }
+              return new Proxy(real, {
+                get(target, prop, receiver) {
+                  if (prop === 'Quillmark') return ThrowingQuillmark
+                  return Reflect.get(target, prop, receiver)
+                },
+              })
+            },
+            formats: ['pdf', 'svg', 'png'],
+          },
+        },
+      })
+    const rendered = (err) =>
+      throwingEngine(err)
+        .render(makeRuntimeQuill(), Document.fromMarkdown(TEST_MARKDOWN))
+        .catch((e) => e)
+
+    const overflow = new RangeError('Maximum call stack size exceeded')
+    const trapped = await rendered(overflow)
+    expect(trapped.diagnostics[0].code).toBe('runtime::backend_trapped')
+    expect(trapped.cause).toBe(overflow)
+
+    const recursion = Object.assign(new Error('too much recursion'), { name: 'InternalError' })
+    const firefox = await rendered(recursion)
+    expect(firefox.diagnostics[0].code).toBe('runtime::backend_trapped')
+    expect(firefox.cause).toBe(recursion)
+
+    const other = new RangeError('Invalid array length')
+    expect(await rendered(other)).toBe(other)
+  })
+
   it('propagates a clone-construction failure (doc clone), leaving the quill clone cached', async () => {
     // The quill clone is already materialized and cached, and stays cached;
     // only the per-call doc clone is freed in the `finally`. Cache and leak

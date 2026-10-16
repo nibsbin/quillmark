@@ -40,6 +40,11 @@ fn a_license_off_the_spdx_grammar_is_refused_with_its_fix() {
         ("LicenseRef-", None),
         ("NOASSERTION", None),
         ("\"MIT\\nOR Apache-2.0\"", None),
+        ("\"MIT\\u2028\"", None),
+        ("\"MIT\\u2029OR Apache-2.0\"", None),
+        ("\"MIT\\u0085\"", None),
+        ("\"MIT\\vOR Apache-2.0\"", None),
+        ("\"MIT\\f\"", None),
         ("42", None),
         ("~", None),
     ] {

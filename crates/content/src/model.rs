@@ -798,9 +798,10 @@ impl Content {
         self.text.chars().count()
     }
 
-    /// Whether this content satisfies the `richtext(inline)` constraint: exactly
-    /// one `Para` line, sitting in no container, with no islands.
-    /// [`Content::empty`] is inline, so a blank inline field passes.
+    /// Whether this content is one line, as a `text` or `richtext` field
+    /// without `multiline: true` requires: exactly one `Para` line, sitting in
+    /// no container, with no islands. [`Content::empty`] is one line, so a
+    /// blank one-line field passes.
     pub fn is_inline(&self) -> bool {
         self.islands.is_empty()
             && self.lines.len() == 1
@@ -808,11 +809,11 @@ impl Content {
             && self.lines[0].containers.is_empty()
     }
 
-    /// Whether this content satisfies the `plaintext` constraint: no marks, no
+    /// Whether this content satisfies the `text` constraint: no marks, no
     /// islands, and every line a plain `Para` sitting in no container.
     /// `continues` is unconstrained. [`Content::empty`] is plain.
     ///
-    /// The distinguishing property of plaintext over `richtext { marks: [] }` is
+    /// The distinguishing property of `text` over a mark-free `richtext` is
     /// the *literal* codec ([`crate::import::from_plaintext`]), not this
     /// predicate.
     pub fn is_plain(&self) -> bool {

@@ -20,9 +20,13 @@ it declares `multiline: true`.
   coercion, `validate`, the editor and acroform all read. `inline:` and
   `ui.multiline` are retired and fail the load as `quill::field_parse_error`,
   naming the replacement, and a `richtext` spells `multiline:` either way for
-  this release. `schema()` emits `quillmark:multiline: true` where it emitted
-  `quillmark:inline` on the opposite fields; the blueprint prints
-  `text(multiline)<plain>` and `richtext(multiline)<markdown>`.
+  this release, so no quill declaring a text field loads on both 0.125 and
+  0.126. `schema()` carries `multiline` where it carried `inline: true` on the
+  opposite fields, and the transform schema a plate reads carries
+  `quillmark:multiline: true` where it carried `quillmark:inline`. The
+  blueprint prints `text<plain>`, `text(multiline)<plain>`,
+  `richtext<markdown>` and `richtext(multiline)<markdown>`, where
+  `richtext<markdown>` named a block field.
   `validation::not_inline`, `edit::field_not_inline`,
   `conform::field_not_inline` and `quill::seed_not_inline` end in
   `not_single_line`, and their `codec` names `text`. An acroform text widget binds multiline exactly where
@@ -32,16 +36,34 @@ it declares `multiline: true`.
   that computes with a text value reads its `str` through the new
   `qm.str(..)`. A former `string` value reaches the plate as content, with nav
   and click-to-edit, and still rests as the verbatim string. A matrix added
-  item's `title` is a one-line `text` cell. (#2230)
+  item's `title` is a one-line `text` cell. A stored `string` value holding an
+  interior line break fails `validation::not_single_line` and its render
+  `validation::coercion_failed`; a one-line value ignores trailing
+  whitespace. (#2230)
+- fix(core)!: **a one-line `text` value drops its trailing whitespace**, so a
+  stored former `string` written as a YAML `|` block, whose newline the block
+  keeps, validates, renders and conforms to its line, where it failed
+  `validation::not_single_line` and the render's coercion. Only a line break
+  inside the value fails. `trailingNewline` leaves the `not_single_line`
+  args, and `trailing_newline` leaves `ValidationError::NotSingleLine` and
+  `EditError::FieldNotSingleLine`.
+- fix(typst): **`qm.str` drops every trailing space**, where a value ending in
+  two kept one. (#2230)
 
 ### PDF forms
 
 - feat(acroform)!: **an acroform quill's field spec is `form.yaml`**, read as
   `Quill.yaml` is, where it was `form.json`. JSON is YAML 1.2, so a renamed
-  `form.json` loads unchanged; a quill holding `form.json` fails as
+  `form.json` loads unchanged but for the three contents the upgrade guide
+  names: a raw DEL, C1 control, U+FFFE or U+FFFF, a repeated key, and a `rect`
+  value past `f32` range. A quill holding `form.json` fails as
   `acroform::legacy_form_json`. `acroform::invalid_form_json` is
   `acroform::invalid_form_spec`, located in `form.yaml`, and
   `acroform::missing_form_json` is `acroform::missing_form_spec`. (#2210)
+- fix(cli): **`quillmark validate --no-render` reads an acroform quill's
+  `form.yaml` as `open` does**, binding it against the schema and `form.pdf`'s
+  pages, so a quill holding `form.json`, no spec, or one that does not parse
+  fails there, where it passed and then failed to open.
 
 ### Blueprint
 
@@ -50,11 +72,12 @@ it declares `multiline: true`.
   describes the package and never reaches the blueprint. (#2222)
 - feat(core)!: **a blank `default:` (`""`, `[]`, `{}`) prints in the blueprint
   as no default does**, an empty cell where it printed `""`, since it renders
-  as one; `0` and `false` print. **A typed table without a `default:` prints
-  `[]` led by its synthetic row commented out**, the shape `default: []`
-  printed, where it printed the row live and an unedited blueprint rendered one
-  blank row. The blank `default:` stays legal, and no diagnostic names it.
-  (#2233)
+  as one; `0` and `false` print. **A required typed table without a
+  `default:` prints `[]` led by its synthetic row commented out**, the shape
+  `default: []` printed, and an optional one an empty cell,
+  `r: # array<object>?`, under the same commented row, since `[]` answers it;
+  either printed the row live, and an unedited blueprint rendered one blank
+  row. The blank `default:` stays legal, and no diagnostic names it. (#2233)
 
 ### Typst plates
 
@@ -101,6 +124,9 @@ it declares `multiline: true`.
 - fix(typst): **SVG output is well-formed XML when a link's URL holds `&` or
   `<`**, where its `href` carried them raw and an XML parser refused the file.
   (#2194)
+- fix(typst): **a link whose URL holds a character XML 1.0 cannot carry, a C0
+  control but tab, LF and CR or U+FFFE or U+FFFF, renders as its text
+  alone**, where its `href` carried it raw and the whole SVG failed to parse.
 - fix(core)!: **a card-yaml block's aliases and tags expand within a budget
   linear in its source**: past twice the block's bytes plus 4 KiB of scalars,
   or its bytes plus 4 KiB of nodes, the block fails its YAML parse, with a
@@ -121,17 +147,30 @@ it declares `multiline: true`.
 - fix(typst): **a quill opens promptly whatever face count its font collection
   declares**: a collection whose header declares more faces than the file
   holds offsets for loads no faces. (#2168, #2189)
-- feat(typst): **a character no loaded font covers warns
+- fix(typst): **a font collection declaring more than 256 faces loads none
+  and warns `typst::font_collection_skipped`**, where a crafted collection
+  under 5 MB declaring a million cost seconds and gigabytes at every open.
+- feat(typst)!: **a character no loaded font covers warns
   `typst::missing_glyph`**, once per render, naming each character the page
-  draws as an empty box, where Typst drew it and said nothing. (#2179, #2196)
+  draws as an empty box, where Typst drew it and said nothing. `quillmark
+  validate` fails an `example.md` that draws one. (#2179, #2196)
+- fix(typst): **a word past 64 KiB of characters no font covers renders**,
+  where reading its glyphs panicked on every format, aborting the CLI and
+  Python and trapping WASM. (#2227)
 
 ### Markdown
 
-- fix(content)!: **a body nests at most 12 levels deep, so every body that
-  imports renders under Typst**, where import took 100 and Typst's show-rule
-  depth refused 16 quotes or 32 lists. A body past the bound fails
-  `parse::body_import` at its `path`, and a stored row holding one fails to
-  load; `ParseError::BodyImport` holds `{ path, message }`. (#2187, #2190)
+- fix(content)!: **a body nests at most 12 list items, quotes and elements
+  deep, its marks counting nothing, so every body that imports renders under
+  Typst**, where import took 100 and Typst's show-rule depth refused 16 quotes
+  or 32 lists. A body past the bound fails `parse::body_import` at its `path`,
+  and a stored row holding one fails to load; `ParseError::BodyImport` holds
+  `{ path, message }`. (#2187, #2190)
+- fix(core)!: **a stored row holding more than 1,000 cards fails to load**,
+  `StorageError::Malformed`, as markdown parse refuses that markdown, where it
+  loaded and its own `to_markdown` failed `parse::too_many_cards`; and placing
+  a 1,001st card refuses as `edit::too_many_cards`, `EditError::TooManyCards`,
+  where the edit landed.
 
 ### Quill names
 
@@ -158,14 +197,20 @@ it declares `multiline: true`.
   series reads them. (#2221, #2224)
 ### Quill metadata
 
-- feat(core): **`quill.license` names a quill's license as an SPDX expression,
+- feat(core)!: **`quill.license` names a quill's license as an SPDX expression,
   and `quill.homepage` where its source or docs live.** Both are optional and
-  surface on `Quill.metadata` and `quillmark info`, absent when undeclared. A
+  surface on `Quill.metadata` and `quillmark info`, absent when undeclared.
+  `QuillConfig` gains the public fields `license` and `homepage`, so Rust code
+  building it with a struct literal fails to compile until it names them. A
   license is checked against the SPDX license list the engine ships: an id off
   it, a lowercase operator or `/` for `OR` fails `quill::invalid_license`, and
   a deprecated id warns `quill::deprecated_license`. A homepage that is not an
   absolute `http` or `https` URL naming a host and no user fails
   `quill::invalid_homepage`. (#2225)
+- fix(core): **a `quill.license` holding any line break fails
+  `quill::invalid_license`**: VT, FF, NEL, U+2028 and U+2029 as LF and CR do,
+  where those five reached the SPDX check and one at either end loaded,
+  trimmed.
 
 ### Bindings
 
@@ -174,6 +219,14 @@ it declares `multiline: true`.
   uncoded `attempted to take ownership of Rust value while it was borrowed`.
   `Engine.render` / `open` and `LiveSession.update` / `render` / `paint` are
   covered; a host routes on the code and discards the realm. (#2176)
+- fix(wasm): **`@quillmark/wasm` declares `engines: { node: ">=22" }`**,
+  where it declared `>=24` and npm on Node 22 resolved 0.103.0, the last
+  release under that floor. The `using` sugar needs Node 24. (#2199)
+- fix(wasm)!: **a native stack overflow inside a render rejects as
+  `runtime::backend_trapped`** too, the `RangeError` V8 and JavaScriptCore
+  raise for it, or Firefox's `InternalError`, on `cause`, where it rejected as
+  that error, uncoded, though it leaves the build's state as undefined as a
+  trap does.
 - fix(python): **`render` releases the GIL while the backend compiles**, and
   renders a clone of the document, so other threads run and may edit it
   meanwhile. (#2176)
@@ -199,22 +252,30 @@ it declares `multiline: true`.
 - docs(reference): **the diagnostic-codes page lists every code the engine
   mints**, and a test fails on a code minted but not listed, or listed but
   minted nowhere. (#2175)
+- fix(core,acroform): **`quill::reserved_field_name` and
+  `acroform::missing_form_spec` carry a hint**: rename the field, and add
+  `form.yaml` at the quill root.
 
 ### Fixtures
 
 - fix(fixtures)!: **`status_report`'s `state` stores `on_track`, `at_risk` and
-  `blocked`**, where it stored `on track`, `at risk` and `blocked`, at the same
-  `version: 0.1.0`. A document holding the old text fails
+  `blocked`**, where it stored `on track`, `at risk` and `blocked`, at
+  `version: 0.2.0`. A document holding the old text fails
   `validation::enum_violation`; the banner prints the same words. (#2167)
 - fix(fixtures): **`usaf_memo` sets in TeX Gyre Termes**, so its rendered
   output changes, and its example drops the seal. (#2173)
+- fix(fixtures): **`usaf_memo` renders a list nested six levels deep or
+  more**, numbering past its last format and restarting each such level under
+  a new parent, where it failed `typst::compile` with
+  `dictionary does not contain key "6"`. (#2191)
 
 ### Distribution
 
 - feat(cli): **prebuilt `quillmark` binaries ship on every GitHub Release**,
   for Linux (musl, x86_64 and aarch64), macOS (arm64 and x86_64) and Windows
-  (x86_64, static C runtime), and `cargo binstall quillmark-cli` installs
-  them. (#2177)
+  (x86_64, static C runtime), each archive carrying the NOTICE and
+  `THIRD_PARTY_LICENSES.md`, and `cargo binstall quillmark-cli` installs
+  them. (#2177, #2195)
 - chore(legal): **every package carries the full Apache-2.0 text and a
   NOTICE**, and the npm package and the wheels ship their third-party
   licenses. (#2173)

@@ -73,8 +73,8 @@ collides with YAML key/value parsing.
 
 Two own-line forms are not annotations: a dormant variant world, which is cells
 with a `# ` in front under a `# when <MEMBER>:` header (see "Enum variants"),
-and a typed table's field commented out above its live `[]` (see "Typed
-tables"). The colons in them are the cells' own.
+and a typed table's field commented out above its live cell, `[]` or empty
+where optional (see "Typed tables"). The colons in them are the cells' own.
 
 ### Leading lines: order
 
@@ -317,7 +317,9 @@ a **cell**, so it keeps its own literal. The outer key carries
 - A non-empty `default:` renders as actual rows (no per-property
   annotations on each row), shippable as-is.
 - Otherwise the cell is inline `[]`: shippable empty, as an unanswered table
-  renders. The field leads it commented out, holding one synthetic row whose
+  renders. An optional table (`array<object>?`) prints an empty cell instead,
+  since `[]` answers it and it renders unanswered as `none`. The field leads
+  either commented out, holding one synthetic row whose
   properties each carry their own description, inline annotation, and cell —
   its `default:`, else empty. That is the config-file spelling of an
   alternative: a reader adds a row by deleting the live line and uncommenting
@@ -356,7 +358,7 @@ declarations: an author who deletes a defaulted line gets that default back at
 render, which is what the "shippable as-is" affordance promises.
 
 An `array` differs because it is a cell: its own `default:` renders, else
-inline `[]`.
+inline `[]`, or empty where optional.
 
 ```
 # The sender's mailing address.

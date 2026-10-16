@@ -20,7 +20,7 @@ pub(crate) mod validation;
 
 pub use config::{CoercionError, QuillConfig};
 pub(crate) use config::{
-    Leniency, RICHTEXT_SINGLE_LINE_TARGET, TEXT_SINGLE_LINE_TARGET, TEXT_TRAILING_NEWLINE,
+    Leniency, RICHTEXT_SINGLE_LINE_TARGET, TEXT_SINGLE_LINE_TARGET,
 };
 pub use compose::PLATE_PATH_KEY;
 pub use conform::BoundParseError;

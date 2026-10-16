@@ -40,6 +40,15 @@ fn an_emoji_sequence_names_its_pictographs_alone() {
     assert!(!warnings[0].contains("U+FE0F"), "{}", warnings[0]);
 }
 
+/// One unbroken word lays out as one text item, whose glyph ranges saturate
+/// at `u16::MAX` bytes, inside a two-byte character here.
+#[test]
+fn a_word_past_64_kib_of_uncovered_text_warns() {
+    let warnings = missing(&"ա".repeat(33_000));
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(warnings[0].contains("U+0561"), "{}", warnings[0]);
+}
+
 #[test]
 fn covered_text_warns_nothing() {
     assert!(missing("plain text, ünïcödé").is_empty());

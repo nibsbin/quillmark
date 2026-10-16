@@ -247,6 +247,37 @@ fn validate_without_rendering_refuses_a_plate_a_render_refuses() {
     }
 }
 
+/// `validate --no-render` reads an acroform quill's `form.yaml` as `open`
+/// does: one held as `form.json`, absent, or unparseable fails it.
+#[test]
+fn validate_without_rendering_refuses_a_form_spec_a_render_refuses() {
+    let form = quillmark_fixtures::quills_path("sample_form");
+    let quill = |spec: Option<(&str, &[u8])>| {
+        let dir = tempfile::tempdir().expect("tempdir");
+        for file in ["Quill.yaml", "form.pdf"] {
+            std::fs::copy(form.join(file), dir.path().join(file)).expect("copy the fixture");
+        }
+        if let Some((name, bytes)) = spec {
+            std::fs::write(dir.path().join(name), bytes).expect("write the spec");
+        }
+        dir
+    };
+    let spec = std::fs::read(form.join("form.yaml")).expect("read form.yaml");
+
+    ok(&["validate", quill(Some(("form.yaml", &spec))).path().to_str().unwrap(), "--no-render"]);
+    for (spec, code) in [
+        (Some(("form.json", &spec[..])), "acroform::legacy_form_json"),
+        (None, "acroform::missing_form_spec"),
+        (Some(("form.yaml", &b"fields: [\n"[..])), "acroform::invalid_form_spec"),
+    ] {
+        let dir = quill(spec);
+        let out = run(&["validate", dir.path().to_str().unwrap(), "--no-render"]);
+        assert_eq!(out.status.code(), Some(1), "{code}");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(stderr.contains(code), "{code}: {stderr}");
+    }
+}
+
 /// A config that will not load is a quill failure, and reads as one.
 #[test]
 fn an_unloadable_quill_is_not_an_invalid_argument() {

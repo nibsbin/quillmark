@@ -66,17 +66,36 @@ pub(crate) fn quill_fonts(source: &Quill) -> Vec<(std::path::PathBuf, &[u8])> {
     fonts
 }
 
-/// Every face in `data`. A collection whose header declares more offsets than
-/// the file holds has none.
-fn faces(data: Bytes) -> impl Iterator<Item = Font> {
+/// Real collections hold dozens of faces, and every face parses at each
+/// session open.
+pub(crate) const MAX_COLLECTION_FACES: u32 = 256;
+
+/// Every face in `data`, or the face count a collection declares past
+/// [`MAX_COLLECTION_FACES`]. A collection whose header declares more offsets
+/// than the file holds has none.
+fn faces(data: Bytes) -> Result<impl Iterator<Item = Font>, u32> {
     let count = match data.first_chunk::<12>() {
         Some([b't', b't', b'c', b'f', _, _, _, _, n @ ..]) => match u32::from_be_bytes(*n) {
+            n if n > MAX_COLLECTION_FACES => return Err(n),
             n if n as usize <= (data.len() - 12) / 4 => n,
             _ => 0,
         },
         _ => 1,
     };
-    (0..count).filter_map(move |index| Font::new(data.clone(), index))
+    Ok((0..count).filter_map(move |index| Font::new(data.clone(), index)))
+}
+
+fn oversized_collection(path: &Path, declared: u32) -> Diagnostic {
+    Diagnostic::new(
+        Severity::Warning,
+        format!(
+            "Skipping '{}': the font collection declares {declared} faces, past the \
+             {MAX_COLLECTION_FACES} one file may hold",
+            path.display()
+        ),
+    )
+    .with_code("typst::font_collection_skipped".to_string())
+    .with_hint("Split the collection into files of fewer faces.".to_string())
 }
 
 /// Typst `World` implementation for quill-based compilation, rooted at the
@@ -109,11 +128,15 @@ impl QuillWorld {
         let mut book = FontBook::new();
         let mut fonts = Vec::new();
 
-        for (_, font_data) in quill_fonts(source) {
-            let font_bytes = Bytes::new(font_data.to_vec());
-            for font in faces(font_bytes) {
-                book.push(font.info().clone());
-                fonts.push(font);
+        for (path, font_data) in quill_fonts(source) {
+            match faces(Bytes::new(font_data.to_vec())) {
+                Ok(faces) => {
+                    for font in faces {
+                        book.push(font.info().clone());
+                        fonts.push(font);
+                    }
+                }
+                Err(declared) => load_warnings.push(oversized_collection(&path, declared)),
             }
         }
 
@@ -121,7 +144,7 @@ impl QuillWorld {
         if fonts.is_empty() {
             for (_, data) in FALLBACK_FONTS {
                 let font_bytes = Bytes::new(data.to_vec());
-                for font in faces(font_bytes) {
+                for font in faces(font_bytes).into_iter().flatten() {
                     book.push(font.info().clone());
                     fonts.push(font);
                 }

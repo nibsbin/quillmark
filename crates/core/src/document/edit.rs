@@ -37,20 +37,6 @@ fn render_at(field: &str, at: &[PathSegment]) -> String {
         .to_string()
 }
 
-fn not_single_line_reason(codec: &str, trailing_newline: bool) -> String {
-    if trailing_newline {
-        format!(
-            "the value ends in a newline, which {codec} keeps as a second line; drop it \
-             (in YAML, write the value as a `|-` block or a plain scalar)"
-        )
-    } else {
-        format!(
-            "{codec} requires a single line with no container or island; declare \
-             multiline: true to admit more"
-        )
-    }
-}
-
 /// `true` if `name` matches `[A-Za-z_][A-Za-z0-9_]*`, tested on `name`'s own
 /// characters: the parser reads a key's raw bytes, so a name that merely
 /// normalises to ASCII (`U+212A KELVIN SIGN`) is not a top-level key.
@@ -113,6 +99,12 @@ pub enum EditError {
     #[error("index {index} is out of range (len = {len})")]
     IndexOutOfRange { index: usize, len: usize },
 
+    /// A card placed in a document already holding
+    /// [`MAX_CARD_COUNT`](crate::error::MAX_CARD_COUNT) composable cards, past
+    /// which its markdown fails `parse::too_many_cards`.
+    #[error("the document already holds the maximum of {max} cards")]
+    TooManyCards { max: usize },
+
     #[error("value nests deeper than the maximum of {max} levels")]
     ValueTooDeep { max: usize },
 
@@ -164,15 +156,15 @@ pub enum EditError {
     /// A content field written under a one-line schema (no `multiline: true`)
     /// decoded to a multi-line content. Both text codecs carry the constraint,
     /// so one code covers both and `codec` says which lane raised it.
-    #[error("{codec} field '{field}' is not a single line: {}", not_single_line_reason(.codec, *.trailing_newline))]
+    #[error(
+        "{codec} field '{field}' is not a single line: {codec} requires a single line with \
+         no container or island; declare multiline: true to admit more"
+    )]
     FieldNotSingleLine {
         field: String,
         /// The codec whose one-line constraint was violated: [`CODEC_RICHTEXT`]
         /// or [`CODEC_TEXT`].
         codec: String,
-        /// The value is one line plus the empty line a trailing `\n` opens,
-        /// which only the verbatim `text` codec keeps.
-        trailing_newline: bool,
     },
 
     /// A typed write could not coerce the value to the field's schema type: the
@@ -222,6 +214,7 @@ impl EditError {
             EditError::ReservedKind => "edit::reserved_kind",
             EditError::RootOnlyEntry { .. } => "edit::root_only_entry",
             EditError::IndexOutOfRange { .. } => "edit::index_out_of_range",
+            EditError::TooManyCards { .. } => "edit::too_many_cards",
             EditError::ValueTooDeep { .. } => "edit::value_too_deep",
             EditError::Import(_) => "edit::import",
             EditError::FieldDecode { .. } => "edit::field_decode",
@@ -251,6 +244,7 @@ impl EditError {
                 "index" => index,
                 "len" => len,
             },
+            EditError::TooManyCards { max } => diag_args! { "max" => max },
             EditError::ValueTooDeep { max } => diag_args! { "max" => max },
             EditError::Import(_) => diag_args! {},
             EditError::FieldDecode {
@@ -270,20 +264,10 @@ impl EditError {
                 "field" => field,
                 "declared" => declared,
             },
-            EditError::FieldNotSingleLine {
-                field,
-                codec,
-                trailing_newline,
-            } => {
-                let mut args = diag_args! {
-                    "field" => field,
-                    "codec" => codec,
-                };
-                if *trailing_newline {
-                    args.insert("trailingNewline".to_string(), serde_json::json!(true));
-                }
-                args
-            }
+            EditError::FieldNotSingleLine { field, codec } => diag_args! {
+                "field" => field,
+                "codec" => codec,
+            },
             EditError::FieldCoercionFailed {
                 field,
                 target,
@@ -544,12 +528,10 @@ fn conform_error_to_edit(name: &str, err: CoercionError) -> EditError {
         t if t == crate::quill::RICHTEXT_SINGLE_LINE_TARGET => EditError::FieldNotSingleLine {
             field,
             codec: CODEC_RICHTEXT.to_string(),
-            trailing_newline: false,
         },
         t if t == crate::quill::TEXT_SINGLE_LINE_TARGET => EditError::FieldNotSingleLine {
             field,
             codec: CODEC_TEXT.to_string(),
-            trailing_newline: reason == crate::quill::TEXT_TRAILING_NEWLINE,
         },
         CODEC_RICHTEXT | CODEC_TEXT => EditError::FieldDecode {
             field,
@@ -793,23 +775,36 @@ impl Document {
 
     /// Append a composable card. Its `$kind` must be a valid, non-reserved
     /// composable kind ([`EditError::InvalidKindName`] /
-    /// [`EditError::ReservedKind`] otherwise).
+    /// [`EditError::ReservedKind`] otherwise), and the document must hold
+    /// fewer than [`MAX_CARD_COUNT`](crate::error::MAX_CARD_COUNT) cards
+    /// ([`EditError::TooManyCards`]).
     pub fn push_card(&mut self, card: Card) -> Result<(), EditError> {
         Self::check_composable_placement(&card)?;
+        self.check_card_room()?;
         self.cards_vec_mut().push(card);
         Ok(())
     }
 
     /// Insert a composable card at `index` (`index > len` →
     /// [`EditError::IndexOutOfRange`]; invalid `$kind` →
-    /// [`EditError::InvalidKindName`] / [`EditError::ReservedKind`]).
+    /// [`EditError::InvalidKindName`] / [`EditError::ReservedKind`]; a full
+    /// document → [`EditError::TooManyCards`]).
     pub fn insert_card(&mut self, index: usize, card: Card) -> Result<(), EditError> {
         let len = self.cards().len();
         if index > len {
             return Err(EditError::IndexOutOfRange { index, len });
         }
         Self::check_composable_placement(&card)?;
+        self.check_card_room()?;
         self.cards_vec_mut().insert(index, card);
+        Ok(())
+    }
+
+    fn check_card_room(&self) -> Result<(), EditError> {
+        let max = crate::error::MAX_CARD_COUNT;
+        if self.cards().len() >= max {
+            return Err(EditError::TooManyCards { max });
+        }
         Ok(())
     }
 

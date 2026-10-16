@@ -96,7 +96,7 @@ text. Its values are made up and nobody keeps them. Starter content people keep
 is a template, not an example. `Quill.yaml` declares nothing about it.
 
 ```
-status_report/0.1.0/
+status_report/0.2.0/
 ├── Quill.yaml
 ├── plate.typ
 └── example.md
@@ -154,7 +154,7 @@ main:
 | `ui`          | object            | no       | UI rendering hints (see [UI Properties](#ui-properties)) |
 | `items`       | object            | for `array` | Element schema for an `array` field (a nested field schema). Required on every array. |
 | `properties`  | object            | for `object` | Nested field schemas for an `object` typed dictionary (or an array's `object`-typed `items`). Required on every `object` field. |
-| `multiline`   | boolean           | for `richtext` | For `text` and `richtext` only: `true` admits more than one line (`text`) or block structure (`richtext`). Absent or `false`, the field is one line or one paragraph. A `richtext` declares it either way. |
+| `multiline`   | boolean           | for `richtext` | For `text` and `richtext` only: `true` admits more than one line (`text`) or block structure (`richtext`). Absent or `false`, the field is one line or one paragraph: a `text` value's trailing whitespace, the newline a YAML `|` block keeps included, drops before the check, so only a line break inside the value fails. A `richtext` declares it either way. |
 
 ### `title`
 
@@ -460,7 +460,8 @@ in a CUI block leaves those values in the document and warns
 are still there. Remove the field to drop the value for good.
 
 A variant cell is an ordinary field: any type a card field may carry, prose,
-dates and containers included, reaching the plate exactly as a card-level one
+dates and containers included, a typed dictionary (`type: object`) among them,
+reaching the plate exactly as a card-level one
 does. What it cannot carry is `variants:` of its own. `variants:` itself
 is valid on a `type: enum` field that is a card's own field or a typed
 dictionary's property — `header.classification` reads, binds and branches as
@@ -468,8 +469,9 @@ dictionary's property — `header.classification` reads, binds and branches as
 matrix column and another variant's cell each refuse one, as does an object
 inside any of them. It
 keys only on declared members (never `""`, which owns no field set), and cannot
-declare a field named `value`. Variant fields sit in the discriminant's
-`ui.group`; a `ui.group` inside a variant is an error. A field set shared by
+declare a field named `value`. Variant fields sit beside the discriminant,
+inside its [group](#grouping) `object` when it is grouped; a `ui.group` on a
+variant field is `quill::nested_group_not_supported`. A field set shared by
 several members is repeated or shared with a YAML anchor — a variant keys on one
 member — but every variant declaring a given name must declare it *identically*,
 since the name is one cell of the container whichever world brings it into play

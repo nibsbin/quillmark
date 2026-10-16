@@ -592,11 +592,24 @@ impl TryFrom<DocumentV0_124_0> for Document {
                 }
             }
         }
-        if kindless {
-            return fold_kindless(main, cards);
-        }
-        Ok(Document::from_main_and_cards(main, cards))
+        let doc = if kindless {
+            fold_kindless(main, cards)?
+        } else {
+            Document::from_main_and_cards(main, cards)
+        };
+        within_card_ceiling(doc)
     }
+}
+
+/// `doc`, when it holds no more cards than markdown parse admits.
+fn within_card_ceiling(doc: Document) -> Result<Document, StorageError> {
+    let (count, max) = (doc.cards().len(), crate::error::MAX_CARD_COUNT);
+    if count > max {
+        return Err(StorageError::Malformed(format!(
+            "document has {count} cards, exceeding the maximum of {max}"
+        )));
+    }
+    Ok(doc)
 }
 
 /// Fold each card naming no `$kind` into the body above it: its fields and
@@ -1448,6 +1461,31 @@ This body and the metadata above are an indorsement card.
             let err = serde_json::from_value::<Document>(row.into()).unwrap_err();
             assert!(err.to_string().contains(&format!("unknown field `{key}`")), "{err}");
         }
+    }
+
+    /// A row loads only where its own markdown parses within the card ceiling.
+    #[test]
+    fn a_stored_row_past_the_card_ceiling_fails_the_load() {
+        use crate::error::MAX_CARD_COUNT;
+
+        let mut doc = Document::parse("~~~card-yaml\n$quill: q@1.0\n$kind: main\n~~~\n")
+            .unwrap()
+            .document;
+        for _ in 0..MAX_CARD_COUNT {
+            doc.push_card(Card::new("note").unwrap()).unwrap();
+        }
+        let row = serde_json::to_value(&doc).unwrap();
+        let loads = |row: serde_json::Value| -> Result<Document, String> {
+            serde_json::from_value::<Document>(row).map_err(|e| e.to_string())
+        };
+
+        let at_ceiling = loads(row.clone()).expect("1,000 cards load");
+        assert!(Document::parse(&at_ceiling.to_markdown()).is_ok());
+        let mut past = row;
+        let cards = past["cards"].as_array_mut().unwrap();
+        cards.push(cards[0].clone());
+        let err = loads(past).expect_err("1,001 cards");
+        assert!(err.contains("cards"), "{err}");
     }
 
     #[test]

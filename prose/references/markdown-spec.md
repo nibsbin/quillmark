@@ -706,11 +706,13 @@ block.
 
 Markdown block nesting depth (12) is enforced at import time by the
 markdown→content parser (`Document::parse`): at every point of a body, the
-list items, quotes and elements open there, the marks open there and one for
-any `<u>` open there number at most 12. An element counts from its open tag
-until it closes or its list item, quote or body ends, so one left unclosed
-counts until then, and a `qm-table` wrapper counts nothing. The Typst backend re-checks
-at render as a backstop for content built without importing.
+list items, quotes and elements open there number at most 12. Marks and `<u>`
+count nothing: the Typst emitter wraps a run in at most six show rules, its
+mark kinds and raw, so 12 quotes at four apiece leave Typst's show-rule depth of
+64 room for them. An element counts from its open tag until it closes or its
+list item, quote or body ends, so one left unclosed counts until then, and a
+`qm-table` wrapper counts nothing. The Typst backend re-checks at render as a
+backstop for content built without importing.
 
 ## 9. Emission Contract
 

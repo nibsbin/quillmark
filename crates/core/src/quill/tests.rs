@@ -334,7 +334,8 @@ fn a_field_named_body_is_refused() {
     ] {
         let errs = QuillConfig::from_yaml_with_warnings(&with_header(yaml)).expect_err(yaml);
         assert!(
-            errs.iter().any(|d| d.code.as_deref() == Some("quill::reserved_field_name")),
+            errs.iter().any(|d| d.code.as_deref() == Some("quill::reserved_field_name")
+                && d.hint.is_some()),
             "{yaml}: {errs:?}"
         );
     }
@@ -351,7 +352,6 @@ fn test_invalid_quill_name_hint_suggests_a_valid_name() {
         ("İstanbul", Some("istanbul")),
         ("MyQuill", Some("my_quill")),
         ("HTTPForm2", Some("httpform2")),
-        ("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", None),
     ] {
         let yaml = format!(
             "quill:\n  name: \"{name}\"\n  version: \"1.0.0\"\n  backend: typst\n  description: q\n"
@@ -368,6 +368,20 @@ fn test_invalid_quill_name_hint_suggests_a_valid_name() {
             assert!(QuillConfig::from_yaml(&renamed).is_ok(), "{s} loads");
         }
     }
+}
+
+#[test]
+fn an_overlong_quill_name_hints_the_bound() {
+    let name = "a".repeat(65);
+    let yaml = format!(
+        "quill:\n  name: {name}\n  version: \"1.0.0\"\n  backend: typst\n  description: q\n"
+    );
+    let errs = QuillConfig::from_yaml_with_warnings(&yaml).unwrap_err();
+    let diag = errs
+        .iter()
+        .find(|d| d.code.as_deref() == Some("quill::invalid_name"))
+        .expect("a 65-character name is refused");
+    assert!(diag.hint.as_deref().is_some_and(|h| h.contains("64")), "{diag:?}");
 }
 
 #[test]
@@ -1387,19 +1401,15 @@ fn a_nested_single_line_richtext_default_over_one_para_is_a_load_error() {
 }
 
 #[test]
-fn a_single_line_text_literal_ending_in_a_newline_names_the_fix() {
-    let err = quill_with_field(concat!(
-        "    pti:\n",
-        "      type: text\n",
-        "      default: |\n",
-        "        one line\n",
-    ))
-    .unwrap_err();
-    let diag = err
-        .iter()
-        .find(|d| d.code.as_deref() == Some("validation::not_single_line"))
-        .unwrap_or_else(|| panic!("{err:?}"));
-    assert!(diag.hint.as_deref().unwrap().contains("`|-`"), "{diag:?}");
+fn a_single_line_text_literal_ending_in_a_newline_loads() {
+    quill_with_field("    pti:\n      type: text\n      default: |\n        one line\n")
+        .expect("a trailing newline is no second line");
+    let err = quill_with_field("    pti:\n      type: text\n      default: |\n        one\n        two\n")
+        .unwrap_err();
+    assert!(
+        err.iter().any(|d| d.code.as_deref() == Some("validation::not_single_line")),
+        "{err:?}"
+    );
 }
 
 #[test]

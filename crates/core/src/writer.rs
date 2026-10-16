@@ -608,7 +608,7 @@ card_kinds:
     }
 
     #[test]
-    fn set_names_the_trailing_newline_a_single_line_text_value_keeps() {
+    fn set_drops_a_single_line_text_value_s_trailing_whitespace() {
         let config = QuillConfig::from_yaml(&QUILL_YAML.replace(
             "    qty:\n",
             "    pti:\n      type: text\n    qty:\n",
@@ -617,14 +617,12 @@ card_kinds:
         let mut doc = blank_doc();
         let mut ed = TypedWriter::new(&config, &mut doc);
 
-        let err = ed.set("pti", QuillValue::from("x\n")).unwrap_err();
-        assert_eq!(err.code(), "edit::field_not_single_line");
-        assert_eq!(err.args().get("trailingNewline"), Some(&serde_json::json!(true)));
-        assert!(err.to_string().contains("`|-`"), "{err}");
+        ed.set("pti", QuillValue::from("x \t\n")).unwrap();
+        assert_eq!(doc.main().field_text("pti", Codec::Text).unwrap().unwrap(), "x");
 
+        let mut ed = TypedWriter::new(&config, &mut doc);
         let err = ed.set("pti", QuillValue::from("x\ny")).unwrap_err();
         assert_eq!(err.code(), "edit::field_not_single_line");
-        assert!(!err.args().contains_key("trailingNewline"));
     }
 
     #[test]

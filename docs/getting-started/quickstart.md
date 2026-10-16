@@ -55,11 +55,15 @@ This paragraph is the document body. *Markdown* works here.
 === "CLI"
 
     ```bash
-    cargo install quillmark-cli
+    cargo install quillmark-cli --locked
     quillmark render my_quill document.md
     ```
 
-    The CLI builds from source, so it needs a [Rust toolchain](https://rustup.rs).
+    `cargo install` builds from source, so it needs a
+    [Rust toolchain](https://rustup.rs). Prebuilt binaries need none:
+    `cargo binstall quillmark-cli` installs one, and each
+    [GitHub Release](https://github.com/borb-sh/quillmark/releases) carries the
+    archives ([Installation](../cli/reference.md#installation)).
     `render` writes `document.pdf`. `quillmark check my_quill document.md`
     reports what the document gets wrong without rendering, and
     `quillmark blueprint my_quill` prints the fill-in-the-blanks document the

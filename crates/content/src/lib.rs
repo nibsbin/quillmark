@@ -24,8 +24,9 @@ pub mod usv;
 /// Maximum container nesting depth the markdown codecs accept before erroring.
 /// The import guard ([`import::from_markdown`]) and the typst backend's markup
 /// converter share this one limit, so a document that imports also renders.
-/// Typst stops at a show-rule depth of 64 and a block quote spends four of it,
-/// so the bound leaves a plate's own rules the rest.
+/// Typst stops at a show-rule depth of 64, a block quote spends four of it and
+/// the marks around a run at most six, so the bound leaves a plate's own rules
+/// the rest.
 pub const MAX_NESTING_DEPTH: usize = 12;
 
 /// Maximum nesting depth of an opaque JSON payload (an island's `props`), in

@@ -163,7 +163,10 @@ three canonical documents: the empty document, the blueprint, and the seeded
 document. A plate that renders the seeded document and not the empty one fails
 here, which is the quill authoring contract every plate is bound by. A Typst
 quill's plate is found as a render finds it, under `--no-render` too, so a
-quill holding no plate fails as `typst::plate_missing`.
+quill holding no plate fails as `typst::plate_missing`. An acroform quill's
+`form.yaml` is read and bound against the schema and `form.pdf`'s pages as a
+render reads it, under `--no-render` too, so a quill holding `form.json`, no
+spec, or a spec that does not parse fails as it would at `open`.
 
 A quill with an `example.md` at its root has that example document read,
 validated, and rendered too. Any diagnostic on it fails the quill, a warning
