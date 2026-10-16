@@ -128,6 +128,9 @@ it declares `multiline: true`.
 - fix(typst): **a quill opens promptly whatever face count its font collection
   declares**: a collection whose header declares more faces than the file
   holds offsets for loads no faces. (#2168, #2189)
+- fix(typst): **a font collection declaring more than 256 faces loads none
+  and warns `typst::font_collection_skipped`**, where a crafted collection
+  under 5 MB declaring a million cost seconds and gigabytes at every open.
 - feat(typst): **a character no loaded font covers warns
   `typst::missing_glyph`**, once per render, naming each character the page
   draws as an empty box, where Typst drew it and said nothing. (#2179, #2196)

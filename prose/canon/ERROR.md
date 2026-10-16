@@ -298,7 +298,9 @@ See `crates/backends/typst/src/error_mapping.rs`.
 **Quill-load warnings** are the backend's other warning source, hand-coded
 rather than derived from a Typst diagnostic: `typst::path_skipped` (a file
 Typst's `VirtualPath` rejected: asset or package file alike),
-`typst::package_manifest`, and `typst::package_entrypoint_missing`. Each marks a
+`typst::package_manifest`, `typst::package_entrypoint_missing`, and
+`typst::font_collection_skipped` (a `.ttc` or `.otc` declaring more than 256
+faces). Each marks a
 file the world had to skip, which otherwise surfaces only as an unresolved
 `#import` pointing at the plate instead of at the defect. They are properties
 of the quill, not of a compile, so `QuillWorld` holds them and the session
