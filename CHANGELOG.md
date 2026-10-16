@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.126.0 - 2026-10-16
 
 Upgrade path: [0.125 → 0.126](docs/migrations/0.125-to-0.126.md). Script
 links, runaway YAML expansion and bodies nested past 12 levels are refused, a
@@ -297,6 +297,97 @@ it declares `multiline: true`.
   npm. The Pages permissions move to the docs deploy job, and Dependabot
   proposes a version once it is a week old. Publishing refuses a package
   without its SBOM. (#2165, #2170)
+
+### Commits since v0.125.0
+
+- fix!: 0.126 release readiness: nesting bound, stored-row ceilings, one-line text trim, form.yaml validation, and docs (#2234)
+- feat(core)!: `text` is one line by default, `multiline` widens it, and `string` retires (#2232)
+- feat(core)!: a blueprint prints a blank default as no default, and a defaultless typed table as `[]` under its dormant row (#2233)
+- feat(core)!: a quill version is MAJOR.MINOR.PATCH, and a $quill selector is @MAJOR.MINOR or exact (#2224)
+- feat!: a Typst quill's plate is `plate.typ` by name, `typst:` is strict, and `quill:` takes `license` and `homepage` (#2225)
+- feat(core)!: the blueprint's root label is main's own, and ui.compact's reference reads its type default (#2222)
+- feat(core)!: a card groups fields under a top-level object; `sections:` is retired (#2213)
+- feat(acroform)!: an acroform quill's field spec is form.yaml (#2210)
+- feat(acroform): a form.json tagged with a later 0.x minor loads (#2208)
+- feat(core): quill.requires names the oldest engine a quill loads on (#2206)
+- fix(core): the reserved-body message names both addresses; docs carry the rule
+- docs(canon): the reserved body name is its own QUILL.md paragraph
+- docs: quill names carry a collection in the authoring guide, and the migration names the storage hop
+- docs(changelog): the reserved body name names its PR
+- fix(core)!: a field named body is refused at quill load
+- feat(core)!: a $quill name may carry a collection, and quill names share one rule
+- test(typst): the never-drawn test names a loaded font, and the changelog reads drawn boxes
+- docs(changelog): SVG link hrefs escape, and the & rule is gone
+- fix(typst): SVG link hrefs inside a tiling escape too
+- docs(changelog): Unreleased names the docs PRs and the hayro bump, and the release PR body covers an uncurated seed
+- fix(typst): `missing_glyph` names only characters the page draws
+- Ship NOTICE and THIRD_PARTY_LICENSES.md in the CLI release archives
+- fix(typst): a link with & before its path keeps its link
+- fix(typst): SVG link hrefs escape & and <
+- ci(release): the seeded entry lists every commit after the curated section
+- docs(changelog): Unreleased carries every change since 0.125
+- fix(content)!: a body nests at most 12 levels deep
+- fix(typst): bound a font collection's face count by its length
+- docs(quill): a description is one line
+- fix(acroform): raster through hayro 0.8's render_into at the explicit size
+- docs(community): questions go to a blank issue while Discussions is off
+- fix(core): field and quill-name suggestions read as a person would write them
+- docs(reference): list runtime::backend_trapped
+- refactor(wasm): drop the trapped-build latch; a trap rejects coded and the host discards the realm
+- docs(reference): list typst::missing_glyph among the diagnostic codes
+- docs(community): drop the code of conduct pending the maintainer's own
+- docs(changelog): reflow the release entry
+- build(deps): Bump hayro from 0.7.1 to 0.8.0
+- docs: drop the Why Quillmark page
+- build(deps): Bump the actions group across 1 directory with 2 updates
+- docs(quickstart): link the playground for a no-install first look
+- docs: link the quillmark-js playground from the README and docs home
+- fix(wasm): a trapped build stays trapped, and every later call into it rejects as runtime::backend_trapped
+- fix(python): render clones the document, so other threads can edit it while the GIL is released
+- docs: the untrusted-input claims match the filters, and the 0.126 guide states the tighter YAML bound
+- fix(pdf): a deep page-tree ancestor chain drops without recursing
+- fix(core)!: a card-yaml block's nodes stay linear in its source too, and a budget refusal carries a hint
+- fix(typst)!: a link whose scheme holds an & renders as its text
+- fix(core,typst,quillmark): newcomer hints fire only on the shape they name
+- build: Roboto's OFL ships in the binary packages, NOTICE carries attribution only, and CI holds the license policy
+- feat(typst): input no loaded font covers warns `typst::missing_glyph`
+- ci(release): publish the tarball by path, and test it in its own job
+- docs(reference): list each derived diagnostic code the engine mints
+- docs: apply review of the snippet fixes
+- docs(community): fixes from review: bug form takes a private quill's source, `!` placement, CI gates, and plainer wording
+- docs: keep the README sample seal-free, use absolute image links, and say machine-readable codes
+- fix(release): static Windows CRT, no write token in CLI builds, Roboto licence in archives
+- chore(wasm): npm homepage is quillmark.dev
+- docs(community): code of conduct, issue forms, PR template, and a contributor path for people
+- feat(cli): prebuilt binaries on every GitHub Release
+- chore(packaging): registry keywords, categories and npm metadata
+- docs: SECURITY.md, what Operations expects of untrusted input, and the 0.126 guide's two new breaks
+- fix(typst)!: a link with a javascript:, vbscript:, data: or file: target renders as its text
+- fix(core)!: a card-yaml block's aliases expand linearly in its source
+- fix(pdf): a page tree shares ancestor chains, and the node cap counts queued kids
+- docs(integration): bound untrusted renders with a process, and size input
+- fix(wasm)!: a trapped render rejects as runtime::backend_trapped
+- fix(python): render releases the GIL while the backend compiles
+- test(quillmark): pin every diagnostic code to a reference page
+- docs(quickstart): one starter quill rendered from the CLI, Python, JavaScript and Rust
+- revert: the README note and the example's seal belong to the positioning work
+- Revert "docs: contributions are Apache-2.0 under a DCO sign-off, and borb-sh maintains every binding"
+- fix(core,typst,quillmark): name the newcomer's mistake in first-run errors
+- build: third-party licenses are written with LF endings
+- docs: contributions are Apache-2.0 under a DCO sign-off, and borb-sh maintains every binding
+- fix(fixtures): usaf_memo sets in TeX Gyre Termes, its example drops the seal, and each fixture names its license
+- build: the npm package and the wheels ship third-party licenses
+- chore(legal): the full Apache-2.0 text, and a NOTICE in every package
+- docs: lead the README and docs home with a rendered memo, a why page, and quillmark.dev
+- docs: fix snippets that throw, stale backend statements, and the maintainer line
+- ci(docs): pin MkDocs below 2.0 and check PRs touching snippet-included files
+- ci(release): build and test @quillmark/wasm in a job that cannot publish
+- fix(core,typst): one `$path` constant, and a `$path` key keeps its suggestion
+- docs(quills,migrations): an enum rename refuses old documents, and the 0.126 guide carries status_report's ids
+- fix(typst)!: a `.ttc` or `.otc` the quill ships loads every face it holds
+- fix(core,typst): a data key spelled `$path` and a spread `$path` say what happens to them
+- docs(quills): an enum value is a stored id, and status_report stores ids
+- ci(wasm): refuse to publish @quillmark/wasm without its SBOM, and generate it on every PR
 
 ## v0.125.0 - 2026-10-12
 
