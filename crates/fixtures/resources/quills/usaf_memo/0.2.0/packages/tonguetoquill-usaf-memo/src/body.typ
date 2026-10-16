@@ -293,7 +293,7 @@
         } else if par_count > 1 {
           // Apply paragraph numbering per AFH 33-337 §2
           let par = format-par(item_content, nest_level, level-counts, indent-fn)
-          level-counts.insert(str(nest_level), level-counts.at(str(nest_level)) + 1)
+          level-counts.insert(str(nest_level), level-counts.at(str(nest_level), default: 1) + 1)
           level-counts = reset-levels-from(level-counts, nest_level + 1, max-levels)
           par
         } else {
