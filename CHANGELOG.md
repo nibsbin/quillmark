@@ -150,18 +150,16 @@ it declares `multiline: true`.
 - fix(typst): **a quill opens promptly whatever face count its font collection
   declares**: a collection whose header declares more faces than the file
   holds offsets for loads no faces. (#2168, #2189)
-- feat(typst)!: **a character no loaded font covers warns
 - fix(typst): **a font collection declaring more than 256 faces loads none
   and warns `typst::font_collection_skipped`**, where a crafted collection
   under 5 MB declaring a million cost seconds and gigabytes at every open.
-- feat(typst): **a character no loaded font covers warns
+- feat(typst)!: **a character no loaded font covers warns
   `typst::missing_glyph`**, once per render, naming each character the page
-  draws as an empty box, where Typst drew it and said nothing. (#2179, #2196)
+  draws as an empty box, where Typst drew it and said nothing. `quillmark
+  validate` fails an `example.md` that draws one. (#2179, #2196)
 - fix(typst): **a word past 64 KiB of characters no font covers renders**,
   where reading its glyphs panicked on every format, aborting the CLI and
   Python and trapping WASM. (#2227)
-  draws as an empty box, where Typst drew it and said nothing. `quillmark
-  validate` fails an `example.md` that draws one. (#2179, #2196)
 
 ### Markdown
 
@@ -171,11 +169,6 @@ it declares `multiline: true`.
   or 32 lists. A body past the bound fails `parse::body_import` at its `path`,
   and a stored row holding one fails to load; `ParseError::BodyImport` holds
   `{ path, message }`. (#2187, #2190)
-- fix(content)!: **a body nests at most 12 levels deep, so every body that
-  imports renders under Typst**, where import took 100 and Typst's show-rule
-  depth refused 16 quotes or 32 lists. A body past the bound fails
-  `parse::body_import` at its `path`, and a stored row holding one fails to
-  load; `ParseError::BodyImport` holds `{ path, message }`. (#2187, #2190)
 - fix(core)!: **a stored row holding more than 1,000 cards, or one whose
   markdown runs past 10 MiB, fails to load**, `StorageError::Malformed`, as
   markdown parse refuses that markdown, where it loaded and its own
@@ -271,7 +264,6 @@ it declares `multiline: true`.
   `version: 0.2.0`. A document holding the old text fails
   `validation::enum_violation`; the banner prints the same words. (#2167)
 - fix(fixtures): **`usaf_memo` sets in TeX Gyre Termes**, so its rendered
-  output changes. (#2173)
   output changes, and its example drops the seal. (#2173)
 - fix(fixtures): **`usaf_memo` renders a list nested six levels deep or
   more**, numbering past its last format, where it failed `typst::compile`
