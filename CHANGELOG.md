@@ -40,7 +40,6 @@ it declares `multiline: true`.
   interior line break fails `validation::not_single_line` and its render
   `validation::coercion_failed`; a one-line value ignores trailing
   whitespace. (#2230)
-  item's `title` is a one-line `text` cell. (#2230)
 - fix(core)!: **a one-line `text` value drops its trailing whitespace**, so a
   stored former `string` written as a YAML `|` block, whose newline the block
   keeps, validates, renders and conforms to its line, where it failed
