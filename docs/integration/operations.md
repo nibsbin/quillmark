@@ -6,7 +6,7 @@ Quillmark bounds what it ingests and not what it renders. That asymmetry is the 
 
 **There is no render budget.** No deadline, no cancellation, no fuel, no progress callback. `Quillmark::render` returns when the backend is done.
 
-The parse limits ([Markdown Specification §8](../reference/markdown-spec.md#8-limits)) bound the input, and nothing translates them into a bound on the work, so a document inside every ceiling can hold a core indefinitely. Cost is a property of the quill at least as much as of the document: a plate is a Typst program, and layout has superlinear shapes. Typst refuses an infinite loop and unbounded recursion, which bounds iteration rather than work — a loop that terminates after enough expensive iterations is refused by neither.
+The parse limits ([Markdown Specification §8](../reference/markdown-spec.md#8-limits)) bound the input, a stored document's too: a row holding more cards than the ceiling, or emitting more markdown than the input-size ceiling, fails to load. Nothing translates them into a bound on the work, so a document inside every ceiling can hold a core indefinitely. Cost is a property of the quill at least as much as of the document: a plate is a Typst program, and layout has superlinear shapes. Typst refuses an infinite loop and unbounded recursion, which bounds iteration rather than work — a loop that terminates after enough expensive iterations is refused by neither.
 
 So the bound comes from the host:
 
