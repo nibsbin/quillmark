@@ -42,6 +42,10 @@ it declares `multiline: true`.
   `acroform::legacy_form_json`. `acroform::invalid_form_json` is
   `acroform::invalid_form_spec`, located in `form.yaml`, and
   `acroform::missing_form_json` is `acroform::missing_form_spec`. (#2210)
+- fix(cli): **`quillmark validate --no-render` reads an acroform quill's
+  `form.yaml` as `open` does**, binding it against the schema and `form.pdf`'s
+  pages, so a quill holding `form.json`, no spec, or one that does not parse
+  fails there, where it passed and then failed to open.
 
 ### Blueprint
 

@@ -62,26 +62,11 @@ impl Backend for AcroformBackend {
         json_data: &serde_json::Value,
         today: CalendarDate,
     ) -> Result<LiveSession, RenderError> {
-        let files = source.files();
-        let base_pdf = files
-            .get_file(FORM_PDF)
-            .ok_or_else(|| {
-                RenderError::coded(
-                    "acroform::missing_form_pdf",
-                    format!("acroform quill is missing its `{FORM_PDF}` background"),
-                )
-            })?
-            .to_vec();
-        let spec = FormSpec::parse(form_spec_bytes(files)?)
-            .map_err(|e| RenderError::from_diag(e.to_diagnostic()))?;
-
-        // Canvas boxes drive the top-left → bottom-left flip and the canvas
-        // coordinate space, and reading them surfaces a malformed base early.
-        let canvas_boxes = quillmark_pdf::page_canvas_boxes(&base_pdf)?;
-
-        let bound = bind::bind_widgets(&spec, source.config(), &canvas_boxes)
-            .map_err(|e| RenderError::coded(e.code(), e.to_string()))?;
-
+        let Form {
+            base_pdf,
+            canvas_boxes,
+            bound,
+        } = read_form(source)?;
         let field_specs = resolve_field_specs(&bound, json_data);
         let raster = stamp_raster(&base_pdf, &field_specs)?;
 
@@ -98,6 +83,46 @@ impl Backend for AcroformBackend {
             json_data,
         ))
     }
+}
+
+/// The refusal `open` raises for the quill's `form.pdf` or `form.yaml`, if
+/// any: each is present, the spec parses, and every widget binds against the
+/// schema and the background's pages. Nothing is stamped or rendered.
+pub fn check_form(source: &Quill) -> Result<(), RenderError> {
+    read_form(source).map(|_| ())
+}
+
+struct Form {
+    base_pdf: Vec<u8>,
+    canvas_boxes: Vec<[f32; 4]>,
+    bound: Vec<BoundWidget>,
+}
+
+fn read_form(source: &Quill) -> Result<Form, RenderError> {
+    let files = source.files();
+    let base_pdf = files
+        .get_file(FORM_PDF)
+        .ok_or_else(|| {
+            RenderError::coded(
+                "acroform::missing_form_pdf",
+                format!("acroform quill is missing its `{FORM_PDF}` background"),
+            )
+        })?
+        .to_vec();
+    let spec = FormSpec::parse(form_spec_bytes(files)?)
+        .map_err(|e| RenderError::from_diag(e.to_diagnostic()))?;
+
+    // Canvas boxes drive the top-left → bottom-left flip and the canvas
+    // coordinate space, and reading them surfaces a malformed base early.
+    let canvas_boxes = quillmark_pdf::page_canvas_boxes(&base_pdf)?;
+
+    let bound = bind::bind_widgets(&spec, source.config(), &canvas_boxes)
+        .map_err(|e| RenderError::coded(e.code(), e.to_string()))?;
+    Ok(Form {
+        base_pdf,
+        canvas_boxes,
+        bound,
+    })
 }
 
 /// `form.yaml`'s bytes. A quill holding `form.json`, alone or beside
