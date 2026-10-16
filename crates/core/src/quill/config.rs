@@ -2259,6 +2259,12 @@ impl QuillConfig {
                     .with_code("quill::invalid_name".to_string());
                     if let Some(fixed) = Self::snake_case_suggestion(n) {
                         diag = diag.with_hint(format!("Rename '{}' to '{}'", n, fixed));
+                    } else if n.chars().count() > crate::version::MAX_QUILL_NAME_LEN {
+                        diag = diag.with_hint(format!(
+                            "Shorten '{}' to at most {} characters",
+                            n,
+                            crate::version::MAX_QUILL_NAME_LEN
+                        ));
                     }
                     errors.push(diag);
                 }
