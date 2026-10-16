@@ -265,8 +265,9 @@ it declares `multiline: true`.
 - fix(fixtures): **`usaf_memo` sets in TeX Gyre Termes**, so its rendered
   output changes, and its example drops the seal. (#2173)
 - fix(fixtures): **`usaf_memo` renders a list nested six levels deep or
-  more**, numbering past its last format, where it failed `typst::compile`
-  with `dictionary does not contain key "6"`. (#2191)
+  more**, numbering past its last format and restarting each such level under
+  a new parent, where it failed `typst::compile` with
+  `dictionary does not contain key "6"`. (#2191)
 
 ### Distribution
 

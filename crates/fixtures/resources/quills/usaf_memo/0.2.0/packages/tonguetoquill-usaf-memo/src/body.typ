@@ -52,10 +52,12 @@
   daf-paragraph.nested-first-level-indent + (level - 1) * daf-paragraph.nested-step
 }
 
-/// Resets counter entries from `start` upward to 1 in the level-counts dictionary.
-#let reset-levels-from(level-counts, start, max-levels) = {
-  for child in range(start, max-levels) {
-    level-counts.insert(str(child), 1)
+/// Resets every counter entry at level `start` or deeper to 1 in the level-counts dictionary.
+#let reset-levels-from(level-counts, start) = {
+  for key in level-counts.keys() {
+    if int(key) >= start {
+      level-counts.insert(key, 1)
+    }
   }
   level-counts
 }
@@ -282,19 +284,19 @@
           if nest_level > 0 {
             let par = format-par(item_content, nest_level, level-counts, indent-fn)
             level-counts.insert(str(nest_level), level-counts.at(str(nest_level), default: 1) + 1)
-            level-counts = reset-levels-from(level-counts, nest_level + 1, max-levels)
+            level-counts = reset-levels-from(level-counts, nest_level + 1)
             par
           } else {
             // DAF top-level paragraphs are unnumbered and first-line indented.
             // Reset nested counters so each new top-level paragraph restarts children.
-            level-counts = reset-levels-from(level-counts, 0, max-levels)
+            level-counts = reset-levels-from(level-counts, 0)
             [#h(daf-paragraph.top-first-line-indent)#item_content]
           }
         } else if par_count > 1 {
           // Apply paragraph numbering per AFH 33-337 §2
           let par = format-par(item_content, nest_level, level-counts, indent-fn)
           level-counts.insert(str(nest_level), level-counts.at(str(nest_level), default: 1) + 1)
-          level-counts = reset-levels-from(level-counts, nest_level + 1, max-levels)
+          level-counts = reset-levels-from(level-counts, nest_level + 1)
           par
         } else {
           // AFH 33-337 §2: "A single paragraph is not numbered"

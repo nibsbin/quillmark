@@ -11,8 +11,8 @@ use quillmark::Document;
 
 mod common;
 
-/// `$body` regions as (content span, top edge) pairs in content order.
-fn body_regions(body: &str) -> Vec<([usize; 2], f32)> {
+/// `$body` regions as (content span, rect) pairs in content order.
+fn body_rects(body: &str) -> Vec<([usize; 2], [f32; 4])> {
     let markdown = format!("~~~card-yaml\n$quill: usaf_memo\n$kind: main\n~~~\n\n{body}\n");
     let (engine, quill) = common::memo();
     let parsed = Document::parse(&markdown).expect("parses").document;
@@ -21,10 +21,15 @@ fn body_regions(body: &str) -> Vec<([usize; 2], f32)> {
         .regions()
         .iter()
         .filter(|r| r.field == "$body")
-        .filter_map(|r| r.span.map(|s| (s, r.rect[1])))
+        .filter_map(|r| r.span.map(|s| (s, r.rect)))
         .collect();
     regions.sort_by_key(|(span, _)| *span);
     regions
+}
+
+/// `$body` regions as (content span, top edge) pairs in content order.
+fn body_regions(body: &str) -> Vec<([usize; 2], f32)> {
+    body_rects(body).into_iter().map(|(s, r)| (s, r[1])).collect()
 }
 
 fn spans(body: &str) -> Vec<[usize; 2]> {
@@ -86,4 +91,21 @@ fn the_run_in_style_still_runs_in() {
 fn a_list_nested_past_the_numbering_formats_renders() {
     let body = "one\n\n- two\n  - three\n    - four\n      - five\n        - six\n          - seven\n            - eight";
     assert_eq!(spans(body).len(), 8, "every level inks");
+}
+
+/// A level past the numbering formats restarts under each new parent: its
+/// first item's number is as wide the second time, so its text starts at the
+/// same left edge.
+#[test]
+fn a_level_past_the_numbering_formats_restarts_under_a_new_parent() {
+    let body = "one\n\n- two\n  - three\n    - four\n      - five\n        - six\n          - seven\n        - six\n          - seven";
+    let text: Vec<&str> = body.lines().map(|l| l.trim_start().trim_start_matches("- ")).filter(|l| !l.is_empty()).collect();
+    let text = text.join("\n");
+    let lefts: Vec<f32> = body_rects(body)
+        .into_iter()
+        .filter(|([start, end], _)| &text[*start..*end] == "seven")
+        .map(|(_, rect)| rect[0])
+        .collect();
+    assert_eq!(lefts.len(), 2, "both deepest items ink");
+    assert!((lefts[0] - lefts[1]).abs() < 0.01, "{lefts:?}");
 }
