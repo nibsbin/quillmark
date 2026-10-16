@@ -136,7 +136,13 @@ widgets:
     rect: { x: 180, y: 470, w: 340, h: 20 }
 ```
 
-The file is read as `Quill.yaml` is: YAML 1.2, where only `true` and `false` are booleans, so `options: [yes, no]` holds two strings. JSON is YAML 1.2, so a generator may write JSON into `form.yaml` unchanged, with one exception: a string holding DEL, a C1 control other than U+0085, U+FFFE or U+FFFF written raw is refused by the parser, so escape such a character (`\u007f`). A YAML error, or a key missing from an entry, fails the load as `acroform::invalid_form_spec`, located at its line and column in `form.yaml`.
+The file is read as `Quill.yaml` is: YAML 1.2, where only `true` and `false` are booleans, so `options: [yes, no]` holds two strings. JSON is YAML 1.2, so a generator may write JSON into `form.yaml` unchanged, with three exceptions:
+
+- A string holding DEL, a C1 control other than U+0085, U+FFFE or U+FFFF written raw is refused by the parser. Escape such a character (`\u007f`).
+- A key written twice in one object is refused, whatever the key.
+- A `rect` value past `f32` range, such as `1e39`, is refused.
+
+A YAML error, one of those three, or a key missing from an entry fails the load as `acroform::invalid_form_spec`, located at its line and column in `form.yaml`.
 
 !!! warning "Quote text holding ` #` or `: `"
     An unquoted ` #` starts a comment, so `tooltip: Box 14b #2` reads as `Box 14b` with no error, and an unquoted `: ` fails the load. Quote such a value: `tooltip: "Box 14b #2"`.
