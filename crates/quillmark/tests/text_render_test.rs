@@ -204,3 +204,47 @@ main:
         .expect("the plate's assertions hold");
     assert!(session.page_count() > 0);
 }
+
+/// Whitespace at a value's end drops, however many spaces it runs to; at its
+/// start it stays.
+#[test]
+fn qm_str_drops_every_trailing_space() {
+    let temp_dir = TempDir::new().unwrap();
+    let quill_path = temp_dir.path().join("trail_quill");
+    fs::create_dir_all(&quill_path).unwrap();
+    fs::write(
+        quill_path.join("Quill.yaml"),
+        r#"quill:
+  name: "trail_quill"
+  version: "1.0.0"
+  backend: "typst"
+  description: "qm.str trailing whitespace"
+
+main:
+  body:
+    enabled: false
+  fields:
+    two: { type: text, multiline: true }
+    three: { type: text, multiline: true }
+    lines: { type: text, multiline: true }
+"#,
+    )
+    .unwrap();
+    fs::write(
+        quill_path.join("plate.typ"),
+        "#import \"@local/quillmark-helper:0.2.0\" as qm\n\
+         #assert.eq(qm.str(qm.data.two), \"  trail\")\n\
+         #assert.eq(qm.str(qm.data.three), \"trail\")\n\
+         #assert.eq(qm.str(qm.data.lines), \"one\\ntwo\")\n\
+         ok\n",
+    )
+    .unwrap();
+    let quill = quillmark::quill_from_path(&quill_path).expect("load quill");
+    let md = "~~~card-yaml\n$quill: trail_quill\n$kind: main\n\
+              two: \"  trail  \"\nthree: \"trail \\t \"\nlines: \"one\\ntwo  \\n  \\n\"\n~~~\n";
+    let doc = Document::parse(md).expect("parse").document;
+    let session = Quillmark::new()
+        .open(&quill, &doc, common::test_date())
+        .expect("the plate's assertions hold");
+    assert!(session.page_count() > 0);
+}

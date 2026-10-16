@@ -33,6 +33,8 @@ it declares `multiline: true`.
   `qm.str(..)`. A former `string` value reaches the plate as content, with nav
   and click-to-edit, and still rests as the verbatim string. A matrix added
   item's `title` is a one-line `text` cell. (#2230)
+- fix(typst): **`qm.str` drops every trailing space**, where a value ending in
+  two kept one. (#2230)
 
 ### PDF forms
 
