@@ -334,7 +334,8 @@ fn a_field_named_body_is_refused() {
     ] {
         let errs = QuillConfig::from_yaml_with_warnings(&with_header(yaml)).expect_err(yaml);
         assert!(
-            errs.iter().any(|d| d.code.as_deref() == Some("quill::reserved_field_name")),
+            errs.iter().any(|d| d.code.as_deref() == Some("quill::reserved_field_name")
+                && d.hint.is_some()),
             "{yaml}: {errs:?}"
         );
     }

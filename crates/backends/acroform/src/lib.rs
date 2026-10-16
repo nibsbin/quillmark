@@ -119,9 +119,10 @@ fn form_spec_bytes(files: &FileTreeNode) -> Result<&[u8], RenderError> {
             ),
             format!("Keep one: delete `{FORM_JSON}`, or rename it over `{FORM_YAML}`."),
         )),
-        (None, false) => Err(RenderError::coded(
+        (None, false) => Err(RenderError::coded_hint(
             "acroform::missing_form_spec",
             format!("acroform quill is missing its `{FORM_YAML}` field spec"),
+            format!("Add `{FORM_YAML}` at the quill root, beside `Quill.yaml`."),
         )),
     }
 }

@@ -203,6 +203,9 @@ it declares `multiline: true`.
 - docs(reference): **the diagnostic-codes page lists every code the engine
   mints**, and a test fails on a code minted but not listed, or listed but
   minted nowhere. (#2175)
+- fix(core,acroform): **`quill::reserved_field_name` and
+  `acroform::missing_form_spec` carry a hint**: rename the field, and add
+  `form.yaml` at the quill root.
 
 ### Fixtures
 
