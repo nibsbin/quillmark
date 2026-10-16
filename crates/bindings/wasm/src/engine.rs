@@ -1723,8 +1723,9 @@ impl Document {
 
     /// Insert a card: `at` absent appends, a number inserts at that index (in
     /// `0..=cards.length`). Accepts any `CardInput`, including a card read back
-    /// out of a document. Throws if `card.kind` is not a valid kind name, or if
-    /// `at` is out of range.
+    /// out of a document. Throws if `card.kind` is not a valid kind name, if
+    /// `at` is out of range, or `edit::too_many_cards` if the document holds
+    /// 1,000 cards.
     #[wasm_bindgen(js_name = insertCard)]
     pub fn insert_card(
         &mut self,

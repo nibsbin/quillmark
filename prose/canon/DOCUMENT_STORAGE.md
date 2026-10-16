@@ -739,8 +739,9 @@ still-supported past version loads, unless a later reader refuses what it
 holds under the same tag: a name outside a closed set (§ Content vocabularies),
 a body nested past `MAX_NESTING_DEPTH`, a `$quill` the reference grammar
 refuses, such as the lone major `memo@1` ([VERSIONING.md](VERSIONING.md)), or
-a document whose markdown would not parse under `MAX_CARD_COUNT` and
-`MAX_INPUT_SIZE`.
+more cards than `MAX_CARD_COUNT`, the ceiling markdown parse and card
+placement both hold. Load measures no emitted size, since emission can
+outgrow the source a document parsed from.
 Migrations chain (`V0_92_0 → V0_124_0 → V0_NN_0 → …`); only the newest DTO
 converts to the live `Document`, so each migration step stays small as versions
 accumulate. The cost is one frozen type tree per schema version plus one

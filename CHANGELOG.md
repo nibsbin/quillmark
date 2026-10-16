@@ -169,10 +169,11 @@ it declares `multiline: true`.
   or 32 lists. A body past the bound fails `parse::body_import` at its `path`,
   and a stored row holding one fails to load; `ParseError::BodyImport` holds
   `{ path, message }`. (#2187, #2190)
-- fix(core)!: **a stored row holding more than 1,000 cards, or one whose
-  markdown runs past 10 MiB, fails to load**, `StorageError::Malformed`, as
-  markdown parse refuses that markdown, where it loaded and its own
-  `to_markdown` failed `parse::too_many_cards` or `parse::input_too_large`.
+- fix(core)!: **a stored row holding more than 1,000 cards fails to load**,
+  `StorageError::Malformed`, as markdown parse refuses that markdown, where it
+  loaded and its own `to_markdown` failed `parse::too_many_cards`; and placing
+  a 1,001st card refuses as `edit::too_many_cards`, `EditError::TooManyCards`,
+  where the edit landed.
 
 ### Quill names
 

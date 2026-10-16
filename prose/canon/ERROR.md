@@ -469,6 +469,7 @@ Three outcomes, and the wire tells them apart only with this table in hand, sinc
 | `edit::unknown_field` | `field` | structured |
 | `edit::invalid_kind_name` | `kind` | structured |
 | `edit::index_out_of_range` | `index`, `len` | structured |
+| `edit::too_many_cards` | `max` | structured |
 | `edit::value_too_deep` | `max` | structured |
 | `edit::field_not_single_line` | `field`, `codec` | structured |
 | `edit::field_not_content` | `field`, `declared` | structured |

@@ -783,6 +783,7 @@ mod args_canon {
                 key: "$quill".into(),
             },
             EditError::IndexOutOfRange { index: 3, len: 1 },
+            EditError::TooManyCards { max: 1 },
             EditError::ValueTooDeep { max: 8 },
             EditError::Import(quillmark_content::import::ImportError::NestingTooDeep {
                 depth: 9,

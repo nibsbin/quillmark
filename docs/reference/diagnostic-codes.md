@@ -143,6 +143,7 @@ A mutator or typed write the document refuses.
 - `edit::invalid_payload`
 - `edit::reserved_kind`
 - `edit::root_only_entry`
+- `edit::too_many_cards`
 - `edit::unknown_field`
 - `edit::value_too_deep`
 

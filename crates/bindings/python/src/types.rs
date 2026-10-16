@@ -624,7 +624,8 @@ impl PyDocument {
 
     /// Place a composable card. `at` picks the position: `None` appends, `Some(i)`
     /// inserts at index `i` (`0..=card_count`; out of range raises
-    /// `IndexOutOfRange`). `card` is a `Card` dict, as `cards`, `remove_card`,
+    /// `IndexOutOfRange`, and a document holding 1,000 cards raises
+    /// `edit::too_many_cards`). `card` is a `Card` dict, as `cards`, `remove_card`,
     /// and `seed_card` return.
     #[pyo3(signature = (card, at=None))]
     fn insert_card(&mut self, card: Bound<'_, PyAny>, at: Option<isize>) -> PyResult<()> {

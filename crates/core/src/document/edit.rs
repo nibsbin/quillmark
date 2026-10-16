@@ -99,6 +99,12 @@ pub enum EditError {
     #[error("index {index} is out of range (len = {len})")]
     IndexOutOfRange { index: usize, len: usize },
 
+    /// A card placed in a document already holding
+    /// [`MAX_CARD_COUNT`](crate::error::MAX_CARD_COUNT) composable cards, past
+    /// which its markdown fails `parse::too_many_cards`.
+    #[error("the document already holds the maximum of {max} cards")]
+    TooManyCards { max: usize },
+
     #[error("value nests deeper than the maximum of {max} levels")]
     ValueTooDeep { max: usize },
 
@@ -208,6 +214,7 @@ impl EditError {
             EditError::ReservedKind => "edit::reserved_kind",
             EditError::RootOnlyEntry { .. } => "edit::root_only_entry",
             EditError::IndexOutOfRange { .. } => "edit::index_out_of_range",
+            EditError::TooManyCards { .. } => "edit::too_many_cards",
             EditError::ValueTooDeep { .. } => "edit::value_too_deep",
             EditError::Import(_) => "edit::import",
             EditError::FieldDecode { .. } => "edit::field_decode",
@@ -237,6 +244,7 @@ impl EditError {
                 "index" => index,
                 "len" => len,
             },
+            EditError::TooManyCards { max } => diag_args! { "max" => max },
             EditError::ValueTooDeep { max } => diag_args! { "max" => max },
             EditError::Import(_) => diag_args! {},
             EditError::FieldDecode {
@@ -767,23 +775,36 @@ impl Document {
 
     /// Append a composable card. Its `$kind` must be a valid, non-reserved
     /// composable kind ([`EditError::InvalidKindName`] /
-    /// [`EditError::ReservedKind`] otherwise).
+    /// [`EditError::ReservedKind`] otherwise), and the document must hold
+    /// fewer than [`MAX_CARD_COUNT`](crate::error::MAX_CARD_COUNT) cards
+    /// ([`EditError::TooManyCards`]).
     pub fn push_card(&mut self, card: Card) -> Result<(), EditError> {
         Self::check_composable_placement(&card)?;
+        self.check_card_room()?;
         self.cards_vec_mut().push(card);
         Ok(())
     }
 
     /// Insert a composable card at `index` (`index > len` →
     /// [`EditError::IndexOutOfRange`]; invalid `$kind` →
-    /// [`EditError::InvalidKindName`] / [`EditError::ReservedKind`]).
+    /// [`EditError::InvalidKindName`] / [`EditError::ReservedKind`]; a full
+    /// document → [`EditError::TooManyCards`]).
     pub fn insert_card(&mut self, index: usize, card: Card) -> Result<(), EditError> {
         let len = self.cards().len();
         if index > len {
             return Err(EditError::IndexOutOfRange { index, len });
         }
         Self::check_composable_placement(&card)?;
+        self.check_card_room()?;
         self.cards_vec_mut().insert(index, card);
+        Ok(())
+    }
+
+    fn check_card_room(&self) -> Result<(), EditError> {
+        let max = crate::error::MAX_CARD_COUNT;
+        if self.cards().len() >= max {
+            return Err(EditError::TooManyCards { max });
+        }
         Ok(())
     }
 

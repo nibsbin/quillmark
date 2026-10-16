@@ -597,23 +597,16 @@ impl TryFrom<DocumentV0_124_0> for Document {
         } else {
             Document::from_main_and_cards(main, cards)
         };
-        within_parse_ceilings(doc)
+        within_card_ceiling(doc)
     }
 }
 
-/// `doc`, when the markdown it emits parses under the card and input-size
-/// ceilings markdown parse enforces.
-fn within_parse_ceilings(doc: Document) -> Result<Document, StorageError> {
+/// `doc`, when it holds no more cards than markdown parse admits.
+fn within_card_ceiling(doc: Document) -> Result<Document, StorageError> {
     let (count, max) = (doc.cards().len(), crate::error::MAX_CARD_COUNT);
     if count > max {
         return Err(StorageError::Malformed(format!(
             "document has {count} cards, exceeding the maximum of {max}"
-        )));
-    }
-    let (size, max) = (doc.to_markdown().len(), crate::error::MAX_INPUT_SIZE);
-    if size > max {
-        return Err(StorageError::Malformed(format!(
-            "document emits {size} bytes of markdown, exceeding the maximum of {max}"
         )));
     }
     Ok(doc)
@@ -1470,36 +1463,29 @@ This body and the metadata above are an indorsement card.
         }
     }
 
-    /// A row loads only where its own markdown parses: within the card and
-    /// input-size ceilings.
+    /// A row loads only where its own markdown parses within the card ceiling.
     #[test]
-    fn a_stored_row_past_a_parse_ceiling_fails_the_load() {
-        use crate::error::{MAX_CARD_COUNT, MAX_INPUT_SIZE};
+    fn a_stored_row_past_the_card_ceiling_fails_the_load() {
+        use crate::error::MAX_CARD_COUNT;
 
-        let row = |cards: usize| {
-            let mut doc = Document::parse("~~~card-yaml\n$quill: q@1.0\n$kind: main\n~~~\n")
-                .unwrap()
-                .document;
-            for _ in 0..cards {
-                doc.push_card(Card::new("note").unwrap()).unwrap();
-            }
-            serde_json::to_value(&doc).unwrap()
-        };
+        let mut doc = Document::parse("~~~card-yaml\n$quill: q@1.0\n$kind: main\n~~~\n")
+            .unwrap()
+            .document;
+        for _ in 0..MAX_CARD_COUNT {
+            doc.push_card(Card::new("note").unwrap()).unwrap();
+        }
+        let row = serde_json::to_value(&doc).unwrap();
         let loads = |row: serde_json::Value| -> Result<Document, String> {
             serde_json::from_value::<Document>(row).map_err(|e| e.to_string())
         };
 
-        let at_ceiling = loads(row(MAX_CARD_COUNT)).expect("1,000 cards load");
+        let at_ceiling = loads(row.clone()).expect("1,000 cards load");
         assert!(Document::parse(&at_ceiling.to_markdown()).is_ok());
-        let err = loads(row(MAX_CARD_COUNT + 1)).expect_err("1,001 cards");
+        let mut past = row;
+        let cards = past["cards"].as_array_mut().unwrap();
+        cards.push(cards[0].clone());
+        let err = loads(past).expect_err("1,001 cards");
         assert!(err.contains("cards"), "{err}");
-
-        let mut large = row(0);
-        large["main"]["payload"]["items"].as_array_mut().unwrap().push(serde_json::json!({
-            "type": "field", "key": "a", "value": "a".repeat(MAX_INPUT_SIZE),
-        }));
-        let err = loads(large).expect_err("a value at the ceiling");
-        assert!(err.contains("bytes of markdown"), "{err}");
     }
 
     #[test]
