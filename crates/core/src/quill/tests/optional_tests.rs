@@ -97,6 +97,31 @@ fn every_projection_carries_the_question_mark() {
     assert!(blueprint.contains("# enum<carried | failed>?"), "{blueprint}");
 }
 
+/// `[]` answers an optional table, so its unedited blueprint cell is empty and
+/// renders as the empty document does; a required one keeps `[]`.
+#[test]
+fn an_optional_typed_table_prints_an_empty_cell() {
+    let config = QuillConfig::from_yaml(
+        r#"
+quill: { name: tables, version: "0.1.0", backend: typst, description: t }
+main:
+  fields:
+    maybe: { type: array?, items: { type: object, properties: { a: { type: text } } } }
+    rows: { type: array, items: { type: object, properties: { a: { type: text } } } }
+"#,
+    )
+    .expect("loads");
+    let blueprint = config.blueprint();
+    assert!(blueprint.contains("\nmaybe: # array<object>?\n"), "{blueprint}");
+    assert!(blueprint.contains("#   - a: # text<plain>\nmaybe:"), "{blueprint}");
+    assert!(blueprint.contains("\nrows: [] # array<object>\n"), "{blueprint}");
+
+    let unedited = Document::parse(&blueprint).expect("parses").document;
+    let plate = config.compile_data(&unedited, test_date()).expect("compiles");
+    assert_eq!(plate["maybe"], json!(null), "{plate}");
+    assert_eq!(plate["rows"], json!([]), "{plate}");
+}
+
 #[test]
 fn a_question_mark_refuses_a_default_and_a_namespace() {
     for (field, code) in [

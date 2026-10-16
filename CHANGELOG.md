@@ -59,6 +59,10 @@ it declares `multiline: true`.
   printed, where it printed the row live and an unedited blueprint rendered one
   blank row. The blank `default:` stays legal, and no diagnostic names it.
   (#2233)
+- fix(core): **an optional typed table without a `default:` prints an empty
+  cell, `r: # array<object>?`**, under its dormant row, where it printed `[]`,
+  which answers it: an unedited blueprint rendered `()` where the empty
+  document renders `none`. (#2233)
 
 ### Typst plates
 
