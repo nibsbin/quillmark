@@ -163,17 +163,20 @@ function quillmarkError(code, message, hint) {
 
 /**
  * `err` as `runtime::backend_trapped` when it is a `WebAssembly.RuntimeError`,
- * else unchanged.
+ * or a `RangeError` for stack or memory exhaustion, which V8 raises for native
+ * stack overflow inside wasm; else unchanged.
  * @param {unknown} err
  * @returns {unknown}
  */
 function backendTrap(err) {
-	if (!(err instanceof WebAssembly.RuntimeError)) return err;
+	const exhausted =
+		err instanceof RangeError && /Maximum call stack|stack overflow|out of memory/i.test(err.message);
+	if (!(err instanceof WebAssembly.RuntimeError) && !exhausted) return err;
 	return Object.assign(
 		quillmarkError(
 			'runtime::backend_trapped',
 			`The backend build trapped (${err.message}); its state is now undefined.`,
-			'A render ran out of memory or panicked. Discard the realm before rendering again: terminate the Worker or restart the process. For untrusted input, cap the document size.'
+			'A render ran out of memory or stack, or panicked. Discard the realm before rendering again: terminate the Worker or restart the process. For untrusted input, cap the document size.'
 		),
 		{ cause: err }
 	);

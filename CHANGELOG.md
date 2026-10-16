@@ -192,6 +192,10 @@ it declares `multiline: true`.
   uncoded `attempted to take ownership of Rust value while it was borrowed`.
   `Engine.render` / `open` and `LiveSession.update` / `render` / `paint` are
   covered; a host routes on the code and discards the realm. (#2176)
+- fix(wasm): **a native stack overflow inside a render rejects as
+  `runtime::backend_trapped`** too, the `RangeError` V8 raises for it on
+  `cause`, where it rejected as the bare `RangeError`, uncoded, though it
+  leaves the build's state as undefined as a trap does.
 - fix(python): **`render` releases the GIL while the backend compiles**, and
   renders a clone of the document, so other threads run and may edit it
   meanwhile. (#2176)
