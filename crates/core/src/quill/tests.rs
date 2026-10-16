@@ -351,7 +351,6 @@ fn test_invalid_quill_name_hint_suggests_a_valid_name() {
         ("İstanbul", Some("istanbul")),
         ("MyQuill", Some("my_quill")),
         ("HTTPForm2", Some("httpform2")),
-        ("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", None),
     ] {
         let yaml = format!(
             "quill:\n  name: \"{name}\"\n  version: \"1.0.0\"\n  backend: typst\n  description: q\n"
@@ -368,6 +367,20 @@ fn test_invalid_quill_name_hint_suggests_a_valid_name() {
             assert!(QuillConfig::from_yaml(&renamed).is_ok(), "{s} loads");
         }
     }
+}
+
+#[test]
+fn an_overlong_quill_name_hints_the_bound() {
+    let name = "a".repeat(65);
+    let yaml = format!(
+        "quill:\n  name: {name}\n  version: \"1.0.0\"\n  backend: typst\n  description: q\n"
+    );
+    let errs = QuillConfig::from_yaml_with_warnings(&yaml).unwrap_err();
+    let diag = errs
+        .iter()
+        .find(|d| d.code.as_deref() == Some("quill::invalid_name"))
+        .expect("a 65-character name is refused");
+    assert!(diag.hint.as_deref().is_some_and(|h| h.contains("64")), "{diag:?}");
 }
 
 #[test]
