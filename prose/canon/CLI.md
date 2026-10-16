@@ -20,8 +20,9 @@ them.
   constructs `Quillmark` to resolve the quill's backend; `check` / `schema` /
   `blueprint` / `info` load the quill with `quillmark::quill_from_path` and read
   the pure config-read operations a `Quill` already carries
-  ([QUILL.md](QUILL.md)). `validate --no-render` is the config-read-only
-  validate.
+  ([QUILL.md](QUILL.md)). `validate --no-render` compiles nothing: it reads
+  the config and finds the backend's own files as `open` does, a Typst plate
+  or an acroform `form.yaml` bound against the schema and `form.pdf`.
 - **`check` is the document's verdict, `validate` the quill's.** `check` parses
   each `MARKDOWN_FILE` through the bound door (`Quill::parse`) and prints the
   parse warnings and every `Quill::validate` diagnostic, under the file's path.

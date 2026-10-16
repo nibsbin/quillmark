@@ -94,3 +94,34 @@ fn a_collection_header_declaring_u32_max_faces_opens_promptly() {
         .open(&q, &serde_json::json!({}), common::test_date())
         .expect("the plate compiles");
 }
+
+#[test]
+fn a_collection_declaring_past_the_face_cap_loads_none_and_warns() {
+    let declared = 1_000u32;
+    let mut ttc = b"ttcf".to_vec();
+    ttc.extend(0x0001_0000u32.to_be_bytes());
+    ttc.extend(declared.to_be_bytes());
+    ttc.extend(std::iter::repeat_n(0u8, declared as usize * 4));
+
+    let mut root = FileTreeNode::Directory {
+        files: Default::default(),
+    };
+    for (path, contents) in [
+        ("Quill.yaml", YAML.as_bytes()),
+        ("plate.typ", b"one\n".as_slice()),
+        ("assets/fonts/Many.ttc", &ttc),
+    ] {
+        root.insert(path, FileTreeNode::File { contents: contents.to_vec() })
+            .expect("insert");
+    }
+    let q = Quill::from_tree(root).expect("load quill");
+    let session = TypstBackend
+        .open(&q, &serde_json::json!({}), common::test_date())
+        .expect("the plate compiles");
+    let skipped: Vec<_> = session
+        .warnings()
+        .iter()
+        .filter(|d| d.code.as_deref() == Some("typst::font_collection_skipped"))
+        .collect();
+    assert_eq!(skipped.len(), 1, "{:?}", session.warnings());
+}

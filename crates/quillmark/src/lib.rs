@@ -70,3 +70,6 @@ pub use orchestration::Quillmark;
 pub use quillmark_typst::{
     plate_file as typst_plate_file, typst_version, workspace as typst_workspace,
 };
+
+#[cfg(feature = "acroform")]
+pub use quillmark_acroform::check_form as acroform_check_form;

@@ -443,8 +443,10 @@ export declare class Engine {
 	 *
 	 * A compile that traps (out of memory, a panic) rejects as
 	 * `runtime::backend_trapped`, the `WebAssembly.RuntimeError` on `cause`, as
-	 * does a trap in {@link LiveSession}'s `update` / `render` / `paint`. The
-	 * build's state is then undefined: discard the realm.
+	 * does a trap in {@link LiveSession}'s `update` / `render` / `paint`, and a
+	 * `RangeError` for stack or memory exhaustion, which V8 raises for a stack
+	 * overflow inside wasm. The build's state is then undefined: discard the
+	 * realm.
 	 */
 	render(quill: Quill, doc: Document, options?: RenderOptions, today?: string): Promise<RenderResult>;
 

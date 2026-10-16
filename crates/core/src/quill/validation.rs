@@ -54,13 +54,7 @@ pub enum ValidationError {
     /// list or quote container, or an island. Both prose types are one line
     /// unless `multiline: true`, so this is one condition under one code, the validation twin of
     /// [`EditError::FieldNotSingleLine`](crate::document::EditError::FieldNotSingleLine).
-    NotSingleLine {
-        path: String,
-        /// The content is one line plus the empty line a trailing `\n` opens,
-        /// as a clip-chomped YAML `|` scalar yields under `text`, whose
-        /// verbatim codec keeps that newline.
-        trailing_newline: bool,
-    },
+    NotSingleLine { path: String },
 
     /// A `text` field whose content carries marks, islands, or block
     /// formatting.
@@ -123,15 +117,12 @@ impl std::fmt::Display for ValidationError {
                     hint = format_hint(format),
                 )
             }
-            ValidationError::NotSingleLine {
-                path,
-                trailing_newline,
-            } => {
+            ValidationError::NotSingleLine { path } => {
                 write!(
                     f,
                     "field `{path}` is one line but its content is not a single \
                      line: {hint}",
-                    hint = not_single_line_hint(*trailing_newline),
+                    hint = not_single_line_hint(),
                 )
             }
             ValidationError::NotPlain { path } => {
@@ -167,16 +158,10 @@ pub(crate) fn format_hint(format: &str) -> String {
 }
 
 /// Actionable exit clause for a `NotSingleLine` error, codec-neutral because both
-/// prose types are one line by default, but for the trailing newline only the
-/// verbatim `text` codec keeps.
-pub(crate) fn not_single_line_hint(trailing_newline: bool) -> &'static str {
-    if trailing_newline {
-        "the value ends in a newline, which `text` keeps as a second line: \
-         write it as a `|-` block or a plain scalar"
-    } else {
-        "keep the value to a single line (no blank lines, headings, lists, \
-         quotes, or tables), or declare `multiline: true` in the schema"
-    }
+/// prose types are one line by default.
+pub(crate) fn not_single_line_hint() -> &'static str {
+    "keep the value to a single line (no blank lines, headings, lists, \
+     quotes, or tables), or declare `multiline: true` in the schema"
 }
 
 /// Actionable exit clause for a `NotPlain` error.
@@ -244,8 +229,7 @@ impl ValidationError {
     /// condition `type_mismatch_hint` branches on, so a consumer picks its
     /// own exit clause from the key's presence instead of re-deriving the
     /// branch. Emitting `null` instead would read as a default spelled `null`.
-    /// `trailingNewline` follows the same rule for `not_single_line_hint`, and
-    /// `open` for `open_matrix_hint`.
+    /// `open` follows the same rule for `open_matrix_hint`.
     pub fn args(&self) -> BTreeMap<String, serde_json::Value> {
         match self {
             ValidationError::TypeMismatch {
@@ -284,16 +268,7 @@ impl ValidationError {
             ValidationError::FormatViolation { path: _, format } => diag_args! {
                 "format" => format,
             },
-            ValidationError::NotSingleLine {
-                path: _,
-                trailing_newline,
-            } => {
-                if *trailing_newline {
-                    diag_args! { "trailingNewline" => true }
-                } else {
-                    diag_args! {}
-                }
-            }
+            ValidationError::NotSingleLine { path: _ } => diag_args! {},
             ValidationError::NotPlain { path: _ } => diag_args! {},
         }
     }
@@ -309,9 +284,7 @@ impl ValidationError {
                 default,
                 ..
             } => Some(type_mismatch_hint(expected, actual, default.as_deref())),
-            ValidationError::NotSingleLine {
-                trailing_newline, ..
-            } => Some(not_single_line_hint(*trailing_newline).to_string()),
+            ValidationError::NotSingleLine { .. } => Some(not_single_line_hint().to_string()),
             ValidationError::NotPlain { .. } => Some(not_plain_hint().to_string()),
             ValidationError::FormatViolation { format, .. } => Some(format_hint(format)),
             ValidationError::EnumViolation {
@@ -662,7 +635,6 @@ fn validate_value(
                     if !rt.is_inline() {
                         errors.push(ValidationError::NotSingleLine {
                             path: path.to_string(),
-                            trailing_newline: false,
                         });
                     }
                 }
@@ -679,10 +651,9 @@ fn validate_value(
                         errors.push(ValidationError::NotPlain {
                             path: path.to_string(),
                         });
-                    } else if !multiline && !rt.is_inline() {
+                    } else if !multiline && !crate::document::trim_line_end(rt).is_inline() {
                         errors.push(ValidationError::NotSingleLine {
                             path: path.to_string(),
-                            trailing_newline: crate::document::is_line_with_trailing_newline(&rt),
                         });
                     }
                 }
@@ -1153,27 +1124,27 @@ main:
         )));
     }
 
+    /// Trailing whitespace is no second line, so the newline a clip-chomped
+    /// `|` block keeps passes; an interior newline fails.
     #[test]
-    fn single_line_text_names_the_kept_newline_of_a_clip_chomped_block() {
+    fn single_line_text_admits_a_trailing_newline_and_refuses_an_interior_one() {
         let config = config_with("    pti:\n      type: text", "");
         let validate = |yaml_value: &str| {
             let md = format!("~~~\n$quill: native_validation@1.0.0\npti: {yaml_value}~~~\n");
             let doc = Document::parse(&md).expect("parses").document;
-            let errors = validate_typed_document(&config, &doc).unwrap_err();
-            assert_eq!(errors.len(), 1, "{errors:?}");
-            errors[0].to_diagnostic()
+            validate_typed_document(&config, &doc)
         };
 
-        let kept = validate("|\n  one line\n");
-        assert_eq!(kept.code.as_deref(), Some("validation::not_single_line"));
-        assert_eq!(kept.args.get("trailingNewline"), Some(&json!(true)));
-        let hint = kept.hint.as_deref().unwrap();
-        assert!(hint.contains("`|-`") && kept.message.ends_with(hint), "{kept:?}");
+        assert!(validate("|\n  one line\n").is_ok());
+        assert!(validate("\"one line \\t\\n\\n\"\n").is_ok());
+        let errors = validate("|\n  one\n  two\n").unwrap_err();
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        assert_eq!(errors[0].to_diagnostic().code.as_deref(), Some("validation::not_single_line"));
 
-        let two_lines = validate("|\n  one\n  two\n");
-        assert_eq!(two_lines.code.as_deref(), Some("validation::not_single_line"));
-        assert!(two_lines.args.is_empty(), "{two_lines:?}");
-        assert!(!two_lines.hint.unwrap().contains("`|-`"));
+        let config = config_with("    pti:\n      type: richtext\n      multiline: false", "");
+        let md = "~~~\n$quill: native_validation@1.0.0\npti: |\n  *one* line\n~~~\n";
+        let doc = Document::parse(md).expect("parses").document;
+        assert!(validate_typed_document(&config, &doc).is_ok());
     }
 
     #[test]

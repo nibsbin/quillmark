@@ -465,7 +465,10 @@ Coercion rules per type:
   `multiline: true` requires its content to be exactly one `Para` line, in no
   container, with no islands (`Content::is_inline`): one line for `text`, one
   paragraph for `richtext`. The empty content satisfies it, so a blank or
-  blank-filled field passes. The constraint is checked in three places:
+  blank-filled field passes. A one-line `text` drops its trailing whitespace
+  first (`trim_line_end`), so the newline a clip-chomped YAML `|` keeps is no
+  second line and the value rests without it; only an interior newline fails.
+  The constraint is checked in three places:
   coercion (`CoercionError` for a document value), validation
   (`validation::not_single_line`, the `TypeMismatch` fatality class, as a
   backstop for a content that bypassed coercion), and load-time default import

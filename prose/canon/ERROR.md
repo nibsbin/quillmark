@@ -259,7 +259,7 @@ Python and WASM bindings delegate to core types:
 **WASM delivery follows the function kind, not the failure kind.** A synchronous verb throws; a promise-returning verb rejects; nothing does both.
 
 - The promise-returning surface is `init` plus the four `Engine` verbs (`render`, `open`, `load`, `supportedFormats`). A programming error reached through one of them (a handle that is not this copy's, `runtime::not_a_quill` / `runtime::not_a_document`; an unregistered backend, `engine::backend_not_found`) arrives as a rejection like any other failure.
-- A `WebAssembly.RuntimeError` from a backend build's `render`, `open`, or `LiveSession` `update` / `render` / `paint` becomes `runtime::backend_trapped`, the trap on `cause`. The trap leaves the module-scoped instance undefined; the host discards the realm.
+- A `WebAssembly.RuntimeError` from a backend build's `render`, `open`, or `LiveSession` `update` / `render` / `paint` becomes `runtime::backend_trapped`, the trap on `cause`, and so does a `RangeError` for stack or memory exhaustion, V8's report of a native stack overflow inside wasm. The trap leaves the module-scoped instance undefined; the host discards the realm.
 - `init` is the one promise-returning export not declared `async`: its memo is returned by identity rather than re-wrapped per call. Its conflict guard therefore returns `Promise.reject(runtime::init_conflict)` where an `async` body would have converted a throw.
 - A synchronous throw from `init` would lose the rule at exactly one export, and silently: `Promise<void>` cannot declare it, so the declaration invites `init(BYTES).catch(…)` and the throw escapes.
 
@@ -298,7 +298,9 @@ See `crates/backends/typst/src/error_mapping.rs`.
 **Quill-load warnings** are the backend's other warning source, hand-coded
 rather than derived from a Typst diagnostic: `typst::path_skipped` (a file
 Typst's `VirtualPath` rejected: asset or package file alike),
-`typst::package_manifest`, and `typst::package_entrypoint_missing`. Each marks a
+`typst::package_manifest`, `typst::package_entrypoint_missing`, and
+`typst::font_collection_skipped` (a `.ttc` or `.otc` declaring more than 256
+faces). Each marks a
 file the world had to skip, which otherwise surfaces only as an unresolved
 `#import` pointing at the plate instead of at the defect. They are properties
 of the quill, not of a compile, so `QuillWorld` holds them and the session
@@ -428,7 +430,7 @@ Values keep their JSON shape (`allowed` arrives as a list, `len` as a number) be
 
 **Falling back is wholesale.** A formatter whose template needs a key that is absent renders `message`, never a sentence with a hole in it. It takes `hint` from the engine in the same breath: the hint is the same English as the message tail (`ValidationError`'s `Display` appends it verbatim), so translating one and passing the other through ships a two-language diagnostic. Localize a code and you own both sentences; fall back and you take both.
 
-**`hint` needs no code of its own.** It is a function of `code` and `args`. Most hints are per-code constants. `type_mismatch_hint` branches only on whether a default exists, which is why `default` is present as a key exactly when the schema declares one, rather than present-and-null; the two card-kind hints branch only on whether `allowed` is empty; the `not_single_line` sentences branch only on `trailingNewline`, present exactly when a `text` value is one line plus the newline a clip-chomped `|` keeps. Any datum a hint branches on is message-relevant by definition and belongs in `args`; a parallel `hint_code` would be derived state on the wire, free to drift.
+**`hint` needs no code of its own.** It is a function of `code` and `args`. Most hints are per-code constants. `type_mismatch_hint` branches only on whether a default exists, which is why `default` is present as a key exactly when the schema declares one, rather than present-and-null; the two card-kind hints branch only on whether `allowed` is empty. Any datum a hint branches on is message-relevant by definition and belongs in `args`; a parallel `hint_code` would be derived state on the wire, free to drift.
 
 **Anchors do not travel twice.** `path` is never an arg. `field` and `kind` are, even though `doc_path` also folds them into the anchor; the rule bars the assembled path string, and recovering a name from one is unsound anyway, since `DocPath` renders field segments unescaped and parses on `.` and `[`, so exactly the malformed names `edit::invalid_field_name` reports can round-trip into different segments. `CoercionError`'s `path` stays out for the separate reason below in § "Three grammars": it is a schema-space anchor and does not cross.
 
@@ -461,14 +463,14 @@ Three outcomes, and the wire tells them apart only with this table in hand, sinc
 | `validation::seed_unknown_kind` | — | code-determined |
 | `validation::seed_overlay_shape` | — | code-determined |
 | `validation::seed_unknown_field` | — | code-determined |
-| `validation::not_single_line` | `trailingNewline`? | structured |
+| `validation::not_single_line` | — | code-determined |
 | `validation::not_plain` | — | code-determined |
 | `edit::invalid_field_name` | `field` | structured |
 | `edit::unknown_field` | `field` | structured |
 | `edit::invalid_kind_name` | `kind` | structured |
 | `edit::index_out_of_range` | `index`, `len` | structured |
 | `edit::value_too_deep` | `max` | structured |
-| `edit::field_not_single_line` | `field`, `codec`, `trailingNewline`? | structured |
+| `edit::field_not_single_line` | `field`, `codec` | structured |
 | `edit::field_not_content` | `field`, `declared` | structured |
 | `edit::field_coercion_failed` | `field`, `target` | structured, coarser |
 | `edit::field_decode` | `field`, `codec` | structured, coarser |
@@ -479,7 +481,7 @@ Three outcomes, and the wire tells them apart only with this table in hand, sinc
 | `edit::invalid_payload` | — | fallback |
 | `conform::invalid_field_name` | `field` | structured |
 | `conform::value_too_deep` | `max` | structured |
-| `conform::field_not_single_line` | `field`, `codec`, `trailingNewline`? | structured |
+| `conform::field_not_single_line` | `field`, `codec` | structured |
 | `conform::field_coercion_failed` | `field`, `target` | structured, coarser |
 | `conform::field_decode` | `field`, `codec` | structured, coarser |
 | `parse::input_too_large` | `size`, `max` | structured |

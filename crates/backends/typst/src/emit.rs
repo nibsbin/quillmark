@@ -940,9 +940,16 @@ fn wraps_and_codes(marks: &[Mark], lo: usize, hi: usize) -> (Vec<Wrap>, Vec<(usi
 
 /// Whether `url` names a scheme a viewer may run or read locally rather than
 /// navigate to (markdown-it's `validateLink` set), read past the whitespace and
-/// controls a browser strips. Such a link renders as its text alone, since SVG
-/// output keeps a link target as a live `href`.
+/// controls a browser strips, or holds a character XML 1.0 cannot carry (a C0
+/// control but tab, LF and CR; U+FFFE; U+FFFF). Such a link renders as its
+/// text alone, since SVG output keeps a link target as a live `href`.
 fn unsafe_link(url: &str) -> bool {
+    let unencodable = |c: char| {
+        matches!(c, '\0'..='\u{8}' | '\u{B}' | '\u{C}' | '\u{E}'..='\u{1F}' | '\u{FFFE}' | '\u{FFFF}')
+    };
+    if url.contains(unencodable) {
+        return true;
+    }
     let head: String = url
         .chars()
         .filter(|c| !c.is_whitespace() && !c.is_control())
@@ -1976,6 +1983,19 @@ mod tests {
             assert!(out.contains("abc"), "{url:?} lost its text, got {out:?}");
         }
         for url in ["https://example.com", "mailto:a@b.c", "#anchor", "data/notes.txt", "https://e.com/?a=1&b=2", "/p?q=a&b", "a&b.html"] {
+            let out = emit_marked("abc", vec![Mark::new(0, 3, MarkKind::Link { url: url.into() })]);
+            assert!(out.contains("#link"), "{url:?} lost its link, got {out:?}");
+        }
+    }
+
+    #[test]
+    fn a_link_holding_a_character_xml_cannot_carry_renders_as_text() {
+        for url in ["https://e.com/\u{0}", "https://e.com/a\u{1}b", "https://e.com/\u{B}", "https://e.com/\u{1F}", "https://e.com/\u{FFFE}", "https://e.com/\u{FFFF}"] {
+            let out = emit_marked("abc", vec![Mark::new(0, 3, MarkKind::Link { url: url.into() })]);
+            assert!(!out.contains("#link"), "{url:?} kept its link, got {out:?}");
+            assert!(out.contains("abc"), "{url:?} lost its text, got {out:?}");
+        }
+        for url in ["https://e.com/a\tb", "https://e.com/a\nb", "https://e.com/\u{FFFD}", "https://e.com/\u{7F}"] {
             let out = emit_marked("abc", vec![Mark::new(0, 3, MarkKind::Link { url: url.into() })]);
             assert!(out.contains("#link"), "{url:?} lost its link, got {out:?}");
         }

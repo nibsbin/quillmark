@@ -164,6 +164,7 @@ Opening a Typst quill and compiling its plate.
 - `typst::duplicate_form_field`
 - `typst::emit`
 - `typst::file_not_found`
+- `typst::font_collection_skipped`
 - `typst::form_field_page_out_of_range`
 - `typst::helper_import`
 - `typst::helper_source`

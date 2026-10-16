@@ -6,7 +6,7 @@ Quillmark bounds what it ingests and not what it renders. That asymmetry is the 
 
 **There is no render budget.** No deadline, no cancellation, no fuel, no progress callback. `Quillmark::render` returns when the backend is done.
 
-The parse limits ([Markdown Specification §8](../reference/markdown-spec.md#8-limits)) bound the input, and nothing translates them into a bound on the work, so a document inside every ceiling can hold a core indefinitely. Cost is a property of the quill at least as much as of the document: a plate is a Typst program, and layout has superlinear shapes. Typst refuses an infinite loop and unbounded recursion, which bounds iteration rather than work — a loop that terminates after enough expensive iterations is refused by neither.
+The parse limits ([Markdown Specification §8](../reference/markdown-spec.md#8-limits)) bound the input, a stored document's too: a row holding more cards than the ceiling, or emitting more markdown than the input-size ceiling, fails to load. Nothing translates them into a bound on the work, so a document inside every ceiling can hold a core indefinitely. Cost is a property of the quill at least as much as of the document: a plate is a Typst program, and layout has superlinear shapes. Typst refuses an infinite loop and unbounded recursion, which bounds iteration rather than work — a loop that terminates after enough expensive iterations is refused by neither.
 
 So the bound comes from the host:
 
@@ -46,6 +46,6 @@ SVG output keeps links as live `href`s. A Markdown link in a body or rich-text f
 
 Nothing in the workspace catches unwind, so a panic is terminal on every surface: it aborts the CLI and the Python extension, and leaves the WASM module poisoned. Panics are bugs — report one.
 
-Under WASM, running out of linear memory (at most 4 GiB, less on some engines) traps the same way. A trap rejects as `runtime::backend_trapped`, carrying the `WebAssembly.RuntimeError` as `cause`. It leaves the instance's state undefined, and the instance is module-scoped, so a new `Engine` inherits it: discard the realm before rendering again.
+Under WASM, running out of linear memory (at most 4 GiB, less on some engines) traps the same way. A trap rejects as `runtime::backend_trapped`, carrying the `WebAssembly.RuntimeError` as `cause`; so does exhausting the native stack, which V8 reports as a `RangeError`, carried the same way. It leaves the instance's state undefined, and the instance is module-scoped, so a new `Engine` inherits it: discard the realm before rendering again.
 
 Ordinary failures are not panics. Every documented error path returns a `RenderError` or a parse diagnostic carrying a stable `code`; route on the code, not the message ([Error Handling](error-handling.md)).

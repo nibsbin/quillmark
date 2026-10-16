@@ -37,20 +37,6 @@ fn render_at(field: &str, at: &[PathSegment]) -> String {
         .to_string()
 }
 
-fn not_single_line_reason(codec: &str, trailing_newline: bool) -> String {
-    if trailing_newline {
-        format!(
-            "the value ends in a newline, which {codec} keeps as a second line; drop it \
-             (in YAML, write the value as a `|-` block or a plain scalar)"
-        )
-    } else {
-        format!(
-            "{codec} requires a single line with no container or island; declare \
-             multiline: true to admit more"
-        )
-    }
-}
-
 /// `true` if `name` matches `[A-Za-z_][A-Za-z0-9_]*`, tested on `name`'s own
 /// characters: the parser reads a key's raw bytes, so a name that merely
 /// normalises to ASCII (`U+212A KELVIN SIGN`) is not a top-level key.
@@ -164,15 +150,15 @@ pub enum EditError {
     /// A content field written under a one-line schema (no `multiline: true`)
     /// decoded to a multi-line content. Both text codecs carry the constraint,
     /// so one code covers both and `codec` says which lane raised it.
-    #[error("{codec} field '{field}' is not a single line: {}", not_single_line_reason(.codec, *.trailing_newline))]
+    #[error(
+        "{codec} field '{field}' is not a single line: {codec} requires a single line with \
+         no container or island; declare multiline: true to admit more"
+    )]
     FieldNotSingleLine {
         field: String,
         /// The codec whose one-line constraint was violated: [`CODEC_RICHTEXT`]
         /// or [`CODEC_TEXT`].
         codec: String,
-        /// The value is one line plus the empty line a trailing `\n` opens,
-        /// which only the verbatim `text` codec keeps.
-        trailing_newline: bool,
     },
 
     /// A typed write could not coerce the value to the field's schema type: the
@@ -270,20 +256,10 @@ impl EditError {
                 "field" => field,
                 "declared" => declared,
             },
-            EditError::FieldNotSingleLine {
-                field,
-                codec,
-                trailing_newline,
-            } => {
-                let mut args = diag_args! {
-                    "field" => field,
-                    "codec" => codec,
-                };
-                if *trailing_newline {
-                    args.insert("trailingNewline".to_string(), serde_json::json!(true));
-                }
-                args
-            }
+            EditError::FieldNotSingleLine { field, codec } => diag_args! {
+                "field" => field,
+                "codec" => codec,
+            },
             EditError::FieldCoercionFailed {
                 field,
                 target,
@@ -544,12 +520,10 @@ fn conform_error_to_edit(name: &str, err: CoercionError) -> EditError {
         t if t == crate::quill::RICHTEXT_SINGLE_LINE_TARGET => EditError::FieldNotSingleLine {
             field,
             codec: CODEC_RICHTEXT.to_string(),
-            trailing_newline: false,
         },
         t if t == crate::quill::TEXT_SINGLE_LINE_TARGET => EditError::FieldNotSingleLine {
             field,
             codec: CODEC_TEXT.to_string(),
-            trailing_newline: reason == crate::quill::TEXT_TRAILING_NEWLINE,
         },
         CODEC_RICHTEXT | CODEC_TEXT => EditError::FieldDecode {
             field,

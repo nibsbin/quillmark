@@ -437,6 +437,7 @@ card_kinds:
         ("", "{ names: [] }", "quill::seed_redundant"),
         ("", "{ names: null }", "quill::seed_redundant"),
         ("", "{}", "quill::seed_redundant"),
+        ("", "{ author: \"a\\nb\" }", "quill::seed_not_single_line"),
         ("  seed: { title: T }", "{ names: [a] }", "quill::invalid_card_schema"),
     ] {
         let errors = crate::quill::QuillConfig::from_yaml_with_warnings(&quill_yaml(main, seed))
@@ -487,6 +488,23 @@ card_kinds:
     assert_eq!(conformed, doc);
 }
 
+
+/// A one-line `text` seed's trailing newline is no second line.
+#[test]
+fn a_one_line_seed_admits_a_trailing_newline() {
+    let quill = quill_from_yaml(
+        r#"
+quill: { name: nl_seed, version: "1.0.0", backend: typst, description: x }
+card_kinds:
+  note:
+    seed: { author: "Named\n" }
+    fields:
+      author: { type: text }
+"#,
+    );
+    let doc = quill.seed_document();
+    assert!(quill.validate(&doc).is_empty(), "{:?}", quill.validate(&doc));
+}
 
 /// `quill::seed_redundant` asks the render floor: a seed is refused only where
 /// it resolves as the absent field does, on every render date.

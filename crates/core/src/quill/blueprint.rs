@@ -406,8 +406,9 @@ fn property_cell(prop: &FieldSchema, path: &[PathSegment]) -> (JsonValue, Vec<Ne
 /// A container's value plus the nested comments its subtree carries, at `path`
 /// relative to the field value (`[]` at card level).
 ///
-/// A **typed table** is a cell: its `default:` renders verbatim, else `[]`, led
-/// by its [`dormant_table`]. A live row would ship an empty element. A **typed
+/// A **typed table** is a cell: its `default:` renders verbatim, else `[]`, or
+/// empty where optional, since `[]` answers it; either is led by its
+/// [`dormant_table`]. A live row would ship an empty element. A **typed
 /// dictionary** holds no literal (`quill::default_on_namespace`), so it always
 /// expands per property.
 fn container_cell(field: &FieldSchema, path: &[PathSegment]) -> (JsonValue, Vec<NestedComment>) {
@@ -416,9 +417,11 @@ fn container_cell(field: &FieldSchema, path: &[PathSegment]) -> (JsonValue, Vec<
         let nested = build_property_mapping(&mut map, props, path);
         return (JsonValue::Object(map), nested);
     }
-    let rows = shown_default(field)
-        .cloned()
-        .unwrap_or_else(|| JsonValue::Array(Vec::new()));
+    let rows = match shown_default(field) {
+        Some(rows) => rows.clone(),
+        None if field.optional => JsonValue::Null,
+        None => JsonValue::Array(Vec::new()),
+    };
     (rows, Vec::new())
 }
 

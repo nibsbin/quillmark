@@ -353,11 +353,19 @@ pub(crate) fn canonical_richtext_value(
     Ok((quillmark_content::serial::to_canonical_value(&content), warnings))
 }
 
-/// Whether a single-line refusal of plain content is one line plus the empty line
-/// a trailing `\n` opens: the value a clip-chomped YAML `|` scalar yields, fixed
-/// by `|-` or a plain scalar.
-pub(crate) fn is_line_with_trailing_newline(content: &quillmark_content::model::Content) -> bool {
-    content.lines.len() == 2 && content.text.ends_with('\n')
+/// Plain content less its trailing whitespace: a one-line `text` value's form
+/// before its single-line check, so the newline a clip-chomped YAML `|` scalar
+/// keeps is no second line.
+pub(crate) fn trim_line_end(
+    content: quillmark_content::model::Normalized,
+) -> quillmark_content::model::Normalized {
+    let text = quillmark_content::export::to_plaintext(&content);
+    let trimmed = text.trim_end();
+    if trimmed.len() == text.len() {
+        content
+    } else {
+        quillmark_content::import::from_plaintext(trimmed)
+    }
 }
 
 pub(crate) mod align;

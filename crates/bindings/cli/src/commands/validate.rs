@@ -119,10 +119,13 @@ pub fn execute(args: ValidateArgs) -> Result<()> {
 }
 
 fn validate_file_references(quill: &Quill, result: &mut ValidationResult) {
-    if quill.backend_id() == "typst" {
-        if let Err(e) = quillmark::typst_plate_file(quill) {
-            result.issues.extend(e.into_diagnostics());
-        }
+    let checked = match quill.backend_id() {
+        "typst" => quillmark::typst_plate_file(quill).map(|_| ()),
+        "acroform" => quillmark::acroform_check_form(quill),
+        _ => Ok(()),
+    };
+    if let Err(e) = checked {
+        result.issues.extend(e.into_diagnostics());
     }
 }
 

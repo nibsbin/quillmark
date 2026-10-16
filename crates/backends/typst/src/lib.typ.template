@@ -295,7 +295,7 @@
   // The generated block opens on a line break, which reads as a space, and
   // closes on a paragraph break; a space the value holds at a line's start or
   // beside another is `~`, a no-break space.
-  walk(value).trim(" ", at: start).trim(regex("[ \n]+"), at: end).replace("\u{a0}", " ")
+  walk(value).trim(" ", at: start).replace("\u{a0}", " ").trim(regex("[ \n]+"), at: end)
 }
 
 /// A matrix's rows, the vocabulary a plate prints: every roster member in

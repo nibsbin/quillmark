@@ -73,6 +73,8 @@ fn a_form_json_is_refused_with_or_without_a_form_yaml() {
 fn a_quill_without_form_yaml_is_missing_its_spec() {
     let diag = open_err(sample_form_with(&[]));
     assert_eq!(diag.code.as_deref(), Some("acroform::missing_form_spec"));
+    let hint = diag.hint.expect("names the fix");
+    assert!(hint.contains("form.yaml"), "{hint}");
 }
 
 #[test]

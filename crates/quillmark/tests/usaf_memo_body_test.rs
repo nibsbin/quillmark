@@ -79,3 +79,11 @@ fn the_run_in_style_still_runs_in() {
     assert!(on_one_line("- # Absorbed\n  item text"));
     assert!(on_one_line("# Absorbed\n\nitem text"));
 }
+
+/// Numbering formats run out at six levels; a list nested past them still
+/// numbers and inks every item.
+#[test]
+fn a_list_nested_past_the_numbering_formats_renders() {
+    let body = "one\n\n- two\n  - three\n    - four\n      - five\n        - six\n          - seven\n            - eight";
+    assert_eq!(spans(body).len(), 8, "every level inks");
+}

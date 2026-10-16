@@ -40,6 +40,16 @@ it declares `multiline: true`.
   interior line break fails `validation::not_single_line` and its render
   `validation::coercion_failed`; a one-line value ignores trailing
   whitespace. (#2230)
+  item's `title` is a one-line `text` cell. (#2230)
+- fix(core)!: **a one-line `text` value drops its trailing whitespace**, so a
+  stored former `string` written as a YAML `|` block, whose newline the block
+  keeps, validates, renders and conforms to its line, where it failed
+  `validation::not_single_line` and the render's coercion. Only a line break
+  inside the value fails. `trailingNewline` leaves the `not_single_line`
+  args, and `trailing_newline` leaves `ValidationError::NotSingleLine` and
+  `EditError::FieldNotSingleLine`.
+- fix(typst): **`qm.str` drops every trailing space**, where a value ending in
+  two kept one. (#2230)
 
 ### PDF forms
 
@@ -51,6 +61,10 @@ it declares `multiline: true`.
   `acroform::legacy_form_json`. `acroform::invalid_form_json` is
   `acroform::invalid_form_spec`, located in `form.yaml`, and
   `acroform::missing_form_json` is `acroform::missing_form_spec`. (#2210)
+- fix(cli): **`quillmark validate --no-render` reads an acroform quill's
+  `form.yaml` as `open` does**, binding it against the schema and `form.pdf`'s
+  pages, so a quill holding `form.json`, no spec, or one that does not parse
+  fails there, where it passed and then failed to open.
 
 ### Blueprint
 
@@ -64,6 +78,10 @@ it declares `multiline: true`.
   printed, where it printed the row live and an unedited blueprint rendered one
   blank row. The blank `default:` stays legal, and no diagnostic names it.
   (#2233)
+- fix(core): **an optional typed table without a `default:` prints an empty
+  cell, `r: # array<object>?`**, under its dormant row, where it printed `[]`,
+  which answers it: an unedited blueprint rendered `()` where the empty
+  document renders `none`. (#2233)
 
 ### Typst plates
 
@@ -110,6 +128,9 @@ it declares `multiline: true`.
 - fix(typst): **SVG output is well-formed XML when a link's URL holds `&` or
   `<`**, where its `href` carried them raw and an XML parser refused the file.
   (#2194)
+- fix(typst): **a link whose URL holds a character XML 1.0 cannot carry, a C0
+  control but tab, LF and CR or U+FFFE or U+FFFF, renders as its text
+  alone**, where its `href` carried it raw and the whole SVG failed to parse.
 - fix(core)!: **a card-yaml block's aliases and tags expand within a budget
   linear in its source**: past twice the block's bytes plus 4 KiB of scalars,
   or its bytes plus 4 KiB of nodes, the block fails its YAML parse, with a
@@ -131,6 +152,10 @@ it declares `multiline: true`.
   declares**: a collection whose header declares more faces than the file
   holds offsets for loads no faces. (#2168, #2189)
 - feat(typst)!: **a character no loaded font covers warns
+- fix(typst): **a font collection declaring more than 256 faces loads none
+  and warns `typst::font_collection_skipped`**, where a crafted collection
+  under 5 MB declaring a million cost seconds and gigabytes at every open.
+- feat(typst): **a character no loaded font covers warns
   `typst::missing_glyph`**, once per render, naming each character the page
   draws as an empty box, where Typst drew it and said nothing. (#2179, #2196)
 - fix(typst): **a word past 64 KiB of characters no font covers renders**,
@@ -147,6 +172,15 @@ it declares `multiline: true`.
   or 32 lists. A body past the bound fails `parse::body_import` at its `path`,
   and a stored row holding one fails to load; `ParseError::BodyImport` holds
   `{ path, message }`. (#2187, #2190)
+- fix(content)!: **a body nests at most 12 levels deep, so every body that
+  imports renders under Typst**, where import took 100 and Typst's show-rule
+  depth refused 16 quotes or 32 lists. A body past the bound fails
+  `parse::body_import` at its `path`, and a stored row holding one fails to
+  load; `ParseError::BodyImport` holds `{ path, message }`. (#2187, #2190)
+- fix(core)!: **a stored row holding more than 1,000 cards, or one whose
+  markdown runs past 10 MiB, fails to load**, `StorageError::Malformed`, as
+  markdown parse refuses that markdown, where it loaded and its own
+  `to_markdown` failed `parse::too_many_cards` or `parse::input_too_large`.
 
 ### Quill names
 
@@ -183,6 +217,10 @@ it declares `multiline: true`.
   a deprecated id warns `quill::deprecated_license`. A homepage that is not an
   absolute `http` or `https` URL naming a host and no user fails
   `quill::invalid_homepage`. (#2225)
+- fix(core): **a `quill.license` holding any line break fails
+  `quill::invalid_license`**: VT, FF, NEL, U+2028 and U+2029 as LF and CR do,
+  where those five reached the SPDX check and one at either end loaded,
+  trimmed.
 
 ### Bindings
 
@@ -194,6 +232,10 @@ it declares `multiline: true`.
 - fix(wasm): **`@quillmark/wasm` declares `engines: { node: ">=22" }`**,
   where it declared `>=24` and npm on Node 22 resolved 0.103.0, the last
   release under that floor. The `using` sugar needs Node 24. (#2199)
+- fix(wasm): **a native stack overflow inside a render rejects as
+  `runtime::backend_trapped`** too, the `RangeError` V8 raises for it on
+  `cause`, where it rejected as the bare `RangeError`, uncoded, though it
+  leaves the build's state as undefined as a trap does.
 - fix(python): **`render` releases the GIL while the backend compiles**, and
   renders a clone of the document, so other threads run and may edit it
   meanwhile. (#2176)
@@ -219,6 +261,9 @@ it declares `multiline: true`.
 - docs(reference): **the diagnostic-codes page lists every code the engine
   mints**, and a test fails on a code minted but not listed, or listed but
   minted nowhere. (#2175)
+- fix(core,acroform): **`quill::reserved_field_name` and
+  `acroform::missing_form_spec` carry a hint**: rename the field, and add
+  `form.yaml` at the quill root.
 
 ### Fixtures
 
@@ -228,6 +273,10 @@ it declares `multiline: true`.
   `validation::enum_violation`; the banner prints the same words. (#2167)
 - fix(fixtures): **`usaf_memo` sets in TeX Gyre Termes**, so its rendered
   output changes. (#2173)
+  output changes, and its example drops the seal. (#2173)
+- fix(fixtures): **`usaf_memo` renders a list nested six levels deep or
+  more**, numbering past its last format, where it failed `typst::compile`
+  with `dictionary does not contain key "6"`. (#2191)
 
 ### Distribution
 
