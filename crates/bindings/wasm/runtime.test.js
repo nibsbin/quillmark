@@ -1153,7 +1153,7 @@ main:
     expect(err.cause).toBeInstanceOf(WebAssembly.RuntimeError)
   })
 
-  it('a RangeError for stack exhaustion rejects as runtime::backend_trapped, any other as itself', async () => {
+  it('a RangeError or InternalError for stack exhaustion rejects as runtime::backend_trapped, any other as itself', async () => {
     const throwingEngine = (err) =>
       new Engine({
         backends: {
@@ -1185,6 +1185,11 @@ main:
     const trapped = await rendered(overflow)
     expect(trapped.diagnostics[0].code).toBe('runtime::backend_trapped')
     expect(trapped.cause).toBe(overflow)
+
+    const recursion = Object.assign(new Error('too much recursion'), { name: 'InternalError' })
+    const firefox = await rendered(recursion)
+    expect(firefox.diagnostics[0].code).toBe('runtime::backend_trapped')
+    expect(firefox.cause).toBe(recursion)
 
     const other = new RangeError('Invalid array length')
     expect(await rendered(other)).toBe(other)

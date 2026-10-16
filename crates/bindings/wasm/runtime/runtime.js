@@ -163,14 +163,16 @@ function quillmarkError(code, message, hint) {
 
 /**
  * `err` as `runtime::backend_trapped` when it is a `WebAssembly.RuntimeError`,
- * or a `RangeError` for stack or memory exhaustion, which V8 raises for native
- * stack overflow inside wasm; else unchanged.
+ * or a `RangeError` (V8, JavaScriptCore) or `InternalError` (SpiderMonkey) for
+ * stack or memory exhaustion, which those engines raise for native stack
+ * overflow inside wasm; else unchanged.
  * @param {unknown} err
  * @returns {unknown}
  */
 function backendTrap(err) {
 	const exhausted =
-		err instanceof RangeError && /Maximum call stack|stack overflow|out of memory/i.test(err.message);
+		(err instanceof RangeError || (err instanceof Error && err.name === 'InternalError')) &&
+		/Maximum call stack|stack overflow|too much recursion|out of memory/i.test(err.message);
 	if (!(err instanceof WebAssembly.RuntimeError) && !exhausted) return err;
 	return Object.assign(
 		quillmarkError(
