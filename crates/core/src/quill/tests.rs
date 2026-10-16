@@ -1388,19 +1388,15 @@ fn a_nested_single_line_richtext_default_over_one_para_is_a_load_error() {
 }
 
 #[test]
-fn a_single_line_text_literal_ending_in_a_newline_names_the_fix() {
-    let err = quill_with_field(concat!(
-        "    pti:\n",
-        "      type: text\n",
-        "      default: |\n",
-        "        one line\n",
-    ))
-    .unwrap_err();
-    let diag = err
-        .iter()
-        .find(|d| d.code.as_deref() == Some("validation::not_single_line"))
-        .unwrap_or_else(|| panic!("{err:?}"));
-    assert!(diag.hint.as_deref().unwrap().contains("`|-`"), "{diag:?}");
+fn a_single_line_text_literal_ending_in_a_newline_loads() {
+    quill_with_field("    pti:\n      type: text\n      default: |\n        one line\n")
+        .expect("a trailing newline is no second line");
+    let err = quill_with_field("    pti:\n      type: text\n      default: |\n        one\n        two\n")
+        .unwrap_err();
+    assert!(
+        err.iter().any(|d| d.code.as_deref() == Some("validation::not_single_line")),
+        "{err:?}"
+    );
 }
 
 #[test]

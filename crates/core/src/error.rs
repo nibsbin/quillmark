@@ -766,7 +766,6 @@ mod args_canon {
             },
             ValidationError::NotSingleLine {
                 path: "main.title".into(),
-                trailing_newline: true,
             },
             ValidationError::NotPlain {
                 path: "main.title".into(),
@@ -803,7 +802,6 @@ mod args_canon {
             EditError::FieldNotSingleLine {
                 field: "body".into(),
                 codec: crate::document::edit::CODEC_TEXT.into(),
-                trailing_newline: true,
             },
             EditError::FieldCoercionFailed {
                 field: "n".into(),
@@ -828,7 +826,6 @@ mod args_canon {
             EditError::FieldNotSingleLine {
                 field: "body".into(),
                 codec: crate::document::edit::CODEC_RICHTEXT.into(),
-                trailing_newline: true,
             },
             EditError::FieldDecode {
                 field: "body".into(),

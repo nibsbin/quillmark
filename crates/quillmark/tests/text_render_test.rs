@@ -248,3 +248,20 @@ main:
         .expect("the plate's assertions hold");
     assert!(session.page_count() > 0);
 }
+
+/// A stored `project: |` block keeps a trailing newline, which a one-line
+/// `text` drops: the document validates, renders, and conforms to the line.
+#[test]
+fn a_one_line_text_written_as_a_block_scalar_renders() {
+    let quill = quillmark::quill_from_path(quillmark_fixtures::quills_path("status_report"))
+        .expect("load status_report");
+    let md = "~~~\n$quill: status_report\nproject: |\n  Harbor Migration\nstate: at_risk\n~~~\n\nBody.\n";
+    let mut doc = Document::parse(md).expect("parse").document;
+    assert!(quill.validate(&doc).is_empty(), "{:?}", quill.validate(&doc));
+    let options = quillmark::RenderOptions::default().with_output_format(quillmark::OutputFormat::Pdf);
+    Quillmark::new()
+        .render(&quill, &doc, common::test_date(), &options)
+        .expect("renders");
+    quill.conform(&mut doc).expect("conforms");
+    assert!(doc.to_markdown().contains("\nproject: Harbor Migration\n"), "{}", doc.to_markdown());
+}

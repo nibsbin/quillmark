@@ -33,6 +33,13 @@ it declares `multiline: true`.
   `qm.str(..)`. A former `string` value reaches the plate as content, with nav
   and click-to-edit, and still rests as the verbatim string. A matrix added
   item's `title` is a one-line `text` cell. (#2230)
+- fix(core)!: **a one-line `text` value drops its trailing whitespace**, so a
+  stored former `string` written as a YAML `|` block, whose newline the block
+  keeps, validates, renders and conforms to its line, where it failed
+  `validation::not_single_line` and the render's coercion. Only a line break
+  inside the value fails. `trailingNewline` leaves the `not_single_line`
+  args, and `trailing_newline` leaves `ValidationError::NotSingleLine` and
+  `EditError::FieldNotSingleLine`.
 - fix(typst): **`qm.str` drops every trailing space**, where a value ending in
   two kept one. (#2230)
 
