@@ -222,7 +222,7 @@ it declares `multiline: true`.
 - fix(wasm): **`@quillmark/wasm` declares `engines: { node: ">=22" }`**,
   where it declared `>=24` and npm on Node 22 resolved 0.103.0, the last
   release under that floor. The `using` sugar needs Node 24. (#2199)
-- fix(wasm): **a native stack overflow inside a render rejects as
+- fix(wasm)!: **a native stack overflow inside a render rejects as
   `runtime::backend_trapped`** too, the `RangeError` V8 and JavaScriptCore
   raise for it, or Firefox's `InternalError`, on `cause`, where it rejected as
   that error, uncoded, though it leaves the build's state as undefined as a
