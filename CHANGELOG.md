@@ -20,9 +20,13 @@ it declares `multiline: true`.
   coercion, `validate`, the editor and acroform all read. `inline:` and
   `ui.multiline` are retired and fail the load as `quill::field_parse_error`,
   naming the replacement, and a `richtext` spells `multiline:` either way for
-  this release. `schema()` emits `quillmark:multiline: true` where it emitted
-  `quillmark:inline` on the opposite fields; the blueprint prints
-  `text(multiline)<plain>` and `richtext(multiline)<markdown>`.
+  this release, so no quill declaring a text field loads on both 0.125 and
+  0.126. `schema()` carries `multiline` where it carried `inline: true` on the
+  opposite fields, and the transform schema a plate reads carries
+  `quillmark:multiline: true` where it carried `quillmark:inline`. The
+  blueprint prints `text<plain>`, `text(multiline)<plain>`,
+  `richtext<markdown>` and `richtext(multiline)<markdown>`, where
+  `richtext<markdown>` named a block field.
   `validation::not_inline`, `edit::field_not_inline`,
   `conform::field_not_inline` and `quill::seed_not_inline` end in
   `not_single_line`, and their `codec` names `text`. An acroform text widget binds multiline exactly where
@@ -32,7 +36,10 @@ it declares `multiline: true`.
   that computes with a text value reads its `str` through the new
   `qm.str(..)`. A former `string` value reaches the plate as content, with nav
   and click-to-edit, and still rests as the verbatim string. A matrix added
-  item's `title` is a one-line `text` cell. (#2230)
+  item's `title` is a one-line `text` cell. A stored `string` value holding an
+  interior line break fails `validation::not_single_line` and its render
+  `validation::coercion_failed`; a one-line value ignores trailing
+  whitespace. (#2230)
 
 ### PDF forms
 
