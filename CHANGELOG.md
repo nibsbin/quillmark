@@ -38,7 +38,9 @@ it declares `multiline: true`.
 
 - feat(acroform)!: **an acroform quill's field spec is `form.yaml`**, read as
   `Quill.yaml` is, where it was `form.json`. JSON is YAML 1.2, so a renamed
-  `form.json` loads unchanged; a quill holding `form.json` fails as
+  `form.json` loads unchanged but for the three contents the upgrade guide
+  names: a raw DEL, C1 control, U+FFFE or U+FFFF, a repeated key, and a `rect`
+  value past `f32` range. A quill holding `form.json` fails as
   `acroform::legacy_form_json`. `acroform::invalid_form_json` is
   `acroform::invalid_form_spec`, located in `form.yaml`, and
   `acroform::missing_form_json` is `acroform::missing_form_spec`. (#2210)
@@ -121,9 +123,10 @@ it declares `multiline: true`.
 - fix(typst): **a quill opens promptly whatever face count its font collection
   declares**: a collection whose header declares more faces than the file
   holds offsets for loads no faces. (#2168, #2189)
-- feat(typst): **a character no loaded font covers warns
+- feat(typst)!: **a character no loaded font covers warns
   `typst::missing_glyph`**, once per render, naming each character the page
-  draws as an empty box, where Typst drew it and said nothing. (#2179, #2196)
+  draws as an empty box, where Typst drew it and said nothing. `quillmark
+  validate` fails an `example.md` that draws one. (#2179, #2196)
 
 ### Markdown
 
@@ -158,9 +161,11 @@ it declares `multiline: true`.
   series reads them. (#2221, #2224)
 ### Quill metadata
 
-- feat(core): **`quill.license` names a quill's license as an SPDX expression,
+- feat(core)!: **`quill.license` names a quill's license as an SPDX expression,
   and `quill.homepage` where its source or docs live.** Both are optional and
-  surface on `Quill.metadata` and `quillmark info`, absent when undeclared. A
+  surface on `Quill.metadata` and `quillmark info`, absent when undeclared.
+  `QuillConfig` gains the public fields `license` and `homepage`, so Rust code
+  building it with a struct literal fails to compile until it names them. A
   license is checked against the SPDX license list the engine ships: an id off
   it, a lowercase operator or `/` for `OR` fails `quill::invalid_license`, and
   a deprecated id warns `quill::deprecated_license`. A homepage that is not an
@@ -207,14 +212,15 @@ it declares `multiline: true`.
   `version: 0.1.0`. A document holding the old text fails
   `validation::enum_violation`; the banner prints the same words. (#2167)
 - fix(fixtures): **`usaf_memo` sets in TeX Gyre Termes**, so its rendered
-  output changes, and its example drops the seal. (#2173)
+  output changes. (#2173)
 
 ### Distribution
 
 - feat(cli): **prebuilt `quillmark` binaries ship on every GitHub Release**,
   for Linux (musl, x86_64 and aarch64), macOS (arm64 and x86_64) and Windows
-  (x86_64, static C runtime), and `cargo binstall quillmark-cli` installs
-  them. (#2177)
+  (x86_64, static C runtime), each archive carrying the NOTICE and
+  `THIRD_PARTY_LICENSES.md`, and `cargo binstall quillmark-cli` installs
+  them. (#2177, #2195)
 - chore(legal): **every package carries the full Apache-2.0 text and a
   NOTICE**, and the npm package and the wheels ship their third-party
   licenses. (#2173)
