@@ -111,13 +111,13 @@ The plate in §3 reads two fields. The next one has a date in it, a field the au
 Its `Quill.yaml`:
 
 ```yaml
---8<-- "crates/fixtures/resources/quills/status_report/0.1.0/Quill.yaml"
+--8<-- "crates/fixtures/resources/quills/status_report/0.2.0/Quill.yaml"
 ```
 
 Its `plate.typ`:
 
 ```typst
---8<-- "crates/fixtures/resources/quills/status_report/0.1.0/plate.typ"
+--8<-- "crates/fixtures/resources/quills/status_report/0.2.0/plate.typ"
 ```
 
 Seven constructs to lift from it:
@@ -130,7 +130,7 @@ Seven constructs to lift from it:
 - **A claim on composed ink.** The banner's glyphs are drawn by the plate rather than by the field, so `qm.region("state", ..)` is what makes a click on them resolve to `state`. See [Tying Composed Content to a Field](editor-regions.md#tying-composed-content-to-a-field).
 - **`#set`.** Page and text defaults are ordinary Typst. See [Typesetting](typst-backend.md#typesetting).
 
-Both listings are included from `crates/fixtures/resources/quills/status_report/0.1.0/`, which the repository's quiver sweep renders.
+Both listings are included from `crates/fixtures/resources/quills/status_report/0.2.0/`, which the repository's quiver sweep renders.
 
 ## 7. Next steps
 

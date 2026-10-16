@@ -208,8 +208,8 @@ it declares `multiline: true`.
 ### Fixtures
 
 - fix(fixtures)!: **`status_report`'s `state` stores `on_track`, `at_risk` and
-  `blocked`**, where it stored `on track`, `at risk` and `blocked`, at the same
-  `version: 0.1.0`. A document holding the old text fails
+  `blocked`**, where it stored `on track`, `at risk` and `blocked`, at
+  `version: 0.2.0`. A document holding the old text fails
   `validation::enum_violation`; the banner prints the same words. (#2167)
 - fix(fixtures): **`usaf_memo` sets in TeX Gyre Termes**, so its rendered
   output changes. (#2173)

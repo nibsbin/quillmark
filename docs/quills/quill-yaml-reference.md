@@ -96,7 +96,7 @@ text. Its values are made up and nobody keeps them. Starter content people keep
 is a template, not an example. `Quill.yaml` declares nothing about it.
 
 ```
-status_report/0.1.0/
+status_report/0.2.0/
 ├── Quill.yaml
 ├── plate.typ
 └── example.md

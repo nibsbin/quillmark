@@ -1,6 +1,6 @@
 quill:
   name: status_report
-  version: 0.1.0
+  version: 0.2.0
   backend: typst
   description: A project status report — a date, a state enum, and one card per milestone
 
