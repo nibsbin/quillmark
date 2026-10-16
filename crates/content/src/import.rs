@@ -638,13 +638,7 @@ impl Builder {
     }
 
     fn check_depth(&self) -> Result<(), ImportError> {
-        // Container path plus open marks approximates the structural depth the
-        // typst backend caps; bound it identically for parity. Nested
-        // underlines union into one mark, so they count once.
-        let underlined = self.inline.underlines.iter().any(Option::is_some);
-        let depth = self.containers.len()
-            + self.inline.open.len()
-            + usize::from(underlined);
+        let depth = self.containers.len();
         if depth > MAX_NESTING_DEPTH {
             return Err(ImportError::NestingTooDeep {
                 depth,
@@ -669,7 +663,7 @@ impl Builder {
                     continue;
                 }
                 Fixed::Underline(tag) => {
-                    self.underline_tag(tag)?;
+                    self.underline_tag(tag);
                     continue;
                 }
                 Fixed::Swallowed(name, at) => {
@@ -877,7 +871,6 @@ impl Builder {
             tag => {
                 if let Some(kind) = mark_kind(&tag) {
                     self.open_mark(kind);
-                    self.check_depth()?;
                 }
             }
         }
@@ -1019,16 +1012,16 @@ impl Builder {
 
     /// Pair one `<u>` tag in the run or table cell it stands in. In an image's
     /// alt text, where nothing is marked, it underlines nothing.
-    fn underline_tag(&mut self, tag: UTag) -> Result<(), ImportError> {
+    fn underline_tag(&mut self, tag: UTag) {
         if self.image_depth > 0 {
-            return Ok(());
+            return;
         }
         if let Some(acc) = self.table.as_mut() {
             if let Some(cell) = acc.cell.as_mut() {
                 acc.pair.content();
                 cell.underline(tag);
             }
-            return Ok(());
+            return;
         }
         if matches!(tag, UTag::Open { .. }) {
             // Resolve an armed line first, as a mark does, so the underline
@@ -1036,7 +1029,6 @@ impl Builder {
             self.open_early();
         }
         self.inline.underline(tag);
-        self.check_depth()
     }
 
     /// Drop each wrapper still open where its list item, quote or the body

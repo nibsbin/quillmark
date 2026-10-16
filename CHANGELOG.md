@@ -130,11 +130,12 @@ it declares `multiline: true`.
 
 ### Markdown
 
-- fix(content)!: **a body nests at most 12 levels deep, so every body that
-  imports renders under Typst**, where import took 100 and Typst's show-rule
-  depth refused 16 quotes or 32 lists. A body past the bound fails
-  `parse::body_import` at its `path`, and a stored row holding one fails to
-  load; `ParseError::BodyImport` holds `{ path, message }`. (#2187, #2190)
+- fix(content)!: **a body nests at most 12 list items, quotes and elements
+  deep, its marks counting nothing, so every body that imports renders under
+  Typst**, where import took 100 and Typst's show-rule depth refused 16 quotes
+  or 32 lists. A body past the bound fails `parse::body_import` at its `path`,
+  and a stored row holding one fails to load; `ParseError::BodyImport` holds
+  `{ path, message }`. (#2187, #2190)
 
 ### Quill names
 
