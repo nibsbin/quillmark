@@ -166,6 +166,10 @@ it declares `multiline: true`.
   a deprecated id warns `quill::deprecated_license`. A homepage that is not an
   absolute `http` or `https` URL naming a host and no user fails
   `quill::invalid_homepage`. (#2225)
+- fix(core): **a `quill.license` holding any line break fails
+  `quill::invalid_license`**: VT, FF, NEL, U+2028 and U+2029 as LF and CR do,
+  where those five reached the SPDX check and one at either end loaded,
+  trimmed.
 
 ### Bindings
 

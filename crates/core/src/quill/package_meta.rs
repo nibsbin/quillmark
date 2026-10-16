@@ -41,7 +41,7 @@ pub(super) fn parse_license(
         errors.push(refuse("not a string", LICENSE_HINT.to_string()));
         return None;
     };
-    if text.contains(['\n', '\r']) {
+    if text.contains(['\n', '\r', '\u{0B}', '\u{0C}', '\u{85}', '\u{2028}', '\u{2029}']) {
         errors.push(refuse("a line break", "Write the expression on one line.".to_string()));
         return None;
     }

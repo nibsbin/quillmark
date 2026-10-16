@@ -62,7 +62,7 @@ fn license_expression() -> impl Strategy<Value = String> {
 }
 
 fn license() -> impl Strategy<Value = String> {
-    let pad = || prop_oneof![4 => Just(""), 2 => Just(" "), 1 => Just("\t "), 1 => Just("\n")];
+    let pad = || prop_oneof![4 => Just(""), 2 => Just(" "), 1 => Just("\t "), 1 => Just("\n"), 1 => Just("\u{2028}")];
     prop_oneof![
         4 => (pad(), license_expression(), pad()).prop_map(|(a, e, b)| format!("{a}{e}{b}")),
         1 => any::<String>(),
@@ -103,7 +103,10 @@ proptest! {
         let Some(loaded) = load_key("license", &text) else { return Ok(()) };
         match loaded {
             Ok((config, warnings)) => {
-                prop_assert!(!text.contains(['\n', '\r']), "a line break loaded: {text:?}");
+                prop_assert!(
+                    !text.contains(['\n', '\r', '\u{0B}', '\u{0C}', '\u{85}', '\u{2028}', '\u{2029}']),
+                    "a line break loaded: {text:?}"
+                );
                 prop_assert_eq!(config.license.as_deref(), Some(text.trim()));
                 prop_assert!(
                     codes(&warnings).iter().all(|code| *code == "quill::deprecated_license")
