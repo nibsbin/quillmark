@@ -72,15 +72,12 @@ it declares `multiline: true`.
   describes the package and never reaches the blueprint. (#2222)
 - feat(core)!: **a blank `default:` (`""`, `[]`, `{}`) prints in the blueprint
   as no default does**, an empty cell where it printed `""`, since it renders
-  as one; `0` and `false` print. **A typed table without a `default:` prints
-  `[]` led by its synthetic row commented out**, the shape `default: []`
-  printed, where it printed the row live and an unedited blueprint rendered one
-  blank row. The blank `default:` stays legal, and no diagnostic names it.
-  (#2233)
-- fix(core): **an optional typed table without a `default:` prints an empty
-  cell, `r: # array<object>?`**, under its dormant row, where it printed `[]`,
-  which answers it: an unedited blueprint rendered `()` where the empty
-  document renders `none`. (#2233)
+  as one; `0` and `false` print. **A required typed table without a
+  `default:` prints `[]` led by its synthetic row commented out**, the shape
+  `default: []` printed, and an optional one an empty cell,
+  `r: # array<object>?`, under the same commented row, since `[]` answers it;
+  either printed the row live, and an unedited blueprint rendered one blank
+  row. The blank `default:` stays legal, and no diagnostic names it. (#2233)
 
 ### Typst plates
 

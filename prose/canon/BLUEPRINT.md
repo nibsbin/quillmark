@@ -73,8 +73,8 @@ collides with YAML key/value parsing.
 
 Two own-line forms are not annotations: a dormant variant world, which is cells
 with a `# ` in front under a `# when <MEMBER>:` header (see "Enum variants"),
-and a typed table's field commented out above its live `[]` (see "Typed
-tables"). The colons in them are the cells' own.
+and a typed table's field commented out above its live cell, `[]` or empty
+where optional (see "Typed tables"). The colons in them are the cells' own.
 
 ### Leading lines: order
 
