@@ -3,15 +3,18 @@
 ## v0.126.0 - 2026-10-16
 
 Upgrade path: [0.125 → 0.126](docs/migrations/0.125-to-0.126.md). Script
-links, runaway YAML expansion and bodies nested past 12 levels are refused, a
-quill's font collections load, an acroform quill's field spec is `form.yaml`,
-a Typst quill's plate is `plate.typ` by name and an unknown `typst:` key fails
-the load, a card groups fields under a top-level `object` where it declared
-`sections:`, a quill's `version` is `MAJOR.MINOR.PATCH` and a `$quill`
-selector `@MAJOR.MINOR` or exact, a document the quill creates pins its
-`MAJOR.MINOR`, a blueprint prints a blank `default:` as no default, a WASM
-trap rejects coded, and a text field is `text` or `richtext`, one line unless
-it declares `multiline: true`.
+links, runaway YAML expansion, bodies nested past 12 levels and a field named
+`body` are refused, a quill's font collections load and a character no loaded
+font covers warns `typst::missing_glyph`, an acroform quill's field spec is
+`form.yaml`, a Typst quill's plate is `plate.typ` by name and an unknown
+`typst:` key fails the load, a card groups fields under a top-level `object`
+where it declared `sections:`, a `$quill` name may carry a collection, a
+quill's `version` is `MAJOR.MINOR.PATCH` and a `$quill` selector
+`@MAJOR.MINOR` or exact, a document the quill creates pins its `MAJOR.MINOR`,
+`status_report` stores enum ids, a blueprint prints a blank `default:` as no
+default, a WASM trap rejects coded, a text field is `text` or `richtext`, one
+line unless it declares `multiline: true`, and prebuilt `quillmark` binaries
+ship on every GitHub Release.
 
 ### Field types
 
@@ -26,29 +29,37 @@ it declares `multiline: true`.
   `quillmark:multiline: true` where it carried `quillmark:inline`. The
   blueprint prints `text<plain>`, `text(multiline)<plain>`,
   `richtext<markdown>` and `richtext(multiline)<markdown>`, where
-  `richtext<markdown>` named a block field.
-  `validation::not_inline`, `edit::field_not_inline`,
-  `conform::field_not_inline` and `quill::seed_not_inline` end in
-  `not_single_line`, and their `codec` names `text`. An acroform text widget binds multiline exactly where
-  its field declares it, so a block `richtext` no longer binds a one-line
-  widget. (#2229, #2217)
+  `richtext<markdown>` named a block field. `validation::not_inline`,
+  `edit::field_not_inline`, `conform::field_not_inline` and
+  `quill::seed_not_inline` end in `not_single_line`, and their `codec` names
+  `text`; a `coercion_failed` `target` reads `text(single_line)`,
+  `richtext(single_line)` or `text`, where it read `plaintext(inline)`,
+  `richtext(inline)` or `plaintext`. In Rust, `FieldType::PlainText { inline }`
+  is `Text { multiline }`, `RichText { inline }` is `RichText { multiline }`,
+  `ValidationError::NotInline` is `NotSingleLine`, `EditError::FieldNotInline`
+  is `FieldNotSingleLine`, `QUILLMARK_INLINE_KEY` is
+  `QUILLMARK_MULTILINE_KEY` and `CODEC_PLAINTEXT` is `CODEC_TEXT`;
+  `UiFieldSchema::multiline` and WASM `QuillFieldUi.multiline` are removed. An
+  acroform text widget binds multiline exactly where its field declares it, so
+  a `richtext` declaring `multiline: true` binds a multiline widget, where a
+  block `richtext` without `ui.multiline` bound a one-line one. (#2217, #2229,
+  #2232)
 - feat(core)!: **`type: string` is retired in favor of `text`**, and a plate
   that computes with a text value reads its `str` through the new
-  `qm.str(..)`. A former `string` value reaches the plate as content, with nav
-  and click-to-edit, and still rests as the verbatim string. A matrix added
-  item's `title` is a one-line `text` cell. A stored `string` value holding an
+  `qm.str(..)`, which returns the value's text with trailing whitespace
+  dropped. A former `string` value reaches the plate as content, with nav and
+  click-to-edit, and still rests as the verbatim string. A matrix added item's
+  `title` is a one-line `text` cell. A stored `string` value holding an
   interior line break fails `validation::not_single_line` and its render
-  `validation::coercion_failed`; a one-line value ignores trailing
-  whitespace. (#2230)
-- fix(core)!: **a one-line `text` value drops its trailing whitespace**, so a
-  stored former `string` written as a YAML `|` block, whose newline the block
-  keeps, validates, renders and conforms to its line, where it failed
-  `validation::not_single_line` and the render's coercion. Only a line break
-  inside the value fails. `trailingNewline` leaves the `not_single_line`
-  args, and `trailing_newline` leaves `ValidationError::NotSingleLine` and
-  `EditError::FieldNotSingleLine`.
-- fix(typst): **`qm.str` drops every trailing space**, where a value ending in
-  two kept one. (#2230)
+  `validation::coercion_failed`; a one-line value ignores trailing whitespace.
+  `FieldType::String` is removed. (#2230, #2232)
+- fix(core)!: **a one-line `text` value ignores its trailing whitespace**, so
+  one written as a YAML `|` block, whose newline the block keeps, validates,
+  renders and conforms to its line, where an `inline: true` `plaintext` failed
+  `validation::not_inline`. Only a line break inside the value fails.
+  `trailingNewline` leaves the `not_single_line` args, and `trailing_newline`
+  leaves `ValidationError::NotSingleLine` and `EditError::FieldNotSingleLine`.
+  (#2234)
 
 ### PDF forms
 
@@ -59,11 +70,13 @@ it declares `multiline: true`.
   value past `f32` range. A quill holding `form.json` fails as
   `acroform::legacy_form_json`. `acroform::invalid_form_json` is
   `acroform::invalid_form_spec`, located in `form.yaml`, and
-  `acroform::missing_form_json` is `acroform::missing_form_spec`. (#2210)
+  `acroform::missing_form_json` is `acroform::missing_form_spec`, its hint
+  adding `form.yaml` at the quill root. (#2210, #2234)
 - fix(cli): **`quillmark validate --no-render` reads an acroform quill's
   `form.yaml` as `open` does**, binding it against the schema and `form.pdf`'s
   pages, so a quill holding `form.json`, no spec, or one that does not parse
   fails there, where it passed and then failed to open.
+  `quillmark::acroform_check_form` is that check. (#2234)
 
 ### Blueprint
 
@@ -127,6 +140,7 @@ it declares `multiline: true`.
 - fix(typst): **a link whose URL holds a character XML 1.0 cannot carry, a C0
   control but tab, LF and CR or U+FFFE or U+FFFF, renders as its text
   alone**, where its `href` carried it raw and the whole SVG failed to parse.
+  (#2234)
 - fix(core)!: **a card-yaml block's aliases and tags expand within a budget
   linear in its source**: past twice the block's bytes plus 4 KiB of scalars,
   or its bytes plus 4 KiB of nodes, the block fails its YAML parse, with a
@@ -140,23 +154,17 @@ it declares `multiline: true`.
 ### Fonts
 
 - fix(typst)!: **a `.ttc` or `.otc` the quill ships loads every face it
-  holds**, where the font scan skipped it and naming its family warned
-  `unknown font family`. A quill whose only fonts are collections renders in
-  them rather than the embedded Roboto, so a plate there naming `Roboto` warns
-  `unknown font family`. (#2167)
-- fix(typst): **a quill opens promptly whatever face count its font collection
-  declares**: a collection whose header declares more faces than the file
-  holds offsets for loads no faces. (#2168, #2189)
-- fix(typst): **a font collection declaring more than 256 faces loads none
-  and warns `typst::font_collection_skipped`**, where a crafted collection
-  under 5 MB declaring a million cost seconds and gigabytes at every open.
+  holds, up to 256**, where the font scan skipped it and naming its family
+  warned `unknown font family`. A collection declaring more faces loads none
+  and warns `typst::font_collection_skipped`, and one whose header declares
+  more faces than the file holds offsets for loads none. A quill whose only
+  fonts are collections renders in them rather than the embedded Roboto, so a
+  plate there naming `Roboto` warns `unknown font family`. (#2167, #2168,
+  #2189, #2234)
 - feat(typst)!: **a character no loaded font covers warns
   `typst::missing_glyph`**, once per render, naming each character the page
   draws as an empty box, where Typst drew it and said nothing. `quillmark
-  validate` fails an `example.md` that draws one. (#2179, #2196)
-- fix(typst): **a word past 64 KiB of characters no font covers renders**,
-  where reading its glyphs panicked on every format, aborting the CLI and
-  Python and trapping WASM. (#2227)
+  validate` fails an `example.md` that draws one. (#2179, #2196, #2234)
 
 ### Markdown
 
@@ -165,12 +173,12 @@ it declares `multiline: true`.
   Typst**, where import took 100 and Typst's show-rule depth refused 16 quotes
   or 32 lists. A body past the bound fails `parse::body_import` at its `path`,
   and a stored row holding one fails to load; `ParseError::BodyImport` holds
-  `{ path, message }`. (#2187, #2190)
+  `{ path, message }`. (#2187, #2190, #2234)
 - fix(core)!: **a stored row holding more than 1,000 cards fails to load**,
   `StorageError::Malformed`, as markdown parse refuses that markdown, where it
   loaded and its own `to_markdown` failed `parse::too_many_cards`; and placing
   a 1,001st card refuses as `edit::too_many_cards`, `EditError::TooManyCards`,
-  where the edit landed.
+  where the edit landed. (#2234)
 
 ### Quill names
 
@@ -195,6 +203,7 @@ it declares `multiline: true`.
   seeded, empty and example documents and the blueprint carry
   `$quill: memo@1.2`, where they carried `memo@1.2.0`, so every patch in the
   series reads them. (#2221, #2224)
+
 ### Quill metadata
 
 - feat(core)!: **`quill.license` names a quill's license as an SPDX expression,
@@ -203,14 +212,11 @@ it declares `multiline: true`.
   `QuillConfig` gains the public fields `license` and `homepage`, so Rust code
   building it with a struct literal fails to compile until it names them. A
   license is checked against the SPDX license list the engine ships: an id off
-  it, a lowercase operator or `/` for `OR` fails `quill::invalid_license`, and
-  a deprecated id warns `quill::deprecated_license`. A homepage that is not an
-  absolute `http` or `https` URL naming a host and no user fails
-  `quill::invalid_homepage`. (#2225)
-- fix(core): **a `quill.license` holding any line break fails
-  `quill::invalid_license`**: VT, FF, NEL, U+2028 and U+2029 as LF and CR do,
-  where those five reached the SPDX check and one at either end loaded,
-  trimmed.
+  it, a lowercase operator, `/` for `OR` or any line break fails
+  `quill::invalid_license`, and a deprecated id warns
+  `quill::deprecated_license`. A homepage that is not an absolute `http` or
+  `https` URL naming a host and no user fails `quill::invalid_homepage`.
+  (#2225, #2234)
 
 ### Bindings
 
@@ -221,12 +227,12 @@ it declares `multiline: true`.
   covered; a host routes on the code and discards the realm. (#2176)
 - fix(wasm): **`@quillmark/wasm` declares `engines: { node: ">=22" }`**,
   where it declared `>=24` and npm on Node 22 resolved 0.103.0, the last
-  release under that floor. The `using` sugar needs Node 24. (#2199)
+  release under that floor. The `using` sugar needs Node 24. (#2199, #2234)
 - fix(wasm)!: **a native stack overflow inside a render rejects as
   `runtime::backend_trapped`** too, the `RangeError` V8 and JavaScriptCore
   raise for it, or Firefox's `InternalError`, on `cause`, where it rejected as
   that error, uncoded, though it leaves the build's state as undefined as a
-  trap does.
+  trap does. (#2234)
 - fix(python): **`render` releases the GIL while the backend compiles**, and
   renders a clone of the document, so other threads run and may edit it
   meanwhile. (#2176)
@@ -247,27 +253,28 @@ it declares `multiline: true`.
   each dictionary's address `$path`**, and a spread failing `unexpected
   argument: $path` hints a sink parameter such as `..rest`. (#2167)
 - fix(core)!: **a quill declaring a field named `body` fails to load with
-  `quill::reserved_field_name`**, where the field and the card's body shared
-  one path, `main.body` or `cards.<kind>[i].body`. (#2207)
+  `quill::reserved_field_name`**, its hint to rename the field, where the
+  field and the card's body shared one path, `main.body` or
+  `cards.<kind>[i].body`. (#2207, #2234)
 - docs(reference): **the diagnostic-codes page lists every code the engine
   mints**, and a test fails on a code minted but not listed, or listed but
   minted nowhere. (#2175)
-- fix(core,acroform): **`quill::reserved_field_name` and
-  `acroform::missing_form_spec` carry a hint**: rename the field, and add
-  `form.yaml` at the quill root.
 
 ### Fixtures
 
 - fix(fixtures)!: **`status_report`'s `state` stores `on_track`, `at_risk` and
-  `blocked`**, where it stored `on track`, `at risk` and `blocked`, at
-  `version: 0.2.0`. A document holding the old text fails
-  `validation::enum_violation`; the banner prints the same words. (#2167)
+  `blocked`**, where it stored `on track`, `at risk` and `blocked`, and its
+  `version` is `0.2.0`, so a document pinned `status_report@0.1` fails
+  `quill::version_mismatch`. A document holding the old text fails
+  `validation::enum_violation`; the banner prints the same words. (#2167,
+  #2234)
 - fix(fixtures): **`usaf_memo` sets in TeX Gyre Termes**, so its rendered
-  output changes, and its example drops the seal. (#2173)
+  output changes, and the fixtures crate names each third-party file's
+  license. (#2173)
 - fix(fixtures): **`usaf_memo` renders a list nested six levels deep or
   more**, numbering past its last format and restarting each such level under
   a new parent, where it failed `typst::compile` with
-  `dictionary does not contain key "6"`. (#2191)
+  `dictionary does not contain key "6"`. (#2191, #2234)
 
 ### Distribution
 
@@ -277,13 +284,15 @@ it declares `multiline: true`.
   `THIRD_PARTY_LICENSES.md`, and `cargo binstall quillmark-cli` installs
   them. (#2177, #2195)
 - chore(legal): **every package carries the full Apache-2.0 text and a
-  NOTICE**, and the npm package and the wheels ship their third-party
-  licenses. (#2173)
+  NOTICE**, and the npm package and the wheels ship `THIRD_PARTY_LICENSES.md`,
+  the licenses of the crates they link and the embedded Roboto's OFL.
+  `@quillmark/wasm` declares keywords, author, homepage and bugs, and the
+  library crates their crates.io keywords and categories. (#2173, #2177)
 - build(deps): **the PDF form backend rasters through hayro 0.8.** (#2100)
 - docs: **a quickstart renders one starter quill from the CLI, Python,
   JavaScript and Rust**, and the README and docs home lead with a rendered
-  memo; quillmark.dev is the docs site and the package homepage. (#2172,
-  #2174)
+  memo and link the quillmark-js playground; quillmark.dev is the docs site
+  and the package homepage. (#2172, #2174)
 - docs: **snippets that threw run as written**, and backend statements match
   the code. (#2171)
 - docs(community): **`CONTRIBUTING.md` says where questions, bugs and
@@ -297,97 +306,6 @@ it declares `multiline: true`.
   npm. The Pages permissions move to the docs deploy job, and Dependabot
   proposes a version once it is a week old. Publishing refuses a package
   without its SBOM. (#2165, #2170)
-
-### Commits since v0.125.0
-
-- fix!: 0.126 release readiness: nesting bound, stored-row ceilings, one-line text trim, form.yaml validation, and docs (#2234)
-- feat(core)!: `text` is one line by default, `multiline` widens it, and `string` retires (#2232)
-- feat(core)!: a blueprint prints a blank default as no default, and a defaultless typed table as `[]` under its dormant row (#2233)
-- feat(core)!: a quill version is MAJOR.MINOR.PATCH, and a $quill selector is @MAJOR.MINOR or exact (#2224)
-- feat!: a Typst quill's plate is `plate.typ` by name, `typst:` is strict, and `quill:` takes `license` and `homepage` (#2225)
-- feat(core)!: the blueprint's root label is main's own, and ui.compact's reference reads its type default (#2222)
-- feat(core)!: a card groups fields under a top-level object; `sections:` is retired (#2213)
-- feat(acroform)!: an acroform quill's field spec is form.yaml (#2210)
-- feat(acroform): a form.json tagged with a later 0.x minor loads (#2208)
-- feat(core): quill.requires names the oldest engine a quill loads on (#2206)
-- fix(core): the reserved-body message names both addresses; docs carry the rule
-- docs(canon): the reserved body name is its own QUILL.md paragraph
-- docs: quill names carry a collection in the authoring guide, and the migration names the storage hop
-- docs(changelog): the reserved body name names its PR
-- fix(core)!: a field named body is refused at quill load
-- feat(core)!: a $quill name may carry a collection, and quill names share one rule
-- test(typst): the never-drawn test names a loaded font, and the changelog reads drawn boxes
-- docs(changelog): SVG link hrefs escape, and the & rule is gone
-- fix(typst): SVG link hrefs inside a tiling escape too
-- docs(changelog): Unreleased names the docs PRs and the hayro bump, and the release PR body covers an uncurated seed
-- fix(typst): `missing_glyph` names only characters the page draws
-- Ship NOTICE and THIRD_PARTY_LICENSES.md in the CLI release archives
-- fix(typst): a link with & before its path keeps its link
-- fix(typst): SVG link hrefs escape & and <
-- ci(release): the seeded entry lists every commit after the curated section
-- docs(changelog): Unreleased carries every change since 0.125
-- fix(content)!: a body nests at most 12 levels deep
-- fix(typst): bound a font collection's face count by its length
-- docs(quill): a description is one line
-- fix(acroform): raster through hayro 0.8's render_into at the explicit size
-- docs(community): questions go to a blank issue while Discussions is off
-- fix(core): field and quill-name suggestions read as a person would write them
-- docs(reference): list runtime::backend_trapped
-- refactor(wasm): drop the trapped-build latch; a trap rejects coded and the host discards the realm
-- docs(reference): list typst::missing_glyph among the diagnostic codes
-- docs(community): drop the code of conduct pending the maintainer's own
-- docs(changelog): reflow the release entry
-- build(deps): Bump hayro from 0.7.1 to 0.8.0
-- docs: drop the Why Quillmark page
-- build(deps): Bump the actions group across 1 directory with 2 updates
-- docs(quickstart): link the playground for a no-install first look
-- docs: link the quillmark-js playground from the README and docs home
-- fix(wasm): a trapped build stays trapped, and every later call into it rejects as runtime::backend_trapped
-- fix(python): render clones the document, so other threads can edit it while the GIL is released
-- docs: the untrusted-input claims match the filters, and the 0.126 guide states the tighter YAML bound
-- fix(pdf): a deep page-tree ancestor chain drops without recursing
-- fix(core)!: a card-yaml block's nodes stay linear in its source too, and a budget refusal carries a hint
-- fix(typst)!: a link whose scheme holds an & renders as its text
-- fix(core,typst,quillmark): newcomer hints fire only on the shape they name
-- build: Roboto's OFL ships in the binary packages, NOTICE carries attribution only, and CI holds the license policy
-- feat(typst): input no loaded font covers warns `typst::missing_glyph`
-- ci(release): publish the tarball by path, and test it in its own job
-- docs(reference): list each derived diagnostic code the engine mints
-- docs: apply review of the snippet fixes
-- docs(community): fixes from review: bug form takes a private quill's source, `!` placement, CI gates, and plainer wording
-- docs: keep the README sample seal-free, use absolute image links, and say machine-readable codes
-- fix(release): static Windows CRT, no write token in CLI builds, Roboto licence in archives
-- chore(wasm): npm homepage is quillmark.dev
-- docs(community): code of conduct, issue forms, PR template, and a contributor path for people
-- feat(cli): prebuilt binaries on every GitHub Release
-- chore(packaging): registry keywords, categories and npm metadata
-- docs: SECURITY.md, what Operations expects of untrusted input, and the 0.126 guide's two new breaks
-- fix(typst)!: a link with a javascript:, vbscript:, data: or file: target renders as its text
-- fix(core)!: a card-yaml block's aliases expand linearly in its source
-- fix(pdf): a page tree shares ancestor chains, and the node cap counts queued kids
-- docs(integration): bound untrusted renders with a process, and size input
-- fix(wasm)!: a trapped render rejects as runtime::backend_trapped
-- fix(python): render releases the GIL while the backend compiles
-- test(quillmark): pin every diagnostic code to a reference page
-- docs(quickstart): one starter quill rendered from the CLI, Python, JavaScript and Rust
-- revert: the README note and the example's seal belong to the positioning work
-- Revert "docs: contributions are Apache-2.0 under a DCO sign-off, and borb-sh maintains every binding"
-- fix(core,typst,quillmark): name the newcomer's mistake in first-run errors
-- build: third-party licenses are written with LF endings
-- docs: contributions are Apache-2.0 under a DCO sign-off, and borb-sh maintains every binding
-- fix(fixtures): usaf_memo sets in TeX Gyre Termes, its example drops the seal, and each fixture names its license
-- build: the npm package and the wheels ship third-party licenses
-- chore(legal): the full Apache-2.0 text, and a NOTICE in every package
-- docs: lead the README and docs home with a rendered memo, a why page, and quillmark.dev
-- docs: fix snippets that throw, stale backend statements, and the maintainer line
-- ci(docs): pin MkDocs below 2.0 and check PRs touching snippet-included files
-- ci(release): build and test @quillmark/wasm in a job that cannot publish
-- fix(core,typst): one `$path` constant, and a `$path` key keeps its suggestion
-- docs(quills,migrations): an enum rename refuses old documents, and the 0.126 guide carries status_report's ids
-- fix(typst)!: a `.ttc` or `.otc` the quill ships loads every face it holds
-- fix(core,typst): a data key spelled `$path` and a spread `$path` say what happens to them
-- docs(quills): an enum value is a stored id, and status_report stores ids
-- ci(wasm): refuse to publish @quillmark/wasm without its SBOM, and generate it on every PR
 
 ## v0.125.0 - 2026-10-12
 
