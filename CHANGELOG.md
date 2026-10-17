@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.126.1 - 2026-10-17
 
 ### Field types
 
@@ -14,6 +14,11 @@
   `conform::field_not_single_line`, and a seed still fails
   `quill::seed_not_single_line`. This keeps a document stored under 0.124 or
   0.125 with a line break in a former `string` field rendering. (#2237)
+
+### Commits since v0.126.0
+
+- fix(core): a stored line break in a one-line text value renders as a space (#2238)
+- docs(cli): link the README's quickstart at quillmark.dev (#2236)
 
 ## v0.126.0 - 2026-10-16
 
