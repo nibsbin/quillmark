@@ -82,6 +82,8 @@ Fatality is a two-value ladder: `Error` blocks the stage that emits it; `Warning
     - An `Error` is input the engine cannot read as written, such as a value that is not its field's type or an enum value outside `values:`. The render fails.
     - A `Warning` is input no declaration claims: a card with an undeclared `$kind` (`validation::unknown_card`), a body under `body.enabled: false` (`validation::body_disabled`), a key the schema does not declare (`validation::unknown_field`, whose hint names the likely fix), a stranded variant cell (`validation::out_of_variant`), elements past `max:` (`validation::cardinality`), and the `$seed` checks. The document renders without it. A one-shot render carries these warnings on `result.warnings`, ahead of the compile's; a live session's warnings do not, so an editor reads `quill.validate(doc)` beside them.
 
+    A line break inside a one-line `text` value warns too (`validation::line_break_folded`), and renders as a space.
+
     A field the document leaves unanswered draws no diagnostic: it renders its `default:`, else its blank.
 
     On the CLI, `quillmark render` and `quillmark check` both print every validation warning ([CLI Reference](../cli/reference.md#check)).

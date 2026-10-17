@@ -368,6 +368,15 @@ pub(crate) fn trim_line_end(
     }
 }
 
+/// Plain content on one line, each line break a space. The length holds, so a
+/// rendered region's offsets still index the stored value.
+pub(crate) fn fold_line_breaks(
+    content: quillmark_content::model::Normalized,
+) -> quillmark_content::model::Normalized {
+    let text = quillmark_content::export::to_plaintext(&content);
+    quillmark_content::import::from_plaintext(&text.replace('\n', " "))
+}
+
 pub(crate) mod align;
 pub mod assemble;
 pub mod dto;

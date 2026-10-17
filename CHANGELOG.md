@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Field types
+
+- fix(core): **a stored line break in a one-line `text` value renders as a
+  space**, where `render` failed `validation::coercion_failed` and `validate`
+  `validation::not_single_line`. The render floor turns each interior break
+  into a space and warns the new `validation::line_break_folded`; `quillmark
+  check --strict` finds them. The stored value is untouched, so a field
+  later widened to `multiline: true` renders its breaks again. A typed write
+  still refuses the break, `Quill::conform` still warns
+  `conform::field_not_single_line`, and a seed still fails
+  `quill::seed_not_single_line`. This keeps a document stored under 0.124 or
+  0.125 with a line break in a former `string` field rendering. (#2237)
+
 ## v0.126.0 - 2026-10-16
 
 Upgrade path: [0.125 → 0.126](docs/migrations/0.125-to-0.126.md). Script

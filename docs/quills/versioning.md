@@ -35,8 +35,9 @@ Reordering a field's `values:` is PATCH: a field's blank is `""` rather than
 order, the blueprint's `enum` annotation, and acroform dropdown order.
 
 Turning a field's `multiline` from `true` to `false` is MAJOR unless every
-stored value is first reduced to one line: a document holding a second line or
-block stops validating (`validation::not_single_line`).
+stored value is first reduced to one line: a `richtext` holding a second block
+stops validating (`validation::not_single_line`), and a `text` holding a second
+line renders it as a space (`validation::line_break_folded`).
 
 ## How Authors Select Versions
 

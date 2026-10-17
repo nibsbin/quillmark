@@ -524,7 +524,7 @@ impl QuillConfig {
             FieldType::Text { multiline } => {
                 // The literal codec and its two rests: `SCHEMAS.md`
                 // §"Content fields rest per codec".
-                let plain_check = |rt: quillmark_content::model::Normalized| -> Result<
+                let mut plain_check = |rt: quillmark_content::model::Normalized| -> Result<
                     quillmark_content::model::Normalized,
                     CoercionError,
                 > {
@@ -542,6 +542,10 @@ impl QuillConfig {
                     }
                     let rt = crate::document::trim_line_end(rt);
                     if !rt.is_inline() {
+                        if mode == Leniency::Render {
+                            drops.push(super::compose::line_break_folded_warning(path));
+                            return Ok(crate::document::fold_line_breaks(rt));
+                        }
                         return Err(CoercionError::uncoercible(
                             path,
                             "<text>",

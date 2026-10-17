@@ -188,9 +188,9 @@ families:
   `validation::*` diagnostic, mixing severities. Severity is the class
   [SCHEMAS.md](SCHEMAS.md#what-blocks-a-render) assigns: an `Error` is
   malformed input, and the document does not render; a `Warning` is unclaimed
-  input, which renders. The warnings are
+  or folded input, which renders. The warnings are
   `cardinality`, `out_of_variant`, `unknown_card`, `body_disabled`,
-  `unknown_field`, and the
+  `unknown_field`, `line_break_folded`, and the
   `$seed` checks, which warn
   whatever their class because no render reads `$seed`. Beside them it
   returns the `backend::declined_construct` warnings a render raises.
@@ -465,6 +465,7 @@ Three outcomes, and the wire tells them apart only with this table in hand, sinc
 | `validation::seed_unknown_field` | — | code-determined |
 | `validation::not_single_line` | — | code-determined |
 | `validation::not_plain` | — | code-determined |
+| `validation::line_break_folded` | — | code-determined |
 | `edit::invalid_field_name` | `field` | structured |
 | `edit::unknown_field` | `field` | structured |
 | `edit::invalid_kind_name` | `kind` | structured |
