@@ -468,21 +468,23 @@ Coercion rules per type:
   blank-filled field passes. A one-line `text` drops its trailing whitespace
   first (`trim_line_end`), so the newline a clip-chomped YAML `|` keeps is no
   second line and the value rests without it. The constraint is checked in
-  three places: coercion (`CoercionError` for a document value), validation
-  (`validation::not_single_line`, the `TypeMismatch` fatality class, as a
-  backstop for a content that bypassed coercion), and load-time default import
-  (a schema literal that violates it is a load error).
-- **A stored line break in one-line `text` folds at render.** The render floor
-  folds each interior line break, with the whitespace beside it, to one space
-  and warns `validation::line_break_folded`, so `render` and `validate` admit
-  the value; the stored value is untouched. The strict door still refuses it:
-  a typed write fails `edit::field_not_single_line`, `Quill::conform` warns
-  `conform::field_not_single_line` and leaves it as authored, and a seed fails
-  `quill::seed_not_single_line`. A `richtext` holding a second block has no
-  fold and fails `validation::not_single_line`. Blueprint annotates a
+  three places: coercion (`CoercionError` for a document value; at render, a
+  `richtext` one only), validation (`validation::not_single_line`, the
+  `TypeMismatch` fatality class, as a backstop for a content that bypassed
+  coercion), and load-time default import (a schema literal that violates it
+  is a load error). Blueprint annotates a
   field declaring `multiline: true` as `text(multiline)<plain>` or
   `richtext(multiline)<markdown>`; `build_transform_schema` emits
   `quillmark:multiline: true` on it and on every `$body`
+- **A stored line break in one-line `text` folds at render.** The render floor
+  turns each interior line break into a space, the length held so a rendered
+  region's offsets index the stored value, and warns
+  `validation::line_break_folded`; `render` and `validate` admit the value,
+  and the stored value is untouched. The strict door refuses it: a typed write
+  fails `edit::field_not_single_line`, `Quill::conform` warns
+  `conform::field_not_single_line` and leaves it as authored, and a seed fails
+  `quill::seed_not_single_line`. A stranded variant cell does not render and
+  draws no fold warning. A `richtext` holding a second block has no fold.
 - **`text` coercion and enforcement.** A `text` value rides the same
   content as `richtext`, differing only at the codec:
   - a string imports through the **literal** codec (`from_plaintext`,
@@ -855,9 +857,12 @@ other than a well-formed answer falls in one of three classes:
 | Unanswered | a declared cell left absent or present-null | blank-fills it | none |
 | Malformed | markup the grammar cannot read, or a value that will not read as its declared cell's type | fails | `parse::*` errors; `validation::type_mismatch`, `enum_violation`, `format_violation`, `coercion_failed`, `not_single_line`, `not_plain`, `held_stored` |
 | Unclaimed | input no declaration reads | renders; no declared cell reads it | a warning naming the input |
+| Folded | a line break inside a one-line `text` value | renders it as a space | `validation::line_break_folded` |
 
 The `validation::*` severity is the class: an `Error` is malformed, a `Warning`
-unclaimed ([ERROR.md](ERROR.md#warning-flow)). No render reads
+unclaimed or folded ([ERROR.md](ERROR.md#warning-flow)). The fold is the one
+coercion the floor makes on a value its type refuses, and it guesses no
+meaning: every character renders, a break as a space. No render reads
 `$seed`, so every check on it warns, a malformed overlay value included.
 
 **Malformed is fatal because the plate is total.** A declared cell always holds

@@ -1433,7 +1433,7 @@ fn array_of_single_line_richtext_caches_each_element() {
 
 /// `multiline: false` at the render floor: one block imports to content for
 /// both codecs; more is refused for `richtext`, and folds onto one line for
-/// `text`, each break and the whitespace beside it one space.
+/// `text`, each break one space and the length kept.
 #[test]
 fn single_line_coercion_takes_one_block_and_folds_or_refuses_more() {
     for ty in ["richtext", "text"] {
@@ -1450,9 +1450,8 @@ fn single_line_coercion_takes_one_block_and_folds_or_refuses_more() {
         assert!(content.is_inline(), "{value:?}");
         quillmark_content::export::to_plaintext(&content)
     };
-    assert_eq!(folded("one\n\ntwo"), "one two");
-    assert_eq!(folded("  123 ABW/CC \n100 Main St\n\tBase, ST\n"), "  123 ABW/CC 100 Main St Base, ST");
-    assert_eq!(folded("\none\n"), "one");
+    assert_eq!(folded("one\n\ntwo"), "one  two");
+    assert_eq!(folded("\none \ntwo\n"), " one  two");
 }
 
 #[test]

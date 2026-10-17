@@ -45,9 +45,10 @@ not: a stored document carrying it stops validating.
 
 **`multiline` widens one way.** From `false` to `true` it only admits more, so
 it is a PATCH. From `true` to `false` it tightens a constraint: a stored
-document holding a second line or block stops validating
-(`validation::not_single_line`), so it is a MAJOR unless each stored value is
-first reduced to one line.
+`richtext` holding a second block stops validating
+(`validation::not_single_line`) and a stored `text` holding a second line
+renders it as a space (`validation::line_break_folded`), so it is a MAJOR
+unless each stored value is first reduced to one line.
 
 ## Document Syntax
 

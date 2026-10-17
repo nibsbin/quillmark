@@ -37,7 +37,7 @@ order, the blueprint's `enum` annotation, and acroform dropdown order.
 Turning a field's `multiline` from `true` to `false` is MAJOR unless every
 stored value is first reduced to one line: a `richtext` holding a second block
 stops validating (`validation::not_single_line`), and a `text` holding a second
-line renders it folded onto one (`validation::line_break_folded`).
+line renders it as a space (`validation::line_break_folded`).
 
 ## How Authors Select Versions
 

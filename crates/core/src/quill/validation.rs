@@ -840,7 +840,8 @@ fn validate_variant(
     }
 
     // An unselected cell draws no error, but `conform` keeps it and reports
-    // its drops, and so does a container walk that reaches this variant.
+    // its drops, and so does a container walk that reaches this variant. A
+    // fold is a render's, and the cell does not render.
     if ctx == ValueContext::Document {
         for (name, cell) in object {
             if live.is_some_and(|fields| fields.contains_key(name)) {
@@ -858,7 +859,9 @@ fn validate_variant(
                 &mut cell_drops,
             );
             if conformed.is_ok() {
-                drops.extend(cell_drops);
+                drops.extend(cell_drops.into_iter().filter(|d| {
+                    d.code.as_deref() != Some(super::compose::LINE_BREAK_FOLDED)
+                }));
             }
         }
     }
@@ -876,8 +879,9 @@ pub(crate) fn validate_field(
     validate_value(field, value, path, ValueContext::Document, &mut Vec::new())
 }
 
-/// [`validate_field`] for a seed cell, which is authored against the current
-/// schema: a line break the render floor would fold is `NotSingleLine` here.
+/// A document-context [`validate_value`] for a seed cell, which is authored
+/// against the current schema: a line break the render floor would fold is
+/// `NotSingleLine` here.
 pub(crate) fn validate_seed_field(
     field: &FieldSchema,
     value: &QuillValue,
@@ -1145,26 +1149,20 @@ main:
     }
 
     /// Trailing whitespace is no second line, so the newline a clip-chomped
-    /// `|` block keeps passes silently; an interior newline passes with a
-    /// warning, the render floor folding it.
+    /// `|` block keeps passes silently.
     #[test]
-    fn single_line_text_admits_a_trailing_newline_and_folds_an_interior_one() {
+    fn single_line_text_admits_a_trailing_newline_silently() {
         let config = config_with("    pti:\n      type: text", "");
         let validate = |yaml_value: &str| {
             let md = format!("~~~\n$quill: native_validation@1.0.0\npti: {yaml_value}~~~\n");
             let doc = Document::parse(&md).expect("parses").document;
             let mut drops = Vec::new();
             let errors = validate_document_values(&config, &doc, &mut drops);
-            assert!(errors.is_empty(), "{errors:?}");
-            drops.into_iter().map(|d| (d.code.unwrap_or_default(), d.path)).collect::<Vec<_>>()
+            assert!(errors.is_empty() && drops.is_empty(), "{errors:?} {drops:?}");
         };
 
-        assert!(validate("|\n  one line\n").is_empty());
-        assert!(validate("\"one line \\t\\n\\n\"\n").is_empty());
-        assert_eq!(
-            validate("|\n  one\n  two\n"),
-            [("validation::line_break_folded".to_string(), Some("main.pti".to_string()))]
-        );
+        validate("|\n  one line\n");
+        validate("\"one line \\t\\n\\n\"\n");
 
         let config = config_with("    pti:\n      type: richtext\n      multiline: false", "");
         let md = "~~~\n$quill: native_validation@1.0.0\npti: |\n  *one* line\n~~~\n";

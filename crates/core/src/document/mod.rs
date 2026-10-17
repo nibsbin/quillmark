@@ -368,25 +368,13 @@ pub(crate) fn trim_line_end(
     }
 }
 
-/// Plain content on one line: each line break, with the whitespace beside it,
-/// folds to one space, and a blank line folds away.
+/// Plain content on one line, each line break a space. The length holds, so a
+/// rendered region's offsets still index the stored value.
 pub(crate) fn fold_line_breaks(
     content: quillmark_content::model::Normalized,
 ) -> quillmark_content::model::Normalized {
     let text = quillmark_content::export::to_plaintext(&content);
-    let lines: Vec<&str> = text.split('\n').collect();
-    let last = lines.len() - 1;
-    let folded: Vec<&str> = lines
-        .iter()
-        .enumerate()
-        .map(|(i, line)| match i {
-            0 => line.trim_end(),
-            i if i == last => line.trim_start(),
-            _ => line.trim(),
-        })
-        .filter(|line| !line.is_empty())
-        .collect();
-    quillmark_content::import::from_plaintext(&folded.join(" "))
+    quillmark_content::import::from_plaintext(&text.replace('\n', " "))
 }
 
 pub(crate) mod align;
