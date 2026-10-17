@@ -51,7 +51,7 @@ quillmark render my_quill document.md --stdout | lpr
 ```
 
 `my_quill` is a quill directory, the one holding `Quill.yaml`. The
-[Quickstart](https://borb-sh.github.io/quillmark/getting-started/quickstart/) builds one.
+[Quickstart](https://quillmark.dev/getting-started/quickstart/) builds one.
 
 ## Commands
 
