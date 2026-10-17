@@ -154,7 +154,7 @@ main:
 | `ui`          | object            | no       | UI rendering hints (see [UI Properties](#ui-properties)) |
 | `items`       | object            | for `array` | Element schema for an `array` field (a nested field schema). Required on every array. |
 | `properties`  | object            | for `object` | Nested field schemas for an `object` typed dictionary (or an array's `object`-typed `items`). Required on every `object` field. |
-| `multiline`   | boolean           | for `richtext` | For `text` and `richtext` only: `true` admits more than one line (`text`) or block structure (`richtext`). Absent or `false`, the field is one line or one paragraph: a `text` value's trailing whitespace, the newline a YAML `|` block keeps included, drops before the check, so only a line break inside the value fails. A `richtext` declares it either way. |
+| `multiline`   | boolean           | for `richtext` | For `text` and `richtext` only: `true` admits more than one line (`text`) or block structure (`richtext`). Absent or `false`, the field is one line or one paragraph: a `text` value's trailing whitespace, the newline a YAML `|` block keeps included, drops before the check, and a line break inside a stored `text` value renders as a space with a `validation::line_break_folded` warning, while a write refuses it. A `richtext` declares it either way. |
 
 ### `title`
 

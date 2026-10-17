@@ -874,6 +874,10 @@ mod args_canon {
             "validation::cardinality",
             crate::quill::compose::cardinality_warning(&path, 37, 38).args,
         );
+        add(
+            crate::quill::compose::LINE_BREAK_FOLDED,
+            crate::quill::compose::line_break_folded_warning(&path).args,
+        );
         let card = crate::path::DocPath::card(None, 0);
         add(
             "validation::unknown_card",

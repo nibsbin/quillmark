@@ -32,6 +32,7 @@ A document checked against its quill's schema.
 - `validation::enum_violation`
 - `validation::format_violation`
 - `validation::held_stored`
+- `validation::line_break_folded`
 - `validation::not_single_line`
 - `validation::not_plain`
 - `validation::out_of_variant`

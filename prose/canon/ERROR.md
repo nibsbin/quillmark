@@ -465,6 +465,7 @@ Three outcomes, and the wire tells them apart only with this table in hand, sinc
 | `validation::seed_unknown_field` | — | code-determined |
 | `validation::not_single_line` | — | code-determined |
 | `validation::not_plain` | — | code-determined |
+| `validation::line_break_folded` | — | code-determined |
 | `edit::invalid_field_name` | `field` | structured |
 | `edit::unknown_field` | `field` | structured |
 | `edit::invalid_kind_name` | `kind` | structured |

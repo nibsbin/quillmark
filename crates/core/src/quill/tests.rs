@@ -1431,18 +1431,28 @@ fn array_of_single_line_richtext_caches_each_element() {
     );
 }
 
-/// `multiline: false` at the coercion layer, for both content codecs: one
-/// block imports to content, more is refused naming the declared type.
+/// `multiline: false` at the render floor: one block imports to content for
+/// both codecs; more is refused for `richtext`, and folds onto one line for
+/// `text`, each break and the whitespace beside it one space.
 #[test]
-fn single_line_coercion_takes_one_block_and_refuses_more_for_both_content_types() {
+fn single_line_coercion_takes_one_block_and_folds_or_refuses_more() {
     for ty in ["richtext", "text"] {
         let field = format!("    f:\n      type: {ty}\n      multiline: false\n");
         assert!(coerce(&field, serde_json::json!("just one line")).is_ok_and(|v| v.is_object()));
-        assert_eq!(
-            coerce(&field, serde_json::json!("one\n\ntwo")),
-            Err(("f".to_string(), format!("{ty}(single_line)")))
-        );
     }
+    assert_eq!(
+        coerce("    f:\n      type: richtext\n      multiline: false\n", serde_json::json!("one\n\ntwo")),
+        Err(("f".to_string(), "richtext(single_line)".to_string()))
+    );
+    let folded = |value: &str| {
+        let coerced = coerce("    f:\n      type: text\n", serde_json::json!(value)).expect("folds");
+        let content = quillmark_content::serial::from_canonical_value(&coerced).expect("content");
+        assert!(content.is_inline(), "{value:?}");
+        quillmark_content::export::to_plaintext(&content)
+    };
+    assert_eq!(folded("one\n\ntwo"), "one two");
+    assert_eq!(folded("  123 ABW/CC \n100 Main St\n\tBase, ST\n"), "  123 ABW/CC 100 Main St Base, ST");
+    assert_eq!(folded("\none\n"), "one");
 }
 
 #[test]
@@ -1770,6 +1780,48 @@ fn a_literal_longer_than_max_is_a_load_error() {
          items: { type: text }\n",
     )
     .expect("a literal at the cap fits it");
+}
+
+/// A stored line break in a one-line `text` renders folded and warns, at a top
+/// field and an array element alike; conform warns and leaves the stored
+/// value as authored.
+#[test]
+fn a_stored_line_break_in_one_line_text_renders_folded_and_stays_stored() {
+    let quill = quill_from_yaml(&with_header(
+        "main:\n  fields:\n    address: { type: text }\n    cc:\n      type: array\n      items: { type: text }\n",
+    ));
+    let mut doc = Document::parse(
+        "~~~\n$quill: q@1.0\n$kind: main\naddress: \"123 ABW/CC\\n100 Main St\"\ncc: [\"a\\nb\"]\n~~~\n",
+    )
+    .expect("parses")
+    .document;
+
+    let plate = quill.compile_data(&doc, test_date()).expect("renders");
+    assert_eq!(plate["address"]["text"], "123 ABW/CC 100 Main St");
+    assert_eq!(plate["cc"][0]["text"], "a b");
+
+    let folded: Vec<(Severity, Option<String>)> = quill
+        .validate(&doc)
+        .into_iter()
+        .filter(|d| d.code.as_deref() == Some("validation::line_break_folded"))
+        .map(|d| (d.severity, d.path))
+        .collect();
+    assert_eq!(
+        folded,
+        [
+            (Severity::Warning, Some("main.address".to_string())),
+            (Severity::Warning, Some("main.cc[0]".to_string())),
+        ]
+    );
+
+    let conformed = quill.conform(&mut doc).expect("conforms");
+    assert!(conformed
+        .iter()
+        .any(|d| d.code.as_deref() == Some("conform::field_not_single_line")));
+    assert_eq!(
+        doc.main().payload().get("address").and_then(|v| v.as_str()),
+        Some("123 ABW/CC\n100 Main St")
+    );
 }
 
 /// The obligation family, never a gate: an over-filled document renders, with

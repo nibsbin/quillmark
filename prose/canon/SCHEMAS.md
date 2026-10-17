@@ -467,12 +467,19 @@ Coercion rules per type:
   paragraph for `richtext`. The empty content satisfies it, so a blank or
   blank-filled field passes. A one-line `text` drops its trailing whitespace
   first (`trim_line_end`), so the newline a clip-chomped YAML `|` keeps is no
-  second line and the value rests without it; only an interior newline fails.
-  The constraint is checked in three places:
-  coercion (`CoercionError` for a document value), validation
+  second line and the value rests without it. The constraint is checked in
+  three places: coercion (`CoercionError` for a document value), validation
   (`validation::not_single_line`, the `TypeMismatch` fatality class, as a
   backstop for a content that bypassed coercion), and load-time default import
-  (a schema literal that violates it is a load error). Blueprint annotates a
+  (a schema literal that violates it is a load error).
+- **A stored line break in one-line `text` folds at render.** The render floor
+  folds each interior line break, with the whitespace beside it, to one space
+  and warns `validation::line_break_folded`, so `render` and `validate` admit
+  the value; the stored value is untouched. The strict door still refuses it:
+  a typed write fails `edit::field_not_single_line`, `Quill::conform` warns
+  `conform::field_not_single_line` and leaves it as authored, and a seed fails
+  `quill::seed_not_single_line`. A `richtext` holding a second block has no
+  fold and fails `validation::not_single_line`. Blueprint annotates a
   field declaring `multiline: true` as `text(multiline)<plain>` or
   `richtext(multiline)<markdown>`; `build_transform_schema` emits
   `quillmark:multiline: true` on it and on every `$body`

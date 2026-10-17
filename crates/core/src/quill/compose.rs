@@ -384,7 +384,7 @@ pub(crate) fn seed_overlay_diagnostics(
             continue;
         };
         let qv = QuillValue::from_json(value.clone());
-        for violation in super::validation::validate_field(field_schema, &qv, &field_path) {
+        for violation in super::validation::validate_seed_field(field_schema, &qv, &field_path) {
             diags.push(seed_violation_diagnostic(&violation));
         }
         collect_unknown_in(field_schema, value, &field_path, &mut diags);
@@ -1422,6 +1422,26 @@ fn collect_cardinality_diags(
     field.each_child(json, path, &mut |child, value, at| {
         collect_cardinality_diags(child, value, at, out)
     });
+}
+
+pub(crate) const LINE_BREAK_FOLDED: &str = "validation::line_break_folded";
+
+pub(crate) fn line_break_folded_warning(path: &DocPath) -> Diagnostic {
+    let path = path.to_string();
+    Diagnostic::new(
+        Severity::Warning,
+        format!(
+            "Field `{path}` is one line but holds a line break: it renders with each break as a \
+             space."
+        ),
+    )
+    .with_code(LINE_BREAK_FOLDED.to_string())
+    .with_path(path)
+    .with_hint(
+        "Rewrite the value on one line, or declare `multiline: true` in the schema to keep its \
+         breaks."
+            .to_string(),
+    )
 }
 
 pub(crate) fn cardinality_warning(path: &DocPath, max: u32, actual: usize) -> Diagnostic {

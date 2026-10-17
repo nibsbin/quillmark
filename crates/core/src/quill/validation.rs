@@ -867,12 +867,32 @@ fn validate_variant(
 }
 
 /// Validate a single document value against a field schema at the given path.
+#[cfg(test)]
 pub(crate) fn validate_field(
     field: &FieldSchema,
     value: &QuillValue,
     path: &DocPath,
 ) -> Vec<ValidationError> {
     validate_value(field, value, path, ValueContext::Document, &mut Vec::new())
+}
+
+/// [`validate_field`] for a seed cell, which is authored against the current
+/// schema: a line break the render floor would fold is `NotSingleLine` here.
+pub(crate) fn validate_seed_field(
+    field: &FieldSchema,
+    value: &QuillValue,
+    path: &DocPath,
+) -> Vec<ValidationError> {
+    let mut drops = Vec::new();
+    let mut errors = validate_value(field, value, path, ValueContext::Document, &mut drops);
+    errors.extend(
+        drops
+            .into_iter()
+            .filter(|d| d.code.as_deref() == Some(super::compose::LINE_BREAK_FOLDED))
+            .filter_map(|d| d.path)
+            .map(|path| ValidationError::NotSingleLine { path }),
+    );
+    errors
 }
 
 /// Validate a schema literal value (a `default:` declared in Quill.yaml)
@@ -1125,21 +1145,26 @@ main:
     }
 
     /// Trailing whitespace is no second line, so the newline a clip-chomped
-    /// `|` block keeps passes; an interior newline fails.
+    /// `|` block keeps passes silently; an interior newline passes with a
+    /// warning, the render floor folding it.
     #[test]
-    fn single_line_text_admits_a_trailing_newline_and_refuses_an_interior_one() {
+    fn single_line_text_admits_a_trailing_newline_and_folds_an_interior_one() {
         let config = config_with("    pti:\n      type: text", "");
         let validate = |yaml_value: &str| {
             let md = format!("~~~\n$quill: native_validation@1.0.0\npti: {yaml_value}~~~\n");
             let doc = Document::parse(&md).expect("parses").document;
-            validate_typed_document(&config, &doc)
+            let mut drops = Vec::new();
+            let errors = validate_document_values(&config, &doc, &mut drops);
+            assert!(errors.is_empty(), "{errors:?}");
+            drops.into_iter().map(|d| (d.code.unwrap_or_default(), d.path)).collect::<Vec<_>>()
         };
 
-        assert!(validate("|\n  one line\n").is_ok());
-        assert!(validate("\"one line \\t\\n\\n\"\n").is_ok());
-        let errors = validate("|\n  one\n  two\n").unwrap_err();
-        assert_eq!(errors.len(), 1, "{errors:?}");
-        assert_eq!(errors[0].to_diagnostic().code.as_deref(), Some("validation::not_single_line"));
+        assert!(validate("|\n  one line\n").is_empty());
+        assert!(validate("\"one line \\t\\n\\n\"\n").is_empty());
+        assert_eq!(
+            validate("|\n  one\n  two\n"),
+            [("validation::line_break_folded".to_string(), Some("main.pti".to_string()))]
+        );
 
         let config = config_with("    pti:\n      type: richtext\n      multiline: false", "");
         let md = "~~~\n$quill: native_validation@1.0.0\npti: |\n  *one* line\n~~~\n";
