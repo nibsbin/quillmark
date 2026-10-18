@@ -232,14 +232,14 @@ and `Quill::validate` reports nothing about it.
 | Type       | Notes |
 |------------|-------|
 | `enum`     | A closed set of string values; requires a `values:` list. Also accepts its [blank](#the-blank-values-is-for-choices-not-for-the-absence-of-one) (`""`), which is not a declared member. The [schema](#reading-the-schema-programmatically) emits `values:` as declared, with no `""` |
-| `text`     | Open, **unformatted** text over the canonical content: the same nav/regions as `richtext`, but a literal codec (delimiters stay literal, no markup). One line; add `multiline: true` to admit line breaks. A plate that computes with the value reads it as a `str` through [`qm.str`](typst-backend.md#text-as-a-str) |
+| `text`     | Open, **unformatted** text over the canonical content: the same nav/regions as `richtext`, but a literal codec (delimiters stay literal, no markup). One line; add `multiline: true` to admit line breaks. Optional `max:`, a character cap (see [`max`](#max-what-the-page-holds)). A plate that computes with the value reads it as a `str` through [`qm.str`](typst-backend.md#text-as-a-str) |
 | `number`   | Numeric scalar (integers and decimals) |
 | `integer`  | Integer-only numeric scalar, sized as an `i64`; a literal past that range takes `number` |
 | `boolean`  | `true` or `false` |
 | `array`    | Ordered list; requires an `items:` element schema. Optional `max:`, the element count the page holds (see [`max`](#max-what-the-page-holds)) |
 | `date`     | A strict calendar date `YYYY-MM-DD`, or `today` (see [Dated by the render](#dated-by-the-render-today)); rejects any time component |
 | `datetime` | A strict offset-less wall-clock datetime `YYYY-MM-DDThh:mm[:ss]`; rejects offsets, the space separator, fractional seconds, and bare dates |
-| `richtext` | Rich, **formatted** prose over a canonical content; backends lower it to the target format. Markdown is its import/export projection. One paragraph; `multiline: true` admits paragraphs, lists and other blocks. Declare `multiline:` either way, `true` or `false`: leaving it out is a load error |
+| `richtext` | Rich, **formatted** prose over a canonical content; backends lower it to the target format. Markdown is its import/export projection. One paragraph; `multiline: true` admits paragraphs, lists and other blocks. Declare `multiline:` either way, `true` or `false`: leaving it out is a load error. Optional `max:`, a character cap |
 | `object`   | Structured map; requires a `properties:` map |
 | `matrix`   | A vocabulary the author ticks; requires a `members:` roster, and `open: true` lets a document add items. Its value is the set of held members, each an object of the field's `properties:` (see [Matrix](#matrix-a-vocabulary-the-author-ticks)) |
 
@@ -595,11 +595,13 @@ statements:
   items: { type: text, max: 350 }   # each statement
 ```
 
-A character is a Unicode scalar value of the plain text the page shows: a
-richtext's markup does not count, a line break counts as one, and trailing line
-breaks do not count. A longer value draws a **warning**,
+A character is a Unicode scalar value of the plain text: a richtext's markup
+does not count, and neither does a table or an image; a line break counts as
+one, and trailing line breaks, or a one-line `text`'s trailing spaces, do not
+count. An unquoted number counts as its text, so `ssn: 1234567890` is ten
+characters. A longer value draws a **warning**,
 `validation::over_length`, at its own path with `max` and `actual`, and renders
-as written; a `default:` or a kind's `seed:` longer than the cap fails to load
+as written; a `default:` holding a value longer than its cap, at any depth, or a kind's `seed:` fails to load
 (`quill::default_over_length`, `quill::seed_over_length`).
 The blueprint shows `# up to 1350 characters`, and an array of capped text
 `# up to 4, each up to 350 characters`. On an `acroform` quill the cap is the

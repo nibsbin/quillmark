@@ -1402,7 +1402,7 @@ fn validate_cardinality(config: &QuillConfig, doc: &Document) -> Vec<Diagnostic>
 /// world, or an array's elements is capped by its own declaration. The walk
 /// descends only what the document authored, since an absent cell has no count
 /// to exceed.
-fn collect_cardinality_diags(
+pub(crate) fn collect_cardinality_diags(
     field: &FieldSchema,
     json: &serde_json::Value,
     path: &DocPath,

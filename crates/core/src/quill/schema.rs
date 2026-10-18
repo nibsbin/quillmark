@@ -18,6 +18,14 @@ pub const CONTENT_MEDIA_TYPE: &str = "application/quillmark-content+json";
 /// wire for editor and backend consumers.
 pub const QUILLMARK_MULTILINE_KEY: &str = "quillmark:multiline";
 
+/// Transform-schema keywords carrying a field's `max:` in the unit its type
+/// counts: elements on an array, characters on a text field. A cap warns and
+/// never refuses, so it rides a `quillmark:` annotation rather than JSON
+/// Schema's asserting `maxItems` / `maxLength`, which a standard validator
+/// would enforce against a document the engine renders.
+pub const QUILLMARK_MAX_ITEMS_KEY: &str = "quillmark:maxItems";
+pub const QUILLMARK_MAX_LENGTH_KEY: &str = "quillmark:maxLength";
+
 /// Transform-schema keyword marking a `text` field: the literal-codec
 /// sibling of richtext. It rides the same [`CONTENT_MEDIA_TYPE`], so backends
 /// lower it identically; this annotation only tells editors to mount a
@@ -74,10 +82,7 @@ fn discriminant_schema(field: &FieldSchema) -> serde_json::Value {
 /// The descriptor marks richtext fields with `contentMediaType:
 /// application/quillmark-content+json` (see [`CONTENT_MEDIA_TYPE`]) and
 /// date/date-time fields with the corresponding JSON Schema `format`. A
-/// `max:` crosses in the keyword that names its unit: `maxItems` on an array,
-/// `maxLength` on a text field, where it counts the content's plain text
-/// ([`quillmark_content::export::char_count`]), the content object itself
-/// being what a standard validator sees.
+/// `max:` crosses as [`QUILLMARK_MAX_ITEMS_KEY`] or [`QUILLMARK_MAX_LENGTH_KEY`].
 ///
 /// `$body` is injected into a kind's `properties` only when that kind's
 /// `body.enabled` is not `false`. A body-disabled kind's `$body` is absent,
@@ -151,7 +156,7 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
                     );
                 }
                 if let Some(max) = field.max {
-                    schema.insert("maxLength".to_string(), max.into());
+                    schema.insert(QUILLMARK_MAX_LENGTH_KEY.to_string(), max.into());
                 }
             }
             FieldType::Text { multiline } => {
@@ -175,7 +180,7 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
                     );
                 }
                 if let Some(max) = field.max {
-                    schema.insert("maxLength".to_string(), max.into());
+                    schema.insert(QUILLMARK_MAX_LENGTH_KEY.to_string(), max.into());
                 }
             }
             FieldType::Number => {
@@ -209,7 +214,7 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
                     schema.insert("items".to_string(), field_to_schema(items));
                 }
                 if let Some(max) = field.max {
-                    schema.insert("maxItems".to_string(), max.into());
+                    schema.insert(QUILLMARK_MAX_ITEMS_KEY.to_string(), max.into());
                 }
             }
             FieldType::Object => {
@@ -401,7 +406,8 @@ main:
 
     /// One `max:` in Quill.yaml, two keywords on the wire: the unit a reader
     /// of the declaration takes from the sibling `type:` is in the keyword's
-    /// name here, as JSON Schema spells it.
+    /// name here, and no asserting JSON Schema keyword refuses what the engine
+    /// renders.
     #[test]
     fn max_crosses_as_the_keyword_that_names_its_unit() {
         let json = build_from_yaml(
@@ -427,15 +433,18 @@ main:
         .as_json()
         .clone();
         let fields = &json["properties"];
-        assert_eq!(fields["citation"]["maxLength"], 1350);
-        assert_eq!(fields["ssn"]["maxLength"], 9);
-        assert_eq!(fields["statements"]["maxItems"], 4);
-        assert_eq!(fields["statements"]["items"]["maxLength"], 350);
-        for (field, keyword) in [("citation", "maxItems"), ("statements", "maxLength")] {
+        assert_eq!(fields["citation"]["quillmark:maxLength"], 1350);
+        assert_eq!(fields["ssn"]["quillmark:maxLength"], 9);
+        assert_eq!(fields["statements"]["quillmark:maxItems"], 4);
+        assert_eq!(fields["statements"]["items"]["quillmark:maxLength"], 350);
+        for (field, keyword) in [("citation", "quillmark:maxItems"), ("statements", "quillmark:maxLength")] {
             assert!(fields[field].get(keyword).is_none(), "{field} carries no {keyword}");
         }
-        assert!(fields["notes"].get("maxItems").is_none(), "an uncapped array");
-        assert!(fields["notes"]["items"].get("maxLength").is_none(), "uncapped text");
+        assert!(fields["notes"].get("quillmark:maxItems").is_none(), "an uncapped array");
+        assert!(fields["notes"]["items"].get("quillmark:maxLength").is_none(), "uncapped text");
+        for keyword in ["maxItems", "maxLength"] {
+            assert!(fields["statements"].get(keyword).is_none(), "a cap never asserts");
+        }
     }
 
     #[test]

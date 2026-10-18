@@ -1122,12 +1122,26 @@ impl FieldSchema {
     }
 
     /// The character count `max:` caps on a `text` or `richtext` value
-    /// ([`quillmark_content::export::char_count`] of its plain text). `None`
-    /// for any other type, or a value its codec cannot read.
+    /// ([`quillmark_content::export::char_count`] of its plain text), read as
+    /// the render floor reads it: a bare scalar or a one-string array as its
+    /// text, and a one-line `text` less its trailing whitespace. `None` for any
+    /// other type, or a value the floor cannot read as text.
     pub(crate) fn char_count(&self, value: &serde_json::Value) -> Option<usize> {
-        let content = self.r#type.codec()?.decode_field(value).ok()?;
+        let codec = self.r#type.codec()?;
+        let lenient;
+        let value = if value.is_object() || value.is_string() {
+            value
+        } else {
+            lenient = serde_json::Value::String(super::config::lenient_string(value)?);
+            &lenient
+        };
+        let content = codec.decode_field(value).ok()?;
         let text = quillmark_content::export::to_plaintext(&content);
-        Some(quillmark_content::export::char_count(&text))
+        let text = match self.r#type {
+            FieldType::Text { multiline: false } => text.trim_end(),
+            _ => text.as_str(),
+        };
+        Some(quillmark_content::export::char_count(text))
     }
 }
 

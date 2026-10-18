@@ -330,21 +330,21 @@ document over the limit renders with the plate's own rule for the surplus.
 `max:` on a `text` or `richtext` field is the character count past which the
 value overflows its box or its record: a fixed-character form box, or a limit
 the system of record enforces. Its witness is a value the plate or the record
-cuts. A character is a Unicode scalar value of the plain text
-(`FieldSchema::char_count`): a richtext counts its projection, not its markup, a
-line break counts one, trailing line breaks none, and no normalization runs.
-The surfaces mirror the array's: `validation::over_length` at the cell's own
-path, args `{max, actual}`, a warning at every depth, an array's elements capped
-by their `items:`; a `default:` past it is `quill::default_over_length` and a
-seed past it `quill::seed_over_length`; a typed write accepts it. The plate receives
-the value verbatim, whether it fits being the plate's own judgement; `acroform`
-writes the cap as the widget's `/MaxLen`, and drops it from a widget whose value
-is already past it, where a viewer would cut stored text. The blueprint prints
-`# up to N characters`, and on an array of capped text `each up to N
-characters` beside the array's own cap. The transform schema carries the cap
-in the keyword that names its unit, `maxItems` on an array and `maxLength` on
-a text field, so a wire consumer never reads the type to know what a number
-counts.
+cuts. A character is a Unicode scalar value of the plain text as the render
+floor reads it (`FieldSchema::char_count`): a richtext's projection, not its
+markup, so a table or an image counts nothing; a bare scalar as its text; a
+line break as one; trailing line breaks, and a one-line `text`'s trailing
+whitespace, as none. No normalization runs.
+
+| Surface | Over the cap |
+|---|---|
+| `validate`, render | warns `validation::over_length` at the cell's own path, args `{max, actual}`, at every depth; an array's elements are capped by their `items:` |
+| load | a `default:` past a cap at any depth is `quill::default_over_length` (`quill::default_over_max` for elements); a seed is `quill::seed_over_length` |
+| typed write | accepts the value |
+| plate | receives the value verbatim; whether it fits is the plate's judgement |
+| `acroform` | writes the cap as the widget's `/MaxLen`, except where the drawn value is past it in UTF-16 units, the viewer's count, where a viewer would cut stored text |
+| blueprint | `# up to N characters`; on an array of capped text, `each up to N characters` beside the array's own cap |
+| transform schema | `quillmark:maxLength`, and `quillmark:maxItems` for an array's cap, naming the unit so a wire consumer never reads the type; JSON Schema's own `maxLength` and `maxItems` assert, and a cap never refuses |
 
 There is no `min:`. `min: 1` is `required:` by another name, and no cell is
 required: an unanswered one renders its `default:` or its blank

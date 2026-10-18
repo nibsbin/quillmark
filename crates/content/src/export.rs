@@ -180,8 +180,7 @@ pub fn to_plaintext(rt: &Content) -> String {
 }
 
 /// The character count a text cap (`max:`) measures on a plaintext projection:
-/// Unicode scalar values, trailing line breaks aside. One rule for every
-/// reader of the cap, so a validator and a form widget agree on a value.
+/// Unicode scalar values, trailing line breaks aside.
 pub fn char_count(text: &str) -> usize {
     text.trim_end_matches(['\n', '\r']).chars().count()
 }

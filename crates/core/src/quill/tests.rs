@@ -1802,6 +1802,10 @@ fn a_text_literal_longer_than_max_is_a_load_error() {
         "    r:\n      type: richtext\n      multiline: false\n      max: 3\n      default: abcd\n",
         "    rows:\n      type: array\n      default: [ab, abcd]\n      \
          items: { type: text, max: 3 }\n",
+        "    rows:\n      type: array\n      default: [{ code: abcd }]\n      items:\n        \
+         type: object\n        properties:\n          code: { type: text, max: 3 }\n",
+        "    m:\n      type: matrix\n      members: { a: A }\n      default: { a: { note: abcd } }\n      \
+         properties:\n        note: { type: text, max: 3 }\n",
     ] {
         let err = quill_with_field(field).expect_err("a literal over the cap");
         assert!(
@@ -1814,12 +1818,15 @@ fn a_text_literal_longer_than_max_is_a_load_error() {
         "    r:\n      type: richtext\n      multiline: false\n      max: 3\n      default: \"**abc**\"\n",
     )
     .expect("markup is not counted");
+    quill_with_field("    s:\n      type: text\n      max: 3\n      default: \"abc  \"\n")
+        .expect("a one-line text renders without its trailing spaces");
 }
 
 /// The record limit, never a gate: a text value past its `max:` renders and
-/// warns at its own path, a capped element of an array included. Richtext
-/// counts what reaches the page, not its markup, and a character outside the
-/// BMP is one.
+/// warns at its own path, a capped element of an array included. The count is
+/// the floor's: richtext less its markup, an unquoted number as its text, a
+/// one-line text less its trailing spaces, and a character outside the BMP as
+/// one.
 #[test]
 fn an_over_long_text_warns_at_its_own_path() {
     let quill = quill_from_yaml(&with_header(
@@ -1827,6 +1834,8 @@ fn an_over_long_text_warns_at_its_own_path() {
   fields:
     citation: { type: richtext, multiline: true, max: 10 }
     ssn: { type: text, max: 4 }
+    zip: { type: text, max: 5 }
+    code: { type: text, max: 3 }
     statements:
       type: array
       max: 4
@@ -1835,26 +1844,29 @@ fn an_over_long_text_warns_at_its_own_path() {
     ));
     let doc = Document::parse(
         "~~~\n$quill: q@1.0\n$kind: main\ncitation: \"**Exactly** a\"\nssn: \"\u{1F600}abcd\"\n\
-         statements: [abc, abcd]\n~~~\n",
+         zip: 1234567\ncode: \"abc   \"\nstatements: [abc, abcd]\n~~~\n",
     )
     .expect("parses")
     .document;
 
-    let found: Vec<(String, String)> = quill
+    let found: Vec<(String, serde_json::Value)> = quill
         .validate(&doc)
         .into_iter()
         .filter(|d| d.code.as_deref() == Some("validation::over_length"))
         .map(|d| {
             assert_eq!(d.severity, Severity::Warning, "a cap never gates render");
-            (d.path.unwrap_or_default(), format!("{:?}", d.args))
+            (d.path.unwrap_or_default(), d.args["actual"].clone())
         })
         .collect();
     assert_eq!(
-        found.iter().map(|(p, _)| p.as_str()).collect::<Vec<_>>(),
-        ["main.ssn", "main.statements[1]"],
-        "`Exactly a` is 9 characters; the emoji is one"
+        found,
+        [
+            ("main.ssn".to_string(), serde_json::json!(5)),
+            ("main.zip".to_string(), serde_json::json!(7)),
+            ("main.statements[1]".to_string(), serde_json::json!(4)),
+        ],
+        "`Exactly a` is 9 characters and `abc   ` renders as 3"
     );
-    assert!(found[0].1.contains("\"actual\": Number(5)"), "{}", found[0].1);
     assert!(
         quill.compile_data(&doc, test_date()).is_ok(),
         "an over-long document still renders"
