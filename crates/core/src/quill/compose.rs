@@ -1376,12 +1376,13 @@ pub(crate) fn out_of_variant_warning(path: &DocPath, owner: &str, member: &str) 
     ))
 }
 
-/// Report every `array` the document fills past its declared `max:`, across the
-/// main card and every composable card.
+/// Report every `array` and text field the document fills past its declared
+/// `max:`, across the main card and every composable card.
 ///
-/// `max:` is page geometry: the element count past which the surplus leaves the
-/// page the field is laid out on. A warning, never a gate — a
-/// document over the limit renders, with the plate's own rule for the surplus.
+/// `max:` is the count past which the surplus leaves the box the field is laid
+/// out in: elements on an array, characters on a text field. A warning, never a
+/// gate — a document over the limit renders, with the plate's own rule for the
+/// surplus.
 fn validate_cardinality(config: &QuillConfig, doc: &Document) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
     for (schema, card, path) in schema_cards(config, doc) {
@@ -1396,12 +1397,12 @@ fn validate_cardinality(config: &QuillConfig, doc: &Document) -> Vec<Diagnostic>
     diags
 }
 
-/// Warn at each over-filled array `field` holds, at whatever depth: an array
-/// nested in a typed dictionary, a matrix member, a live variant world, or
-/// another array's elements is capped by its own declaration. The walk descends
-/// only what the document authored, since an absent array has no count to
-/// exceed.
-fn collect_cardinality_diags(
+/// Warn at each over-filled array or over-long text `field` holds, at whatever
+/// depth: a cell nested in a typed dictionary, a matrix member, a live variant
+/// world, or an array's elements is capped by its own declaration. The walk
+/// descends only what the document authored, since an absent cell has no count
+/// to exceed.
+pub(crate) fn collect_cardinality_diags(
     field: &FieldSchema,
     json: &serde_json::Value,
     path: &DocPath,
@@ -1417,6 +1418,11 @@ fn collect_cardinality_diags(
         let count = json.as_array().map_or(1, Vec::len);
         if count > max as usize {
             out.push(cardinality_warning(path, max, count));
+        }
+    }
+    if let (Some(max), Some(count)) = (field.max, field.char_count(json)) {
+        if count > max as usize {
+            out.push(over_length_warning(path, max, count));
         }
     }
     field.each_child(json, path, &mut |child, value, at| {
@@ -1459,6 +1465,22 @@ pub(crate) fn cardinality_warning(path: &DocPath, max: u32, actual: usize) -> Di
     .with_arg("actual", actual.into())
     .with_hint(format!(
         "Remove {} element(s), or move the surplus onto another document.",
+        actual.saturating_sub(max as usize)
+    ))
+}
+
+pub(crate) fn over_length_warning(path: &DocPath, max: u32, actual: usize) -> Diagnostic {
+    let path = path.to_string();
+    Diagnostic::new(
+        Severity::Warning,
+        format!("Field `{path}` holds {actual} characters but the quill allows at most {max}."),
+    )
+    .with_code("validation::over_length".to_string())
+    .with_path(path)
+    .with_arg("max", max.into())
+    .with_arg("actual", actual.into())
+    .with_hint(format!(
+        "Shorten the value by {} character(s).",
         actual.saturating_sub(max as usize)
     ))
 }

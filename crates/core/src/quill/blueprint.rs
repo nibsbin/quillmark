@@ -301,12 +301,27 @@ fn push_leading(items: &mut CardItems, field: &FieldSchema) {
     }
 }
 
-/// The `# up to <N>` leading line for a capped array, in the own-line form
-/// `# composable (0..N)` already takes for a card kind's cardinality. A limit
-/// the blueprint does not show is a limit the MCP flow learns from prose, which
-/// is what `max:` exists to stop.
+/// The `# up to <N>` leading line for a capped array, `# up to <N> characters`
+/// for a capped text field, in the own-line form `# composable (0..N)` already
+/// takes for a card kind's cardinality. An array's elements have no leading
+/// line of their own, so their cap rides the array's (`each up to <N>
+/// characters`). A limit the blueprint does not show is a limit the MCP flow
+/// learns from prose, which is what `max:` exists to stop.
 fn cap_hint(field: &FieldSchema) -> Option<String> {
-    field.max.map(|max| format!("up to {max}"))
+    let own = field.max.map(|max| match field.r#type {
+        FieldType::Text { .. } | FieldType::RichText { .. } => format!("up to {max} characters"),
+        _ => format!("up to {max}"),
+    });
+    let each = field
+        .items
+        .as_deref()
+        .filter(|items| items.r#type.codec().is_some())
+        .and_then(|items| items.max)
+        .map(|max| format!("each up to {max} characters"));
+    match (own, each) {
+        (Some(own), Some(each)) => Some(format!("{own}, {each}")),
+        (own, each) => own.or(each),
+    }
 }
 
 /// A leaf's cell: its `default:`, else empty.

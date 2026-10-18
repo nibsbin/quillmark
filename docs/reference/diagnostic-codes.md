@@ -36,6 +36,7 @@ A document checked against its quill's schema.
 - `validation::not_single_line`
 - `validation::not_plain`
 - `validation::out_of_variant`
+- `validation::over_length`
 - `validation::seed_overlay_shape`
 - `validation::seed_unknown_field`
 - `validation::seed_unknown_kind`
@@ -54,6 +55,7 @@ Loading a quill: `Quill.yaml`, its files, its seeds.
 - `quill::default_held_stored`
 - `quill::default_not_in_enum`
 - `quill::default_on_namespace`
+- `quill::default_over_length`
 - `quill::default_over_max`
 - `quill::default_type_mismatch`
 - `quill::deprecated_groups`
@@ -107,6 +109,7 @@ Loading a quill: `Quill.yaml`, its files, its seeds.
 - `quill::seed_not_plain`
 - `quill::seed_not_single_line`
 - `quill::seed_out_of_variant`
+- `quill::seed_over_length`
 - `quill::seed_overlay_shape`
 - `quill::seed_redundant`
 - `quill::seed_type_mismatch`

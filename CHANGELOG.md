@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Field types
+
+- feat(core): **`max:` caps a `text` or `richtext` field's characters**, as
+  it caps an `array`'s elements: Unicode scalar values of the plain text the
+  render floor reads, a richtext's markup aside. A longer value warns the new
+  `validation::over_length` (`{max, actual}`) and renders; a `default:` past
+  a cap at any depth fails `quill::default_over_length`, and a seed
+  `quill::seed_over_length`. The blueprint prints `# up to N characters`, the
+  transform schema `quillmark:maxLength` (and `quillmark:maxItems` for an
+  array's cap), and an `acroform` widget bound to a capped cell carries
+  `/MaxLen`, omitted where the drawn value is already past it in UTF-16
+  units. `schema()` emits `max` on a text field. (#2241)
+
 ## v0.126.1 - 2026-10-17
 
 A stored line break in a one-line `text` value renders as a space, where it

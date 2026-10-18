@@ -308,6 +308,12 @@ the member schema, whose `additionalProperties` is the added item, and whose
 
 ### Cardinality
 
+`max:` is the count of what a cell holds, in the cell's own unit: elements on
+an `array`, characters on a `text` or `richtext`. The sibling `type:` names the
+unit, which is why one key serves both. It is never a value bound: a number's
+magnitude is a domain, not a capacity, and a bound on one would be another key
+with its own witness.
+
 `max:` on an `array` is the element count past which the surplus leaves the page
 the field is laid out on: page geometry, not style. A non-negative integer, and
 a `default:` longer than it is `quill::default_over_max`: a default past the cap
@@ -320,6 +326,25 @@ declaration. The surplus is unclaimed input
 ([What blocks a render](#what-blocks-a-render)), never a gate — fatal ≡ won't-render is an
 invariant of the diagnostic model ([ERROR.md](ERROR.md#warning-flow)), and a
 document over the limit renders with the plate's own rule for the surplus.
+
+`max:` on a `text` or `richtext` field is the character count past which the
+value overflows its box or its record: a fixed-character form box, or a limit
+the system of record enforces. Its witness is a value the plate or the record
+cuts. A character is a Unicode scalar value of the plain text as the render
+floor reads it (`FieldSchema::char_count`): a richtext's projection, not its
+markup, so a table or an image counts nothing; a bare scalar as its text; a
+line break as one; trailing line breaks, and a one-line `text`'s trailing
+whitespace, as none. No normalization runs.
+
+| Surface | Over the cap |
+|---|---|
+| `validate`, render | warns `validation::over_length` at the cell's own path, args `{max, actual}`, at every depth; an array's elements are capped by their `items:` |
+| load | a `default:` past a cap at any depth is `quill::default_over_length` (`quill::default_over_max` for elements); a seed is `quill::seed_over_length` |
+| typed write | accepts the value |
+| plate | receives the value verbatim; whether it fits is the plate's judgement |
+| `acroform` | writes the cap as the widget's `/MaxLen`, except where the drawn value is past it in UTF-16 units, the viewer's count, where a viewer would cut stored text |
+| blueprint | `# up to N characters`; on an array of capped text, `each up to N characters` beside the array's own cap |
+| transform schema | `quillmark:maxLength`, and `quillmark:maxItems` for an array's cap, naming the unit so a wire consumer never reads the type; JSON Schema's own `maxLength` and `maxItems` assert, and a cap never refuses |
 
 There is no `min:`. `min: 1` is `required:` by another name, and no cell is
 required: an unanswered one renders its `default:` or its blank
@@ -895,6 +920,7 @@ read it.
 | body prose under `body.enabled: false` | `validation::body_disabled` | absent |
 | a variant cell outside the selected world | `validation::out_of_variant` | absent ([Enum variants](#enum-variants)) |
 | elements past an array's `max:` | `validation::cardinality` | verbatim; the plate's own rule leaves the surplus off the page ([Cardinality](#cardinality)) |
+| characters past a text field's `max:` | `validation::over_length` | verbatim ([Cardinality](#cardinality)) |
 | a `$seed` overlay naming no declared kind or field, or a `$body` its kind disables | `validation::seed_unknown_kind`, `seed_unknown_field` | absent, as `$seed` always is |
 | a `$seed` overlay that is not a mapping, or a `$body` that is not a string | `validation::seed_overlay_shape` | absent |
 | a key the schema does not declare at its position, at any depth of a claimed card | `validation::unknown_field` | verbatim; absent inside a variant container, and a `$path` key absent from a Typst plate's data, which spells each typed dictionary's address with it |
@@ -1081,7 +1107,8 @@ The type-gated keys:
   (the columns) are the authored carriers, so the view round-trips.
 - `open`: admits items a document adds beside a `matrix`'s roster, valid only
   there and emitted only when `true`.
-- `max`: an `array`'s element cap ([Cardinality](#cardinality)), valid only there.
+- `max`: an `array`'s element cap or a text field's character cap
+  ([Cardinality](#cardinality)), valid only on `array`, `text` and `richtext`.
 - `ui.layout`: the control a field asks an editor to draw where the shape admits
   more than one and the default reads wrong. `table` is valid only on an `array`
   whose `items` is an `object`; `quill::invalid_ui` names the field anywhere

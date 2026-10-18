@@ -81,7 +81,7 @@ pub(crate) fn scalar_as_string(value: &serde_json::Value) -> Option<String> {
 /// Shared by the `String` and `Content` coercion branches, which both reduce
 /// a lenient value to a string before adopting it (as the field value itself,
 /// or as markdown to import).
-fn lenient_string(value: &serde_json::Value) -> Option<String> {
+pub(super) fn lenient_string(value: &serde_json::Value) -> Option<String> {
     if let Some(s) = value.as_str() {
         return Some(s.to_string());
     }
@@ -1602,38 +1602,46 @@ impl QuillConfig {
         );
     }
 
-    /// Refuse a `default:` array literal longer than the field's own `max:`.
-    /// A quill rendering an unanswered cell past the cap it declares would warn
-    /// (`validation::cardinality`) on a document nobody authored.
+    /// Refuse a `default:` literal past a cap it holds, at any depth: the
+    /// cardinality walk over the literal, as a document's value, with an
+    /// element count past `max:` as `quill::default_over_max` and a character
+    /// count as `quill::default_over_length`. A quill rendering an unanswered
+    /// cell past the cap it declares would warn on a document nobody authored.
     fn reject_over_max_default(
         schema: &FieldSchema,
         owner_label: &str,
         errors: &mut Vec<Diagnostic>,
     ) {
-        let Some(max) = schema.max else { return };
-        let Some(actual) = schema
-            .default
-            .as_ref()
-            .and_then(|v| v.as_json().as_array())
-            .map(Vec::len)
-            .filter(|len| *len > max as usize)
-        else {
+        let Some(default) = schema.default.as_ref() else {
             return;
         };
-        errors.push(
-            Diagnostic::new(
-                Severity::Error,
-                format!(
-                    "{owner_label} carries a default of {actual} elements but declares \
-                     `max: {max}`."
-                ),
-            )
-            .with_code("quill::default_over_max".to_string())
-            .with_hint(format!(
-                "Shorten the default to {max} elements, or raise `max:` to the count the \
-                 page holds."
-            )),
-        );
+        let owner = crate::path::DocPath::new().field(owner_label);
+        let mut over = Vec::new();
+        super::compose::collect_cardinality_diags(schema, default.as_json(), &owner, &mut over);
+        let owner = owner.to_string();
+        for diag in over {
+            let (code, unit) = match diag.code.as_deref() {
+                Some("validation::cardinality") => ("quill::default_over_max", "elements"),
+                _ => ("quill::default_over_length", "characters"),
+            };
+            let (max, actual) = (&diag.args["max"], &diag.args["actual"]);
+            let at = diag.path.as_deref().unwrap_or_default();
+            let at = match at.strip_prefix(owner.as_str()) {
+                Some("") | None => String::new(),
+                Some(rest) => format!(" at `{}`", rest.trim_start_matches('.')),
+            };
+            errors.push(
+                Diagnostic::new(
+                    Severity::Error,
+                    format!(
+                        "{owner_label} carries a default of {actual} {unit}{at} past its \
+                         `max: {max}`."
+                    ),
+                )
+                .with_code(code.to_string())
+                .with_hint(format!("Shorten the default to {max} {unit}, or raise `max:`.")),
+            );
+        }
     }
 
     /// Validate a `default:` literal against the declared schema, pushing

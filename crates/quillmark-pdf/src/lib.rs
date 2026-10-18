@@ -72,10 +72,13 @@ pub struct FieldSpec {
     pub font_size: Option<f32>,
     /// Value text justification, written to `/Q`.
     pub align: TextAlign,
+    /// A text field's character cap, written to `/MaxLen`; ignored on every
+    /// other kind.
+    pub max_len: Option<u32>,
 }
 
 impl FieldSpec {
-    /// `schema_field`, `value`, and `tooltip` start `None`; the three type
+    /// `schema_field`, `value`, `tooltip`, and `max_len` start `None`; the three type
     /// dials start at the house style (Helvetica, auto-size, left).
     pub fn new(name: String, page: usize, rect: [f32; 4], field_type: FieldType) -> Self {
         Self {
@@ -89,6 +92,7 @@ impl FieldSpec {
             font: FormFont::default(),
             font_size: None,
             align: TextAlign::default(),
+            max_len: None,
         }
     }
 

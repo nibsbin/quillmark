@@ -86,16 +86,20 @@ Per field, in order:
    parse time. The title is the name a person uses for the field, which an
    agent otherwise sees only as the key; it prints only where declared, so a
    title restating the key is visible waste rather than a default.
-2. `# up to <N>`: emitted where a field or an `object` property declares an
-   `array`'s `max:` — the two positions the leading slot exists at. The cap is page
-   geometry — the count past which the surplus leaves the page — and the author
+2. `# up to <N>`: emitted where a field or an `object` property declares
+   `max:` — the two positions the leading slot exists at. The cap is the count
+   past which the surplus leaves the page or the record, and the author
    most likely to exceed it is the MCP flow that reads the spec once and then
    writes. `schema()` is consulted before that author writes and the
    `validation::cardinality` warning arrives after the overflowing document
    exists, so a limit the blueprint does not show is a limit learned from
    `description:` prose. It rides the own-line slot in the form
    `# composable (0..N)` already takes for a card kind's cardinality, which
-   leaves the `<type>[<format>]` grammar untouched.
+   leaves the `<type>[<format>]` grammar untouched. On a `text` or `richtext`
+   field it reads `# up to <N> characters`. An array's
+   elements have no slot of their own, so a cap its text `items:` declare rides
+   the array's line: `# up to 4, each up to 350 characters`, or `# each up to
+   350 characters` on an uncapped array.
 3. `# e.g. <members>`: emitted for a `matrix` declaring columns or `open`,
    whose empty `{}` cell shows neither the columns nor the spelling of an
    added item. It holds one member, present and so held:

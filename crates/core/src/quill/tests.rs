@@ -1723,10 +1723,10 @@ fn a_table_column_is_a_leaf_and_a_container_column_is_refused() {
     }
 }
 
-/// `max:` caps an array's element count, which is arity: a fact no other type
-/// has, and no `items:` declaration can carry.
+/// `max:` caps what a field holds: an array's elements, a text field's
+/// characters. No other type has a count to cap.
 #[test]
-fn max_loads_on_an_array_and_is_refused_elsewhere() {
+fn max_loads_on_an_array_or_text_and_is_refused_elsewhere() {
     let config =
         quill_with_field("    rows:\n      type: array\n      max: 37\n      items: { type: text }\n")
             .expect("an array may declare its cap");
@@ -1736,9 +1736,21 @@ fn max_loads_on_an_array_and_is_refused_elsewhere() {
         serde_json::json!(37)
     );
 
+    let config = quill_with_field(
+        "    s:\n      type: text\n      max: 9\n    r:\n      type: richtext\n      \
+         multiline: true\n      max: 1350\n",
+    )
+    .expect("a text field may declare its cap");
+    assert_eq!(config.main.fields["s"].max, Some(9));
+    assert_eq!(
+        config.schema()["main"]["fields"]["r"]["max"],
+        serde_json::json!(1350)
+    );
+
     for field in [
         "    n:\n      type: integer\n      max: 3\n",
-        "    s:\n      type: text\n      max: 3\n",
+        "    b:\n      type: boolean\n      max: 3\n",
+        "    e:\n      type: enum\n      values: [a]\n      max: 3\n",
     ] {
         let err = quill_with_field(field).expect_err("max off an array");
         assert!(
@@ -1779,6 +1791,86 @@ fn a_literal_longer_than_max_is_a_load_error() {
          items: { type: text }\n",
     )
     .expect("a literal at the cap fits it");
+}
+
+/// A text default is held to its own cap, and an array default's elements to
+/// the cap their `items:` declare.
+#[test]
+fn a_text_literal_longer_than_max_is_a_load_error() {
+    for field in [
+        "    s:\n      type: text\n      max: 3\n      default: abcd\n",
+        "    r:\n      type: richtext\n      multiline: false\n      max: 3\n      default: abcd\n",
+        "    rows:\n      type: array\n      default: [ab, abcd]\n      \
+         items: { type: text, max: 3 }\n",
+        "    rows:\n      type: array\n      default: [{ code: abcd }]\n      items:\n        \
+         type: object\n        properties:\n          code: { type: text, max: 3 }\n",
+        "    m:\n      type: matrix\n      members: { a: A }\n      default: { a: { note: abcd } }\n      \
+         properties:\n        note: { type: text, max: 3 }\n",
+    ] {
+        let err = quill_with_field(field).expect_err("a literal over the cap");
+        assert!(
+            err.iter().any(|d| d.code.as_deref() == Some("quill::default_over_length")),
+            "{field}: {err:?}"
+        );
+    }
+
+    quill_with_field(
+        "    r:\n      type: richtext\n      multiline: false\n      max: 3\n      default: \"**abc**\"\n",
+    )
+    .expect("markup is not counted");
+    quill_with_field("    s:\n      type: text\n      max: 3\n      default: \"abc  \"\n")
+        .expect("a one-line text renders without its trailing spaces");
+}
+
+/// The record limit, never a gate: a text value past its `max:` renders and
+/// warns at its own path, a capped element of an array included. The count is
+/// the floor's: richtext less its markup, an unquoted number as its text, a
+/// one-line text less its trailing spaces, and a character outside the BMP as
+/// one.
+#[test]
+fn an_over_long_text_warns_at_its_own_path() {
+    let quill = quill_from_yaml(&with_header(
+        r#"main:
+  fields:
+    citation: { type: richtext, multiline: true, max: 10 }
+    ssn: { type: text, max: 4 }
+    zip: { type: text, max: 5 }
+    code: { type: text, max: 3 }
+    statements:
+      type: array
+      max: 4
+      items: { type: text, max: 3 }
+"#,
+    ));
+    let doc = Document::parse(
+        "~~~\n$quill: q@1.0\n$kind: main\ncitation: \"**Exactly** a\"\nssn: \"\u{1F600}abcd\"\n\
+         zip: 1234567\ncode: \"abc   \"\nstatements: [abc, abcd]\n~~~\n",
+    )
+    .expect("parses")
+    .document;
+
+    let found: Vec<(String, serde_json::Value)> = quill
+        .validate(&doc)
+        .into_iter()
+        .filter(|d| d.code.as_deref() == Some("validation::over_length"))
+        .map(|d| {
+            assert_eq!(d.severity, Severity::Warning, "a cap never gates render");
+            (d.path.unwrap_or_default(), d.args["actual"].clone())
+        })
+        .collect();
+    assert_eq!(
+        found,
+        [
+            ("main.ssn".to_string(), serde_json::json!(5)),
+            ("main.zip".to_string(), serde_json::json!(7)),
+            ("main.statements[1]".to_string(), serde_json::json!(4)),
+        ],
+        "`Exactly a` is 9 characters and `abc   ` renders as 3"
+    );
+    assert!(
+        quill.compile_data(&doc, test_date()).is_ok(),
+        "an over-long document still renders"
+    );
 }
 
 /// A stored line break in a one-line `text` renders folded and warns, at a top
@@ -1940,6 +2032,28 @@ fn a_cap_rides_its_own_leading_line_under_the_description() {
         bp.contains("  # Tags for the box.\n  # up to 1\n  tags:"),
         "{bp}"
     );
+
+    let text = config_with_sections(
+        r#"main:
+  fields:
+    ssn: { type: text, max: 9 }
+    statements:
+      type: array
+      max: 4
+      items: { type: text, max: 350 }
+    notes:
+      type: array
+      items: { type: text, max: 80 }
+"#,
+    )
+    .expect("text caps load")
+    .blueprint();
+    assert!(text.contains("# up to 9 characters\nssn:"), "{text}");
+    assert!(
+        text.contains("# up to 4, each up to 350 characters\nstatements:"),
+        "{text}"
+    );
+    assert!(text.contains("# each up to 80 characters\nnotes:"), "{text}");
 
     let uncapped = config_with_sections(
         "main:\n  fields:\n    rows:\n      type: array\n      items: { type: text }\n",

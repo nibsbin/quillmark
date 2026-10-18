@@ -18,7 +18,11 @@ use crate::bind::BoundWidget;
 /// A text value holding a newline makes its widget multiline whatever the
 /// schema said: a richtext of two paragraphs, an array, a block scalar. The
 /// appearance stream stacks the lines, and a single-line widget shows a viewer
-/// one, so the rule reads the string the widget draws.
+/// one, so the rule reads the string the widget draws. A value past the
+/// widget's character cap stamps without `/MaxLen`, which would otherwise
+/// leave a viewer to cut the value the document holds; the count is the
+/// viewer's, UTF-16 units of the drawn string, since a non-ASCII `/V` is
+/// UTF-16BE.
 pub fn field_spec(widget: &BoundWidget, data: &Value) -> FieldSpec {
     let mut spec = FieldSpec::new(
         widget.name.clone(),
@@ -32,6 +36,11 @@ pub fn field_spec(widget: &BoundWidget, data: &Value) -> FieldSpec {
     {
         *multiline = true;
     }
+    spec.max_len = widget.max_len.filter(|max| {
+        spec.value
+            .as_deref()
+            .is_none_or(|v| v.encode_utf16().count() <= *max as usize)
+    });
     spec.schema_field = widget.schema_field.clone();
     spec.tooltip = widget.tooltip.clone();
     spec
@@ -340,6 +349,7 @@ mod tests {
             rect: [72.0, 700.0, 300.0, 720.0],
             field_type: FieldType::Text { multiline: false },
             tooltip: None,
+            max_len: None,
         }
     }
 
@@ -360,6 +370,19 @@ mod tests {
         assert!(multiline("bio"), "richtext of two paragraphs");
         assert!(multiline("address"), "block scalar");
         assert!(!multiline("full_name"), "one line keeps the schema's answer");
+    }
+
+    #[test]
+    fn a_value_past_the_cap_stamps_without_max_len() {
+        let capped = BoundWidget {
+            max_len: Some(5),
+            ..text_widget("name")
+        };
+        let max_len = |name: &str| field_spec(&capped, &json!({ "name": name })).max_len;
+        assert_eq!(max_len("Ada"), Some(5));
+        assert_eq!(max_len("Ada L"), Some(5), "at the cap");
+        assert_eq!(max_len("Ada Lovelace"), None, "a viewer would cut the value");
+        assert_eq!(max_len("abcd\u{1F600}"), None, "a viewer counts UTF-16 units");
     }
 
     #[test]

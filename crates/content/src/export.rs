@@ -179,6 +179,12 @@ pub fn to_plaintext(rt: &Content) -> String {
     rt.text.chars().filter(|&c| c != ISLAND_SLOT).collect()
 }
 
+/// The character count a text cap (`max:`) measures on a plaintext projection:
+/// Unicode scalar values, trailing line breaks aside.
+pub fn char_count(text: &str) -> usize {
+    text.trim_end_matches(['\n', '\r']).chars().count()
+}
+
 struct Ctx<'a> {
     rt: &'a Content,
     /// One entry per [`Content::lines`] entry.

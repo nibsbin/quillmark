@@ -875,6 +875,10 @@ mod args_canon {
             crate::quill::compose::cardinality_warning(&path, 37, 38).args,
         );
         add(
+            "validation::over_length",
+            crate::quill::compose::over_length_warning(&path, 1350, 1351).args,
+        );
+        add(
             crate::quill::compose::LINE_BREAK_FOLDED,
             crate::quill::compose::line_break_folded_warning(&path).args,
         );

@@ -31,7 +31,8 @@ pub use fill::blank;
 pub use formats::{parse_date, parse_datetime, CalendarDate, ParseDateError, TODAY};
 pub use ignore::QuillIgnore;
 pub use schema::{
-    build_transform_schema, CONTENT_MEDIA_TYPE, QUILLMARK_MULTILINE_KEY, QUILLMARK_ROSTER_KEY,
+    build_transform_schema, CONTENT_MEDIA_TYPE, QUILLMARK_MAX_ITEMS_KEY, QUILLMARK_MAX_LENGTH_KEY,
+    QUILLMARK_MULTILINE_KEY, QUILLMARK_ROSTER_KEY,
 };
 pub use tree::FileTreeNode;
 pub use validation::ValidationError;

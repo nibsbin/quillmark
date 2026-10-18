@@ -20,6 +20,8 @@ pub struct BoundWidget {
     pub rect: [f32; 4],
     pub field_type: WidgetType,
     pub tooltip: Option<String>,
+    /// The bound text field's `max:`, the character cap its widget carries.
+    pub max_len: Option<u32>,
 }
 
 /// Why binding a `form.yaml` field failed. Every variant is a load error.
@@ -121,6 +123,9 @@ fn bind_field(
         rect: place(&field.name, field.page, field.rect, canvas_boxes)?,
         field_type,
         tooltip,
+        max_len: schema.max.filter(|_| {
+            matches!(schema.r#type, SchemaType::Text { .. } | SchemaType::RichText { .. })
+        }),
     })
 }
 
@@ -135,6 +140,7 @@ fn bind_unbound(
         rect: place(&widget.name, widget.page, widget.rect, canvas_boxes)?,
         field_type: widget_type(&widget.kind),
         tooltip: widget.tooltip.clone(),
+        max_len: None,
     })
 }
 
@@ -613,6 +619,41 @@ main:
         let bound = bind_widgets(&spec, &cfg, &mb).unwrap();
         assert_eq!(bound[0].tooltip.as_deref(), Some("From the schema."));
         assert_eq!(bound[1].tooltip.as_deref(), Some("Override."));
+    }
+
+    /// A text cell's `max:` is the widget's character cap; an array's is an
+    /// element count, which no joined widget carries.
+    #[test]
+    fn a_text_cap_binds_as_the_widget_max_len() {
+        let yaml = r#"
+quill: { name: capped, version: 0.1.0, backend: acroform, description: x }
+main:
+  body: { enabled: false }
+  fields:
+    ssn: { type: text, max: 9 }
+    statements:
+      type: array
+      max: 4
+      items: { type: text, max: 350 }
+"#;
+        let cfg = QuillConfig::from_yaml_with_warnings(yaml).unwrap().0;
+        let spec = FormSpec::parse(
+            br#"{
+              "schema": "quillmark/form@0.2.0",
+              "fields": [
+                { "name": "SSN", "schema_field": "ssn", "page": 0,
+                  "rect": { "x": 0, "y": 0, "w": 1, "h": 1 } },
+                { "name": "S0", "schema_field": "statements.0", "page": 0,
+                  "rect": { "x": 0, "y": 2, "w": 1, "h": 1 } },
+                { "name": "All", "schema_field": "statements", "page": 0,
+                  "rect": { "x": 0, "y": 4, "w": 1, "h": 1 } }
+              ]
+            }"#,
+        )
+        .unwrap();
+        let bound = bind_widgets(&spec, &cfg, &[[0.0, 0.0, 612.0, 792.0]]).unwrap();
+        let caps: Vec<Option<u32>> = bound.iter().map(|w| w.max_len).collect();
+        assert_eq!(caps, [Some(9), Some(350), None]);
     }
 
     #[test]

@@ -395,6 +395,9 @@ fn write_widget_object(
                 if *multiline {
                     field.field_flags(FieldFlags::MULTILINE);
                 }
+                if let Some(max) = spec.max_len {
+                    field.text_max_len(i32::try_from(max).unwrap_or(i32::MAX));
+                }
                 if let Some(v) = spec.value.as_deref() {
                     field.text_value(TextStr(v));
                 }
