@@ -189,6 +189,8 @@ A bound field's kind is derived from the **capability of the resolved schema fie
 
 A container has no widget shape of its own; the cells inside it do, and each binds at its own address. A matrix member's own address is its tick, a checkbox at `qualifications.flight_cc` checked when the document holds the member, and its columns are text widgets beside it (`qualifications.flight_cc.detail`). An open matrix fails to load (`quill::open_matrix_unsupported`): a form has no widget for an item a document adds.
 
+A text widget bound to a `text` or `richtext` field declaring `max:` carries it as `/MaxLen`, so a viewer stops input at the cap. A value already past the cap stamps without `/MaxLen`, since a viewer would otherwise cut the value the document holds; `validate` warns `validation::over_length` either way. A scalar array's `max:` counts elements, so the joined widget carries none.
+
 `multiline` on a text widget comes from the schema field's own `multiline: true` (a scalar array is always multiline), and a value holding a newline (a richtext of two paragraphs, a block scalar) widens it to multiline whatever the schema said, so the file shows every line the preview does.
 
 A text widget takes a richtext value's plain text: the backend draws paragraphs and nothing else. A heading, rule, code block, list, quote, table or image in a content field warns `backend::declined_construct` at `validate` and at render, once per field and construct. The text of a heading, code block, list or quote still lands as lines; a rule, table or image lands as nothing.

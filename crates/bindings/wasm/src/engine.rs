@@ -94,9 +94,11 @@ export interface QuillFieldSchema {
     ui?: QuillFieldUi;
     properties?: Record<string, QuillFieldSchema>;
     items?: QuillFieldSchema;
-    /** The element count past which an `array` overflows the page it is laid
-     *  out on. Valid only on an `array`. Never gates render: a document over
-     *  the cap warns `validation::cardinality` and renders. */
+    /** An `array`'s element cap, or a `text` or `richtext` field's
+     *  character cap (Unicode scalar values of its plain text, trailing line
+     *  breaks aside). Valid only on those types. Never gates render: a
+     *  document over the cap warns `validation::cardinality` or
+     *  `validation::over_length` and renders. */
     max?: number;
     /** The line shape of a `text` or `richtext` field, valid nowhere else.
      *  Absent or `false`, the field is one line (`text`) or one paragraph with

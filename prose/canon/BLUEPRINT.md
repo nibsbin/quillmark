@@ -95,7 +95,11 @@ Per field, in order:
    exists, so a limit the blueprint does not show is a limit learned from
    `description:` prose. It rides the own-line slot in the form
    `# composable (0..N)` already takes for a card kind's cardinality, which
-   leaves the `<type>[<format>]` grammar untouched.
+   leaves the `<type>[<format>]` grammar untouched. A `text` or `richtext`
+   field's `max:` prints `# up to <N> characters` in the same slot. An array's
+   elements have no slot of their own, so a cap its text `items:` declare rides
+   the array's line: `# up to 4, each up to 350 characters`, or `# each up to
+   350 characters` on an uncapped array.
 3. `# e.g. <members>`: emitted for a `matrix` declaring columns or `open`,
    whose empty `{}` cell shows neither the columns nor the spelling of an
    added item. It holds one member, present and so held:

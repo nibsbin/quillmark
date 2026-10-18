@@ -412,6 +412,7 @@ card_kinds:
       author: {{ type: text, default: Anon }}
       level: {{ type: number, default: 1 }}
       names: {{ type: array, max: 1, items: {{ type: text }} }}
+      code: {{ type: text, max: 3 }}
       office: {{ type: object, properties: {{ symbol: {{ type: text }} }} }}
       mark:
         type: enum
@@ -438,6 +439,7 @@ card_kinds:
         ("", "{ names: null }", "quill::seed_redundant"),
         ("", "{}", "quill::seed_redundant"),
         ("", "{ author: \"a\\nb\" }", "quill::seed_not_single_line"),
+        ("", "{ code: abcd }", "quill::seed_over_length"),
         ("  seed: { title: T }", "{ names: [a] }", "quill::invalid_card_schema"),
     ] {
         let errors = crate::quill::QuillConfig::from_yaml_with_warnings(&quill_yaml(main, seed))

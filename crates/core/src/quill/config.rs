@@ -1602,38 +1602,62 @@ impl QuillConfig {
         );
     }
 
-    /// Refuse a `default:` array literal longer than the field's own `max:`.
-    /// A quill rendering an unanswered cell past the cap it declares would warn
-    /// (`validation::cardinality`) on a document nobody authored.
+    /// Refuse a `default:` literal past the field's own `max:`: an array with
+    /// more elements, a text field with more characters, or an array whose
+    /// element is longer than its `items:` cap. A quill rendering an unanswered
+    /// cell past the cap it declares would warn (`validation::cardinality`,
+    /// `validation::over_length`) on a document nobody authored.
     fn reject_over_max_default(
         schema: &FieldSchema,
         owner_label: &str,
         errors: &mut Vec<Diagnostic>,
     ) {
-        let Some(max) = schema.max else { return };
-        let Some(actual) = schema
-            .default
-            .as_ref()
-            .and_then(|v| v.as_json().as_array())
-            .map(Vec::len)
-            .filter(|len| *len > max as usize)
-        else {
+        let Some(default) = schema.default.as_ref().map(QuillValue::as_json) else {
             return;
         };
-        errors.push(
-            Diagnostic::new(
-                Severity::Error,
-                format!(
-                    "{owner_label} carries a default of {actual} elements but declares \
-                     `max: {max}`."
-                ),
-            )
-            .with_code("quill::default_over_max".to_string())
-            .with_hint(format!(
-                "Shorten the default to {max} elements, or raise `max:` to the count the \
-                 page holds."
-            )),
-        );
+        let over = |message: String, hint: String| {
+            Diagnostic::new(Severity::Error, message)
+                .with_code("quill::default_over_max".to_string())
+                .with_hint(hint)
+        };
+        if let Some(max) = schema.max {
+            if let Some(actual) = default.as_array().map(Vec::len).filter(|n| *n > max as usize) {
+                errors.push(over(
+                    format!(
+                        "{owner_label} carries a default of {actual} elements but declares \
+                         `max: {max}`."
+                    ),
+                    format!(
+                        "Shorten the default to {max} elements, or raise `max:` to the count \
+                         the page holds."
+                    ),
+                ));
+            }
+            if let Some(actual) = schema.char_count(default).filter(|n| *n > max as usize) {
+                errors.push(over(
+                    format!(
+                        "{owner_label} carries a default of {actual} characters but declares \
+                         `max: {max}`."
+                    ),
+                    format!("Shorten the default to {max} characters, or raise `max:`."),
+                ));
+            }
+        }
+        let (Some(items), Some(elements)) = (schema.items.as_deref(), default.as_array()) else {
+            return;
+        };
+        let Some(max) = items.max else { return };
+        for (i, element) in elements.iter().enumerate() {
+            if let Some(actual) = items.char_count(element).filter(|n| *n > max as usize) {
+                errors.push(over(
+                    format!(
+                        "{owner_label} carries a default whose element {i} holds {actual} \
+                         characters but its items declare `max: {max}`."
+                    ),
+                    format!("Shorten the element to {max} characters, or raise `max:`."),
+                ));
+            }
+        }
     }
 
     /// Validate a `default:` literal against the declared schema, pushing

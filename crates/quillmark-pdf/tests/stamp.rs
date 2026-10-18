@@ -111,6 +111,16 @@ fn stamped(fields: &[FieldSpec]) -> (lopdf::Document, lopdf::Dictionary, HashMap
 }
 
 #[test]
+fn a_text_cap_stamps_as_max_len() {
+    let mut capped = text_field("Ssn", "ssn", 0, [72.0, 700.0, 300.0, 720.0], "123456789");
+    capped.max_len = Some(9);
+    let uncapped = text_field("Name", "name", 0, [72.0, 660.0, 300.0, 680.0], "Ada");
+    let (_, _, by_name) = stamped(&[capped, uncapped]);
+    assert_eq!(by_name["Ssn"].get(b"MaxLen").unwrap().as_i64().unwrap(), 9);
+    assert!(by_name["Name"].get(b"MaxLen").is_err());
+}
+
+#[test]
 fn stamps_all_four_field_types_into_valid_acroform() {
     let (_, af, by_name) = stamped(&all_four_fields());
 

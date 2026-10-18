@@ -618,10 +618,11 @@ pub struct FieldSchema {
     /// `Some` under the same gate as [`properties`](Self::properties), which
     /// rejects the absence as `quill::array_missing_items`.
     pub items: Option<Box<FieldSchema>>,
-    /// The element count past which an `array` overflows the page it is laid
-    /// out on: page geometry, so `Quill::validate` warns
-    /// (`validation::cardinality`) rather than gating the render. Valid only on
-    /// an `array`.
+    /// The cap on what a field holds: an `array`'s element count, or a `text`
+    /// or `richtext` field's character count (Unicode scalar values of its
+    /// plain text). `Quill::validate` warns past it (`validation::cardinality`,
+    /// `validation::over_length`) rather than gating the render. Valid only on
+    /// those three types.
     pub max: Option<u32>,
     /// The object schema every held roster member of a `matrix` composes under:
     /// its `properties:` (the columns). Derived at parse from those columns,
@@ -661,7 +662,8 @@ struct FieldSchemaDef {
     /// Whether a `text` or `richtext` field admits more than one line. Lands
     /// in the [`FieldType::Text`] / [`FieldType::RichText`] payload.
     pub multiline: Option<bool>,
-    /// An `array`'s element cap. Lands in [`FieldSchema::max`].
+    /// An `array`'s element cap or a text field's character cap. Lands in
+    /// [`FieldSchema::max`].
     pub max: Option<u32>,
     /// The roster of a `type: matrix` field, and the only spelling of one.
     /// Lands in the [`FieldType::Matrix`] payload.
@@ -761,7 +763,7 @@ impl FieldSchema {
         let r#type = Self::resolve_text_multiline(def.r#type.r#type, def.multiline)?;
         let r#type = Self::resolve_enum_domain(r#type, def.values)?;
         let r#type = Self::resolve_matrix_roster(r#type, def.members, def.open)?;
-        let max = Self::resolve_array_max(&r#type, def.max)?;
+        let max = Self::resolve_max(&r#type, def.max)?;
         let schema = Self {
             name: key.clone(),
             r#type,
@@ -1103,18 +1105,29 @@ impl FieldSchema {
         }
     }
 
-    /// Fold the sibling `max:` key: an element cap is arity, which only an
-    /// `array` has.
-    fn resolve_array_max(r#type: &FieldType, max: Option<u32>) -> Result<Option<u32>, String> {
+    /// Fold the sibling `max:` key: a count of what the field holds, which
+    /// only an `array` (elements) and a text field (characters) have.
+    fn resolve_max(r#type: &FieldType, max: Option<u32>) -> Result<Option<u32>, String> {
         match (r#type, max) {
-            (FieldType::Array, max) => Ok(max),
+            (FieldType::Array | FieldType::Text { .. } | FieldType::RichText { .. }, max) => {
+                Ok(max)
+            }
             (_, None) => Ok(None),
             (other, Some(_)) => Err(format!(
-                "max: caps an array's element count and is only valid on type: array, \
-                 not on type: {}",
+                "max: caps an array's element count or a text field's character count, \
+                 and is only valid on type: array, text or richtext, not on type: {}",
                 other.as_str()
             )),
         }
+    }
+
+    /// The character count `max:` caps on a `text` or `richtext` value: the
+    /// Unicode scalar values of its plain text, trailing line breaks aside.
+    /// `None` for any other type, or a value its codec cannot read.
+    pub(crate) fn char_count(&self, value: &serde_json::Value) -> Option<usize> {
+        let content = self.r#type.codec()?.decode_field(value).ok()?;
+        let text = quillmark_content::export::to_plaintext(&content);
+        Some(text.trim_end_matches(['\n', '\r']).chars().count())
     }
 }
 

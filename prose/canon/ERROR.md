@@ -189,7 +189,7 @@ families:
   [SCHEMAS.md](SCHEMAS.md#what-blocks-a-render) assigns: an `Error` is
   malformed input, and the document does not render; a `Warning` is unclaimed
   or folded input, which renders. The warnings are
-  `cardinality`, `out_of_variant`, `unknown_card`, `body_disabled`,
+  `cardinality`, `over_length`, `out_of_variant`, `unknown_card`, `body_disabled`,
   `unknown_field`, `line_break_folded`, and the
   `$seed` checks, which warn
   whatever their class because no render reads `$seed`. Beside them it
@@ -460,6 +460,7 @@ Three outcomes, and the wire tells them apart only with this table in hand, sinc
 | `validation::coercion_failed` | `value`, `target` | structured, coarser |
 | `validation::out_of_variant` | `variant`, `selected` | structured |
 | `validation::cardinality` | `max`, `actual` | structured |
+| `validation::over_length` | `max`, `actual` | structured |
 | `validation::seed_unknown_kind` | — | code-determined |
 | `validation::seed_overlay_shape` | — | code-determined |
 | `validation::seed_unknown_field` | — | code-determined |

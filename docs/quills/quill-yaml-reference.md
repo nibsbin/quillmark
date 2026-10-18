@@ -570,8 +570,8 @@ experience:
       duty: { type: text, default: "" }
 ```
 
-`max:` is a non-negative integer, valid only on an `array`, and a `default:`
-longer than it fails to load. A document holding more elements draws
+`max:` is a non-negative integer, valid on an `array` and on the text types
+(below), and a `default:` longer than it fails to load. A document holding more elements draws
 a **warning**, `validation::cardinality`, at the field's path with `max` and
 `actual` in its args — never an error: the document still renders, and the plate
 decides what happens to the surplus. Each declaration carries its own cap, so a
@@ -579,6 +579,29 @@ capped array nested inside a row is checked against its own.
 
 The blueprint shows the cap as an own-line `# up to 37` under the field's
 description, which is where an MCP author reads it before writing.
+
+A `text` or `richtext` field takes `max:` too, counting characters: a record
+limit, or a box printed for a fixed number of them.
+
+```yaml
+citation:
+  type: richtext
+  multiline: true
+  max: 1350               # the record system's limit
+statements:
+  type: array
+  max: 4
+  items: { type: text, max: 350 }   # each statement
+```
+
+A character is a Unicode scalar value of the plain text the page shows: a
+richtext's markup does not count, a line break counts as one, and trailing line
+breaks do not count. A longer value draws a **warning**,
+`validation::over_length`, at its own path with `max` and `actual`, and renders
+as written; a `default:` or a kind's `seed:` longer than the cap fails to load.
+The blueprint shows `# up to 1350 characters`, and an array of capped text
+`# up to 4, each up to 350 characters`. On an `acroform` quill the cap is the
+widget's `/MaxLen`.
 
 There is no `min:`. `min: 1` would be `required:` under another name, and no
 field is required ([`default`](#default)); it would

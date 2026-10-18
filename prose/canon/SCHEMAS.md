@@ -321,6 +321,22 @@ declaration. The surplus is unclaimed input
 invariant of the diagnostic model ([ERROR.md](ERROR.md#warning-flow)), and a
 document over the limit renders with the plate's own rule for the surplus.
 
+`max:` on a `text` or `richtext` field is the character count past which the
+value overflows its box or its record: a fixed-character form box, or a limit
+the system of record enforces. Its witness is a value the plate or the record
+cuts. A character is a Unicode scalar value of the plain text
+(`FieldSchema::char_count`): a richtext counts its projection, not its markup, a
+line break counts one, trailing line breaks none, and no normalization runs.
+The surfaces mirror the array's: `validation::over_length` at the cell's own
+path, args `{max, actual}`, a warning at every depth, an array's elements capped
+by their `items:`; a `default:` past it is `quill::default_over_max` and a seed
+past it `quill::seed_over_length`; a typed write accepts it. The plate receives
+the value verbatim, whether it fits being the plate's own judgement; `acroform`
+writes the cap as the widget's `/MaxLen`, and drops it from a widget whose value
+is already past it, where a viewer would cut stored text. The blueprint prints
+`# up to N characters`, and on an array of capped text `each up to N
+characters` beside the array's own cap.
+
 There is no `min:`. `min: 1` is `required:` by another name, and no cell is
 required: an unanswered one renders its `default:` or its blank
 ([`default`](#default)). It would also contradict a
@@ -895,6 +911,7 @@ read it.
 | body prose under `body.enabled: false` | `validation::body_disabled` | absent |
 | a variant cell outside the selected world | `validation::out_of_variant` | absent ([Enum variants](#enum-variants)) |
 | elements past an array's `max:` | `validation::cardinality` | verbatim; the plate's own rule leaves the surplus off the page ([Cardinality](#cardinality)) |
+| characters past a text field's `max:` | `validation::over_length` | verbatim ([Cardinality](#cardinality)) |
 | a `$seed` overlay naming no declared kind or field, or a `$body` its kind disables | `validation::seed_unknown_kind`, `seed_unknown_field` | absent, as `$seed` always is |
 | a `$seed` overlay that is not a mapping, or a `$body` that is not a string | `validation::seed_overlay_shape` | absent |
 | a key the schema does not declare at its position, at any depth of a claimed card | `validation::unknown_field` | verbatim; absent inside a variant container, and a `$path` key absent from a Typst plate's data, which spells each typed dictionary's address with it |
@@ -1081,7 +1098,8 @@ The type-gated keys:
   (the columns) are the authored carriers, so the view round-trips.
 - `open`: admits items a document adds beside a `matrix`'s roster, valid only
   there and emitted only when `true`.
-- `max`: an `array`'s element cap ([Cardinality](#cardinality)), valid only there.
+- `max`: an `array`'s element cap or a text field's character cap
+  ([Cardinality](#cardinality)), valid only on `array`, `text` and `richtext`.
 - `ui.layout`: the control a field asks an editor to draw where the shape admits
   more than one and the default reads wrong. `table` is valid only on an `array`
   whose `items` is an `object`; `quill::invalid_ui` names the field anywhere
