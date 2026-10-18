@@ -329,8 +329,8 @@ cuts. A character is a Unicode scalar value of the plain text
 line break counts one, trailing line breaks none, and no normalization runs.
 The surfaces mirror the array's: `validation::over_length` at the cell's own
 path, args `{max, actual}`, a warning at every depth, an array's elements capped
-by their `items:`; a `default:` past it is `quill::default_over_max` and a seed
-past it `quill::seed_over_length`; a typed write accepts it. The plate receives
+by their `items:`; a `default:` past it is `quill::default_over_length` and a
+seed past it `quill::seed_over_length`; a typed write accepts it. The plate receives
 the value verbatim, whether it fits being the plate's own judgement; `acroform`
 writes the cap as the widget's `/MaxLen`, and drops it from a widget whose value
 is already past it, where a viewer would cut stored text. The blueprint prints

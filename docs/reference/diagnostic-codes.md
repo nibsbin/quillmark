@@ -55,6 +55,7 @@ Loading a quill: `Quill.yaml`, its files, its seeds.
 - `quill::default_held_stored`
 - `quill::default_not_in_enum`
 - `quill::default_on_namespace`
+- `quill::default_over_length`
 - `quill::default_over_max`
 - `quill::default_type_mismatch`
 - `quill::deprecated_groups`

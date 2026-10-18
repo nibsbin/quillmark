@@ -598,7 +598,8 @@ A character is a Unicode scalar value of the plain text the page shows: a
 richtext's markup does not count, a line break counts as one, and trailing line
 breaks do not count. A longer value draws a **warning**,
 `validation::over_length`, at its own path with `max` and `actual`, and renders
-as written; a `default:` or a kind's `seed:` longer than the cap fails to load.
+as written; a `default:` or a kind's `seed:` longer than the cap fails to load
+(`quill::default_over_length`, `quill::seed_over_length`).
 The blueprint shows `# up to 1350 characters`, and an array of capped text
 `# up to 4, each up to 350 characters`. On an `acroform` quill the cap is the
 widget's `/MaxLen`.

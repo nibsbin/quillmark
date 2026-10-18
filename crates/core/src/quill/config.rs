@@ -1603,9 +1603,10 @@ impl QuillConfig {
     }
 
     /// Refuse a `default:` literal past the field's own `max:`: an array with
-    /// more elements, a text field with more characters, or an array whose
-    /// element is longer than its `items:` cap. A quill rendering an unanswered
-    /// cell past the cap it declares would warn (`validation::cardinality`,
+    /// more elements (`quill::default_over_max`), a text field with more
+    /// characters, or an array whose element is longer than its `items:` cap
+    /// (`quill::default_over_length`). A quill rendering an unanswered cell
+    /// past the cap it declares would warn (`validation::cardinality`,
     /// `validation::over_length`) on a document nobody authored.
     fn reject_over_max_default(
         schema: &FieldSchema,
@@ -1615,14 +1616,15 @@ impl QuillConfig {
         let Some(default) = schema.default.as_ref().map(QuillValue::as_json) else {
             return;
         };
-        let over = |message: String, hint: String| {
+        let over = |code: &str, message: String, hint: String| {
             Diagnostic::new(Severity::Error, message)
-                .with_code("quill::default_over_max".to_string())
+                .with_code(code.to_string())
                 .with_hint(hint)
         };
         if let Some(max) = schema.max {
             if let Some(actual) = default.as_array().map(Vec::len).filter(|n| *n > max as usize) {
                 errors.push(over(
+                    "quill::default_over_max",
                     format!(
                         "{owner_label} carries a default of {actual} elements but declares \
                          `max: {max}`."
@@ -1635,6 +1637,7 @@ impl QuillConfig {
             }
             if let Some(actual) = schema.char_count(default).filter(|n| *n > max as usize) {
                 errors.push(over(
+                    "quill::default_over_length",
                     format!(
                         "{owner_label} carries a default of {actual} characters but declares \
                          `max: {max}`."
@@ -1650,6 +1653,7 @@ impl QuillConfig {
         for (i, element) in elements.iter().enumerate() {
             if let Some(actual) = items.char_count(element).filter(|n| *n > max as usize) {
                 errors.push(over(
+                    "quill::default_over_length",
                     format!(
                         "{owner_label} carries a default whose element {i} holds {actual} \
                          characters but its items declare `max: {max}`."

@@ -1805,7 +1805,7 @@ fn a_text_literal_longer_than_max_is_a_load_error() {
     ] {
         let err = quill_with_field(field).expect_err("a literal over the cap");
         assert!(
-            err.iter().any(|d| d.code.as_deref() == Some("quill::default_over_max")),
+            err.iter().any(|d| d.code.as_deref() == Some("quill::default_over_length")),
             "{field}: {err:?}"
         );
     }
