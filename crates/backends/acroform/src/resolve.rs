@@ -37,7 +37,7 @@ pub fn field_spec(widget: &BoundWidget, data: &Value) -> FieldSpec {
     spec.max_len = widget.max_len.filter(|max| {
         spec.value
             .as_deref()
-            .is_none_or(|v| v.chars().count() <= *max as usize)
+            .is_none_or(|v| quillmark_content::export::char_count(v) <= *max as usize)
     });
     spec.schema_field = widget.schema_field.clone();
     spec.tooltip = widget.tooltip.clone();
@@ -379,6 +379,7 @@ mod tests {
         let max_len = |name: &str| field_spec(&capped, &json!({ "name": name })).max_len;
         assert_eq!(max_len("Ada"), Some(5));
         assert_eq!(max_len("Ada L"), Some(5), "at the cap");
+        assert_eq!(max_len("Ada L\n"), Some(5), "a trailing break is not counted");
         assert_eq!(max_len("Ada Lovelace"), None, "a viewer would cut the value");
     }
 
