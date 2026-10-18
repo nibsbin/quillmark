@@ -73,7 +73,11 @@ fn discriminant_schema(field: &FieldSchema) -> serde_json::Value {
 ///
 /// The descriptor marks richtext fields with `contentMediaType:
 /// application/quillmark-content+json` (see [`CONTENT_MEDIA_TYPE`]) and
-/// date/date-time fields with the corresponding JSON Schema `format`.
+/// date/date-time fields with the corresponding JSON Schema `format`. A
+/// `max:` crosses in the keyword that names its unit: `maxItems` on an array,
+/// `maxLength` on a text field, where it counts the content's plain text
+/// ([`quillmark_content::export::char_count`]), the content object itself
+/// being what a standard validator sees.
 ///
 /// `$body` is injected into a kind's `properties` only when that kind's
 /// `body.enabled` is not `false`. A body-disabled kind's `$body` is absent,
@@ -146,6 +150,9 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
                         serde_json::Value::Bool(true),
                     );
                 }
+                if let Some(max) = field.max {
+                    schema.insert("maxLength".to_string(), max.into());
+                }
             }
             FieldType::Text { multiline } => {
                 // Text rides the *same* content and media type as richtext, so
@@ -166,6 +173,9 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
                         QUILLMARK_MULTILINE_KEY.to_string(),
                         serde_json::Value::Bool(true),
                     );
+                }
+                if let Some(max) = field.max {
+                    schema.insert("maxLength".to_string(), max.into());
                 }
             }
             FieldType::Number => {
@@ -197,6 +207,9 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
                 // `items: {type: object, properties: …}`.
                 if let Some(items) = &field.items {
                     schema.insert("items".to_string(), field_to_schema(items));
+                }
+                if let Some(max) = field.max {
+                    schema.insert("maxItems".to_string(), max.into());
                 }
             }
             FieldType::Object => {
@@ -385,6 +398,45 @@ main:
       type: enum
       values: [approve, disapprove]
 "#;
+
+    /// One `max:` in Quill.yaml, two keywords on the wire: the unit a reader
+    /// of the declaration takes from the sibling `type:` is in the keyword's
+    /// name here, as JSON Schema spells it.
+    #[test]
+    fn max_crosses_as_the_keyword_that_names_its_unit() {
+        let json = build_from_yaml(
+            r#"
+quill:
+  name: x
+  version: 1.0.0
+  backend: typst
+  description: x
+main:
+  fields:
+    citation: { type: richtext, multiline: true, max: 1350 }
+    ssn: { type: text, max: 9 }
+    statements:
+      type: array
+      max: 4
+      items: { type: text, max: 350 }
+    notes:
+      type: array
+      items: { type: text }
+"#,
+        )
+        .as_json()
+        .clone();
+        let fields = &json["properties"];
+        assert_eq!(fields["citation"]["maxLength"], 1350);
+        assert_eq!(fields["ssn"]["maxLength"], 9);
+        assert_eq!(fields["statements"]["maxItems"], 4);
+        assert_eq!(fields["statements"]["items"]["maxLength"], 350);
+        for (field, keyword) in [("citation", "maxItems"), ("statements", "maxLength")] {
+            assert!(fields[field].get(keyword).is_none(), "{field} carries no {keyword}");
+        }
+        assert!(fields["notes"].get("maxItems").is_none(), "an uncapped array");
+        assert!(fields["notes"]["items"].get("maxLength").is_none(), "uncapped text");
+    }
 
     #[test]
     fn blank_title_labels_the_blank_only_where_the_author_names_one() {

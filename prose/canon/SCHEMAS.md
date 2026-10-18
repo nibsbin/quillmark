@@ -335,7 +335,10 @@ the value verbatim, whether it fits being the plate's own judgement; `acroform`
 writes the cap as the widget's `/MaxLen`, and drops it from a widget whose value
 is already past it, where a viewer would cut stored text. The blueprint prints
 `# up to N characters`, and on an array of capped text `each up to N
-characters` beside the array's own cap.
+characters` beside the array's own cap. The transform schema carries the cap
+in the keyword that names its unit, `maxItems` on an array and `maxLength` on
+a text field, so a wire consumer never reads the type to know what a number
+counts.
 
 There is no `min:`. `min: 1` is `required:` by another name, and no cell is
 required: an unanswered one renders its `default:` or its blank
