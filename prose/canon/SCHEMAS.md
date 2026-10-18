@@ -308,6 +308,12 @@ the member schema, whose `additionalProperties` is the added item, and whose
 
 ### Cardinality
 
+`max:` is the count of what a cell holds, in the cell's own unit: elements on
+an `array`, characters on a `text` or `richtext`. The sibling `type:` names the
+unit, which is why one key serves both. It is never a value bound: a number's
+magnitude is a domain, not a capacity, and a bound on one would be another key
+with its own witness.
+
 `max:` on an `array` is the element count past which the surplus leaves the page
 the field is laid out on: page geometry, not style. A non-negative integer, and
 a `default:` longer than it is `quill::default_over_max`: a default past the cap

@@ -570,8 +570,9 @@ experience:
       duty: { type: text, default: "" }
 ```
 
-`max:` is a non-negative integer, valid on an `array` and on the text types
-(below), and a `default:` longer than it fails to load. A document holding more elements draws
+`max:` is a non-negative integer counting what the field holds, in the field's
+own unit: elements on an `array`, characters on the text types (below). It is
+never a bound on a number's value. A `default:` longer than it fails to load. A document holding more elements draws
 a **warning**, `validation::cardinality`, at the field's path with `max` and
 `actual` in its args — never an error: the document still renders, and the plate
 decides what happens to the surplus. Each declaration carries its own cap, so a
