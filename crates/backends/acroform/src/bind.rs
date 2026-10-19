@@ -44,6 +44,13 @@ pub enum BindError {
         page: usize,
         page_count: usize,
     },
+    /// A `rect` with no area, or wholly off its page, where no value it binds
+    /// can show.
+    BadRect {
+        name: String,
+        page: usize,
+        rect: Rect,
+    },
 }
 
 impl BindError {
@@ -53,6 +60,7 @@ impl BindError {
             BindError::Dangling { .. } => "acroform::dangling_binding",
             BindError::Unbindable { .. } => "acroform::unbindable_field",
             BindError::PageOutOfRange { .. } => "acroform::field_page_out_of_range",
+            BindError::BadRect { .. } => "acroform::invalid_field_rect",
         }
     }
 }
@@ -82,6 +90,12 @@ impl std::fmt::Display for BindError {
             } => write!(
                 f,
                 "form.yaml field {name:?} targets page {page} but `form.pdf` has {page_count} page(s)"
+            ),
+            BindError::BadRect { name, page, rect } => write!(
+                f,
+                "form.yaml field {name:?} has rect {{ x: {}, y: {}, w: {}, h: {} }}, which shows \
+                 nothing on page {page}: `w` and `h` must be positive and the box must overlap the page",
+                rect.x, rect.y, rect.w, rect.h
             ),
         }
     }
@@ -157,7 +171,23 @@ fn place(
             page,
             page_count: canvas_boxes.len(),
         })?;
-    Ok(flip_rect(rect, *canvas_box))
+    let placed = flip_rect(rect, *canvas_box);
+    let [cx0, cy0, cx1, cy1] = *canvas_box;
+    let shows = rect.w > 0.0
+        && rect.h > 0.0
+        && placed.iter().all(|v| v.is_finite())
+        && placed[0] < cx1
+        && placed[2] > cx0
+        && placed[1] < cy1
+        && placed[3] > cy0;
+    if !shows {
+        return Err(BindError::BadRect {
+            name: name.to_string(),
+            page,
+            rect,
+        });
+    }
+    Ok(placed)
 }
 
 /// Page-relative top-left `{x,y,w,h}` → bottom-left `[x0, y0, x1, y1]` in PDF
@@ -711,6 +741,33 @@ main:
         assert_eq!(
             place("W", 0, r, &[[10.0, 20.0, 622.0, 812.0]]).unwrap(),
             [10.0 + 180.0, 812.0 - 104.0, 10.0 + 194.0, 812.0 - 90.0]
+        );
+    }
+
+    #[test]
+    fn place_rejects_a_box_that_shows_nothing_on_its_page() {
+        let page = [[10.0, 20.0, 622.0, 812.0]];
+        let rect = |x: f32, y: f32, w: f32, h: f32| Rect { x, y, w, h };
+        for r in [
+            rect(10.0, 10.0, 0.0, 14.0),
+            rect(10.0, 10.0, 100.0, 0.0),
+            rect(10.0, 10.0, -50.0, 14.0),
+            rect(10.0, 10.0, 100.0, f32::INFINITY),
+            rect(612.0, 10.0, 100.0, 14.0),
+            rect(-100.0, 10.0, 100.0, 14.0),
+            rect(10.0, 792.0, 100.0, 14.0),
+            rect(10.0, -14.0, 100.0, 14.0),
+        ] {
+            match place("W", 0, r, &page) {
+                Err(e @ BindError::BadRect { .. }) => {
+                    assert_eq!(e.code(), "acroform::invalid_field_rect", "{r:?}");
+                }
+                other => panic!("{r:?}: expected BadRect, got {other:?}"),
+            }
+        }
+        assert!(
+            place("W", 0, rect(600.0, -5.0, 100.0, 14.0), &page).is_ok(),
+            "a box past the page's edge still shows the part on it"
         );
     }
 

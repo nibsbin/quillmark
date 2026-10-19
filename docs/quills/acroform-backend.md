@@ -158,7 +158,7 @@ Note what is **absent** from the bound fields: no `type`, `options`, or `multili
 | `name` | yes | The widget's `/T` entry: unique across **both** `fields` and `widgets`. |
 | `schema_field` | yes | The document field this widget binds to. Resolved against the quill schema at load; a dangling path is a load error (`acroform::dangling_binding`), not a silent blank. |
 | `page` | yes | 0-based page index into `form.pdf`. |
-| `rect` | yes | `{x, y, w, h}` in **PDF points** (1/72"), **top-left origin**, page-relative (see below). |
+| `rect` | yes | `{x, y, w, h}` in **PDF points** (1/72"), **top-left origin**, page-relative (see below). A box with no width or height, or wholly off its page, is a load error (`acroform::invalid_field_rect`). |
 | `tooltip` | no | Overrides the widget's `/TU`. When omitted, the field inherits the schema field's `description`. |
 
 ### Unbound-widget keys (`widgets`)
