@@ -5,7 +5,8 @@
 //!
 //! Drawing commits to a byte encoding and a concrete size: text is transcoded to
 //! WinAnsi and set in the widget's own base-14 face at [`FieldSpec::font_size`],
-//! or at the auto-size a viewer would have picked. A viewer that honours
+//! or at the auto-size a viewer would have picked, and a multiline value is
+//! broken into lines that fit the box's width. A viewer that honours
 //! `/NeedAppearances` rebuilds the stream from `/V` and `/DA` instead, which is
 //! where full Unicode and `/Q` justification reach it.
 
@@ -14,10 +15,13 @@ use pdf_writer::{Chunk, Finish, Name, Rect};
 use crate::error::PdfError;
 use crate::reader::UpdatedObject;
 use crate::writer::{pdf_escape, to_ref, winansi_encode};
-use crate::{FieldSpec, FieldType, CHECK_FONT_RESOURCE, CHECK_GLYPH};
+use crate::{FieldSpec, FieldType, FormFont, CHECK_FONT_RESOURCE, CHECK_GLYPH};
 
 const MIN_SIZE: f32 = 4.0;
 const MAX_SIZE: f32 = 12.0;
+
+/// How far an auto-sized multiline value steps down at a time to fit its box.
+const SIZE_STEP: f32 = 0.5;
 
 /// Inset, in points, of value text from the field box's left edge.
 const TEXT_INSET: f32 = 2.0;
@@ -35,9 +39,94 @@ const CHECK_GLYPH_WIDTH_FACTOR: f32 = 0.6;
 /// The size a widget's value text is drawn at: its own when it carries one,
 /// else the `0 Tf` auto-size a synthesizing viewer would pick for the box.
 fn text_size(spec: &FieldSpec, h: f32) -> f32 {
-    spec.font_size
-        .filter(|s| s.is_finite() && *s > 0.0)
-        .unwrap_or_else(|| (h * 0.65).clamp(MIN_SIZE, MAX_SIZE))
+    explicit_size(spec).unwrap_or_else(|| (h * 0.65).clamp(MIN_SIZE, MAX_SIZE))
+}
+
+fn explicit_size(spec: &FieldSpec) -> Option<f32> {
+    spec.font_size.filter(|s| s.is_finite() && *s > 0.0)
+}
+
+/// A one-line value's size: an auto-sized one shrinks until its widest line
+/// fits `room`, as a viewer's `0 Tf` does, down to [`MIN_SIZE`].
+fn one_line_size(spec: &FieldSpec, lines: &[Vec<u8>], room: f32, h: f32) -> f32 {
+    let size = text_size(spec, h);
+    if explicit_size(spec).is_some() {
+        return size;
+    }
+    let widest = lines
+        .iter()
+        .map(|line| spec.font.width(line, 1.0))
+        .fold(0.0, f32::max);
+    if widest * size <= room {
+        size
+    } else {
+        ((room / widest * 100.0).floor() / 100.0).max(MIN_SIZE)
+    }
+}
+
+/// A multiline value broken into lines that fit `room`. An auto-sized one
+/// steps down from [`text_size`] until its lines fit the box's height too, down
+/// to [`MIN_SIZE`], where what still overflows is cut off at the bottom.
+fn wrapped(spec: &FieldSpec, value: &str, room: f32, h: f32) -> (f32, Vec<Vec<u8>>) {
+    let mut size = text_size(spec, h);
+    if explicit_size(spec).is_some() {
+        return (size, wrap(spec.font, value, room, size));
+    }
+    loop {
+        let lines = wrap(spec.font, value, room, size);
+        let height = TEXT_TOP_INSET + size + (lines.len().max(1) - 1) as f32 * size * LINE_SPACING;
+        if height <= h || size <= MIN_SIZE {
+            return (size, lines);
+        }
+        size = (size - SIZE_STEP).max(MIN_SIZE);
+    }
+}
+
+/// `value` broken at spaces where a line would pass `room` at `size`, and
+/// inside a word that is wider than `room` on its own. A newline always
+/// breaks, and a space a break falls on is not drawn.
+fn wrap(font: FormFont, value: &str, room: f32, size: f32) -> Vec<Vec<u8>> {
+    let space = font.width(b" ", size);
+    let mut lines = Vec::new();
+    for paragraph in value.lines() {
+        let mut line: Vec<u8> = Vec::new();
+        let mut line_width = 0.0;
+        for (i, word) in paragraph.split(' ').enumerate() {
+            let word = winansi_encode(word);
+            let word_width = font.width(&word, size);
+            if i > 0 && line_width + space + word_width <= room {
+                line.push(b' ');
+                line.extend_from_slice(&word);
+                line_width += space + word_width;
+                continue;
+            }
+            if i > 0 {
+                lines.push(std::mem::take(&mut line));
+            }
+            line = word;
+            line_width = word_width;
+            while line_width > room && line.len() > 1 {
+                let mut cut = 0;
+                let mut head = 0.0;
+                while cut < line.len() {
+                    let next = font.width(&line[cut..=cut], size);
+                    if cut > 0 && head + next > room {
+                        break;
+                    }
+                    head += next;
+                    cut += 1;
+                }
+                if cut == line.len() {
+                    break;
+                }
+                let tail = line.split_off(cut);
+                lines.push(std::mem::replace(&mut line, tail));
+                line_width -= head;
+            }
+        }
+        lines.push(line);
+    }
+    lines
 }
 
 /// Larger than [`text_size`]: the check glyph reads a touch small.
@@ -72,27 +161,40 @@ pub(crate) fn of(spec: &FieldSpec) -> Option<Normal> {
         return None;
     }
 
+    let room = w - 2.0 * TEXT_INSET;
     let (resource, size, x, y, lines) = match &spec.field_type {
         FieldType::Signature => return None,
         FieldType::Checkbox => return Some(check_states([w, h])),
-        FieldType::Text { .. } => {
-            let size = text_size(spec, h);
+        FieldType::Text { multiline: true } => {
+            let (size, lines) = wrapped(spec, spec.value.as_deref()?, room, h);
             (
                 spec.font.resource_name(),
                 size,
                 TEXT_INSET,
                 h - size - TEXT_TOP_INSET,
-                spec.value.as_deref()?.lines().map(winansi_encode).collect(),
+                lines,
+            )
+        }
+        FieldType::Text { multiline: false } => {
+            let lines: Vec<Vec<u8>> = spec.value.as_deref()?.lines().map(winansi_encode).collect();
+            let size = one_line_size(spec, &lines, room, h);
+            (
+                spec.font.resource_name(),
+                size,
+                TEXT_INSET,
+                h - size - TEXT_TOP_INSET,
+                lines,
             )
         }
         FieldType::Choice { .. } => {
-            let size = text_size(spec, h);
+            let line = winansi_encode(spec.value.as_deref()?);
+            let size = one_line_size(spec, std::slice::from_ref(&line), room, h);
             (
                 spec.font.resource_name(),
                 size,
                 TEXT_INSET,
                 (h - size) * 0.5,
-                vec![winansi_encode(spec.value.as_deref()?)],
+                vec![line],
             )
         }
     };
@@ -266,10 +368,100 @@ mod tests {
     fn a_multiline_value_steps_one_line_height_per_line() {
         let mut spec = text(Some("first\nsecond"));
         spec.field_type = FieldType::Text { multiline: true };
+        spec.rect = [72.0, 600.0, 300.0, 720.0];
         let drawn = content(&spec);
         assert!(drawn.contains("(first) Tj"), "{drawn}");
         assert!(drawn.contains("(second) Tj"), "{drawn}");
         assert!(drawn.contains("0 -14.4 Td"), "12pt → 14.4pt leading: {drawn}");
+    }
+
+    /// The `(..) Tj` lines a stream shows, unescaped, and the size it sets.
+    fn shown(spec: &FieldSpec) -> (f32, Vec<String>) {
+        let drawn = content(spec);
+        let size = drawn
+            .split_once(" Tf")
+            .and_then(|(head, _)| head.rsplit(' ').next())
+            .and_then(|s| s.parse().ok())
+            .expect("a stream sets its size");
+        let lines = drawn
+            .lines()
+            .filter_map(|l| l.strip_prefix('(')?.strip_suffix(") Tj"))
+            .map(|l| l.replace("\\(", "(").replace("\\)", ")"))
+            .collect();
+        (size, lines)
+    }
+
+    fn paragraph(spec: &mut FieldSpec, value: &str, rect: [f32; 4]) {
+        spec.field_type = FieldType::Text { multiline: true };
+        spec.value = Some(value.into());
+        spec.rect = rect;
+    }
+
+    #[test]
+    fn a_multiline_value_breaks_into_lines_that_fit_its_box() {
+        let value = "Led an 8-member team that rebuilt the base network core, restoring \
+                     service to 2,100 users in six hours and saving the contract support.\n\
+                     Second statement.";
+        for font in [FormFont::Helvetica, FormFont::Times, FormFont::Courier] {
+            let mut spec = text(None);
+            spec.font = font;
+            paragraph(&mut spec, value, [20.0, 25.0, 300.0, 640.0]);
+            let (size, lines) = shown(&spec);
+            assert_eq!(size, 12.0, "{font:?}: a tall box keeps the auto-size");
+            assert!(lines.len() > 2, "{font:?}: {lines:?}");
+            for line in &lines {
+                assert!(
+                    font.width(line.as_bytes(), size) <= 280.0 - 2.0 * TEXT_INSET,
+                    "{font:?}: {line:?} is wider than the box"
+                );
+            }
+            assert_eq!(lines.last().unwrap(), "Second statement.", "a newline breaks");
+            assert_eq!(
+                lines[..lines.len() - 1].join(" "),
+                value.lines().next().unwrap(),
+                "{font:?}: every word is drawn once, in order"
+            );
+        }
+    }
+
+    #[test]
+    fn a_word_wider_than_its_box_breaks_inside_itself() {
+        let mut spec = text(None);
+        paragraph(&mut spec, &"W".repeat(40), [0.0, 0.0, 100.0, 400.0]);
+        let (size, lines) = shown(&spec);
+        assert!(lines.len() > 1, "{lines:?}");
+        assert_eq!(lines.concat(), "W".repeat(40));
+        assert!(lines.iter().all(|l| FormFont::Helvetica.width(l.as_bytes(), size) <= 96.0));
+    }
+
+    #[test]
+    fn an_auto_sized_multiline_value_shrinks_until_its_lines_fit_the_box() {
+        let mut spec = text(None);
+        paragraph(&mut spec, &"one two three four five six ".repeat(6), [0.0, 0.0, 200.0, 60.0]);
+        let (size, lines) = shown(&spec);
+        assert!(size < 12.0, "{size}");
+        assert!(
+            TEXT_TOP_INSET + size + (lines.len() - 1) as f32 * size * LINE_SPACING <= 60.0,
+            "{} lines at {size}pt overflow the box",
+            lines.len()
+        );
+
+        spec.font_size = Some(12.0);
+        assert_eq!(shown(&spec).0, 12.0, "an explicit size is never shrunk");
+    }
+
+    #[test]
+    fn an_auto_sized_line_shrinks_to_its_box_width_and_an_explicit_one_does_not() {
+        let value = "Lt Col Casey B. Sample, DSN 555-0100, Comm (555) 555-0100";
+        let mut spec = text(Some(value));
+        spec.rect = [0.0, 0.0, 150.0, 20.0];
+        let (size, lines) = shown(&spec);
+        assert_eq!(lines, [value]);
+        assert!(size < 12.0, "{size}");
+        assert!(FormFont::Helvetica.width(value.as_bytes(), size) <= 146.0);
+
+        spec.font_size = Some(10.0);
+        assert_eq!(shown(&spec).0, 10.0);
     }
 
     #[test]
