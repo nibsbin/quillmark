@@ -265,3 +265,34 @@ fn a_construct_the_form_declines_warns_at_validate_and_on_the_session() {
     let session = open_session(&md);
     assert_eq!(declines(session.warnings(), "backend::declined_construct"), expected);
 }
+
+#[test]
+fn a_value_the_form_font_cannot_draw_warns_at_its_field_until_it_can() {
+    let md = |name: &str, comment: &str| {
+        FILLED
+            .replace("Ada Lovelace", name)
+            .replace("Second comment line.", comment)
+    };
+    let unencodable = |session: &quillmark::LiveSession| -> Vec<(String, String)> {
+        session
+            .warnings()
+            .iter()
+            .filter(|d| d.code.as_deref() == Some("acroform::unencodable_text"))
+            .map(|d| (d.path.clone().unwrap_or_default(), d.message.clone()))
+            .collect()
+    };
+
+    let mut session = open_session(&md("Łukasz Nguyễn", "Arrow → here"));
+    let warned = unencodable(&session);
+    assert_eq!(
+        warned.iter().map(|(path, _)| path.as_str()).collect::<Vec<_>>(),
+        ["main.full_name", "main.comments"]
+    );
+    assert!(warned[0].1.starts_with("2 character(s)"), "{}", warned[0].1);
+
+    let doc = Document::parse(&md("Café Señor", "Second comment line."))
+        .expect("parse markdown")
+        .document;
+    session.update(&doc).expect("update");
+    assert!(unencodable(&session).is_empty(), "WinAnsi draws every character");
+}

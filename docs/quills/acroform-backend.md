@@ -270,7 +270,7 @@ A checkbox bakes both of its states, checked or not: `/AP << /N << /Yes … /Off
 
 The `/V` a stamped field carries is always faithful, and a synthesizing viewer renders from it. The **baked stream is an approximation** in three ways, because it commits to one encoding and one measurement where a form renderer would defer. In all three the delivered `/V` is correct, only the drawn pixels differ, and no diagnostic is raised.
 
-- **Non-WinAnsi characters draw as `?`.** The stream encodes text as WinAnsi (CP1252). Any code point outside that range (CJK, emoji, and many symbols) is substituted with `?`, while `/V` keeps full Unicode (UTF-16BE). A field whose value is `日本語` shows correctly in Acrobat but as `???` on the canvas.
+- **Non-WinAnsi characters draw as `?`.** The stream encodes text as WinAnsi (CP1252). Any code point outside that range (CJK, emoji, and many symbols) is substituted with `?`, while `/V` keeps full Unicode (UTF-16BE). A field whose value is `日本語` shows correctly in Acrobat but as `???` on the canvas. The session warns `acroform::unencodable_text` at each such field, with how many characters it draws as `?`.
 - **Justification is not applied.** The stream draws from the box's left edge; `/Q` (the `align` dial) moves the text only in a viewer that re-synthesizes.
 - **Overflow is clipped.** A value wider or taller than its field box is clipped to the box by the appearance's `/BBox`, whereas a synthesizing viewer wraps or scrolls it. A canvas can therefore look truncated where the same field in Acrobat is complete.
 
