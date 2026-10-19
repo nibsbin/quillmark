@@ -29,6 +29,10 @@ const TEXT_INSET: f32 = 2.0;
 /// Inset, in points, between the box's top edge and the first baseline.
 const TEXT_TOP_INSET: f32 = 1.0;
 
+/// How much of a line's size sits above its baseline, as a viewer reckons it
+/// when it centres a one-line value in its box.
+const ONE_LINE_RISE: f32 = 0.65;
+
 /// Line height = point size × this.
 const LINE_SPACING: f32 = 1.2;
 
@@ -129,6 +133,10 @@ fn wrap(font: FormFont, value: &str, room: f32, size: f32) -> Vec<Vec<u8>> {
     lines
 }
 
+fn one_line_baseline(h: f32, size: f32) -> f32 {
+    (h - size * ONE_LINE_RISE) * 0.5
+}
+
 /// Larger than [`text_size`]: the check glyph reads a touch small.
 fn check_size(h: f32) -> f32 {
     (h * 0.75).clamp(MIN_SIZE, MAX_SIZE)
@@ -178,13 +186,12 @@ pub(crate) fn of(spec: &FieldSpec) -> Option<Normal> {
         FieldType::Text { multiline: false } => {
             let lines: Vec<Vec<u8>> = spec.value.as_deref()?.lines().map(winansi_encode).collect();
             let size = one_line_size(spec, &lines, room, h);
-            (
-                spec.font.resource_name(),
-                size,
-                TEXT_INSET,
-                h - size - TEXT_TOP_INSET,
-                lines,
-            )
+            let y = if lines.len() == 1 {
+                one_line_baseline(h, size)
+            } else {
+                h - size - TEXT_TOP_INSET
+            };
+            (spec.font.resource_name(), size, TEXT_INSET, y, lines)
         }
         FieldType::Choice { .. } => {
             let line = winansi_encode(spec.value.as_deref()?);
@@ -193,7 +200,7 @@ pub(crate) fn of(spec: &FieldSpec) -> Option<Normal> {
                 spec.font.resource_name(),
                 size,
                 TEXT_INSET,
-                (h - size) * 0.5,
+                one_line_baseline(h, size),
                 vec![line],
             )
         }
@@ -359,8 +366,8 @@ mod tests {
         assert_eq!(ap.bbox, [228.0, 20.0], "the field box's own extent");
         let drawn = String::from_utf8_lossy(&ap.content).into_owned();
         assert!(
-            drawn.contains("\n2 7 Td\n"),
-            "the first baseline is inset from the box's own top-left: {drawn}"
+            drawn.contains("\n2 6.1 Td\n"),
+            "a one-line value is inset from the box's left and centred in its height: {drawn}"
         );
     }
 
@@ -462,6 +469,26 @@ mod tests {
 
         spec.font_size = Some(10.0);
         assert_eq!(shown(&spec).0, 10.0);
+    }
+
+    #[test]
+    fn a_shrunk_line_stays_centred_in_its_box() {
+        let mut spec = text(Some("Lt Col Casey B. Sample, DSN 555-0100, Comm (555) 555-0100"));
+        spec.rect = [0.0, 0.0, 150.0, 20.0];
+        let (size, _) = shown(&spec);
+        let drawn = content(&spec);
+        let baseline: f32 = drawn
+            .lines()
+            .find_map(|l| l.strip_prefix("2 ")?.strip_suffix(" Td"))
+            .and_then(|y| y.parse().ok())
+            .expect("the line is placed");
+        let cap_height = size * 0.718;
+        let (below, above) = (baseline, 20.0 - baseline - cap_height);
+        assert!(size < 12.0, "the line shrinks to {size}pt");
+        assert!(
+            below > 0.0 && above > 0.0 && (above - below).abs() < size * 0.1,
+            "{size}pt capitals sit {below} over the box's floor and {above} under its top"
+        );
     }
 
     #[test]
