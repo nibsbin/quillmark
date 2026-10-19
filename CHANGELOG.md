@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.126.2 - 2026-10-19
 
 ### Field types
 
@@ -14,6 +14,15 @@
   array's cap), and an `acroform` widget bound to a capped cell carries
   `/MaxLen`, omitted where the drawn value is already past it in UTF-16
   units. `schema()` emits `max` on a text field. (#2241)
+
+### Commits since v0.126.1
+
+- fix(core): a text cap counts what the floor renders, at any depth of a default
+- docs(canon): `max:` is a count in the cell's own unit, never a value bound
+- feat(core): the transform schema carries `max:` as `maxItems` and `maxLength`
+- feat(core): a text default past its cap fails `quill::default_over_length`
+- refactor(content): one character count for a text cap's readers
+- feat(core): cap a text field's characters with `max:`
 
 ## v0.126.1 - 2026-10-17
 
