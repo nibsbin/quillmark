@@ -2,6 +2,9 @@
 
 ## v0.126.2 - 2026-10-19
 
+A `text` or `richtext` field caps its characters with `max:`, warning past
+the cap where the quill failed to load.
+
 ### Field types
 
 - feat(core): **`max:` caps a `text` or `richtext` field's characters**, as
@@ -9,20 +12,13 @@
   render floor reads, a richtext's markup aside. A longer value warns the new
   `validation::over_length` (`{max, actual}`) and renders; a `default:` past
   a cap at any depth fails `quill::default_over_length`, and a seed
-  `quill::seed_over_length`. The blueprint prints `# up to N characters`, the
+  `quill::seed_over_length`. An array default holding an inner array past
+  that inner field's `max:` fails `quill::default_over_max`, where only the
+  outer count was checked. The blueprint prints `# up to N characters`, the
   transform schema `quillmark:maxLength` (and `quillmark:maxItems` for an
   array's cap), and an `acroform` widget bound to a capped cell carries
   `/MaxLen`, omitted where the drawn value is already past it in UTF-16
   units. `schema()` emits `max` on a text field. (#2241)
-
-### Commits since v0.126.1
-
-- fix(core): a text cap counts what the floor renders, at any depth of a default
-- docs(canon): `max:` is a count in the cell's own unit, never a value bound
-- feat(core): the transform schema carries `max:` as `maxItems` and `maxLength`
-- feat(core): a text default past its cap fails `quill::default_over_length`
-- refactor(content): one character count for a text cap's readers
-- feat(core): cap a text field's characters with `max:`
 
 ## v0.126.1 - 2026-10-17
 
