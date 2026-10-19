@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## v0.126.2 - 2026-10-19
+
+A `text` or `richtext` field caps its characters with `max:`, warning past
+the cap where the quill failed to load.
 
 ### Field types
 
@@ -9,7 +12,9 @@
   render floor reads, a richtext's markup aside. A longer value warns the new
   `validation::over_length` (`{max, actual}`) and renders; a `default:` past
   a cap at any depth fails `quill::default_over_length`, and a seed
-  `quill::seed_over_length`. The blueprint prints `# up to N characters`, the
+  `quill::seed_over_length`. An array default holding an inner array past
+  that inner field's `max:` fails `quill::default_over_max`, where only the
+  outer count was checked. The blueprint prints `# up to N characters`, the
   transform schema `quillmark:maxLength` (and `quillmark:maxItems` for an
   array's cap), and an `acroform` widget bound to a capped cell carries
   `/MaxLen`, omitted where the drawn value is already past it in UTF-16
