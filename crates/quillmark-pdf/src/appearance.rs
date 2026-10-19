@@ -78,11 +78,41 @@ fn wrapped(spec: &FieldSpec, value: &str, room: f32, h: f32) -> (f32, Vec<Vec<u8
     }
     loop {
         let lines = wrap(spec.font, value, room, size);
-        let height = TEXT_TOP_INSET + size + (lines.len().max(1) - 1) as f32 * size * LINE_SPACING;
-        if height <= h || size <= MIN_SIZE {
+        if lines_height(size, lines.len()) <= h || size <= MIN_SIZE {
             return (size, lines);
         }
         size = (size - SIZE_STEP).max(MIN_SIZE);
+    }
+}
+
+fn lines_height(size: f32, lines: usize) -> f32 {
+    TEXT_TOP_INSET + size + (lines.max(1) - 1) as f32 * size * LINE_SPACING
+}
+
+/// Whether the baked appearance cuts off some of `spec`'s value: a line wider
+/// than the box, or wrapped lines taller than it, at the size it draws them,
+/// which an auto-sized value reaches only at its smallest, 4 pt.
+pub fn overflows(spec: &FieldSpec) -> bool {
+    let [x0, y0, x1, y1] = spec.rect;
+    let (w, h) = (x1 - x0, y1 - y0);
+    let Some(value) = spec.value.as_deref() else {
+        return false;
+    };
+    if !(w > 0.0 && h > 0.0) {
+        return false;
+    }
+    let room = w - 2.0 * TEXT_INSET;
+    match &spec.field_type {
+        FieldType::Text { multiline: true } => {
+            let (size, lines) = wrapped(spec, value, room, h);
+            lines_height(size, lines.len()) > h
+        }
+        FieldType::Text { multiline: false } | FieldType::Choice { .. } => {
+            let lines: Vec<Vec<u8>> = value.lines().map(winansi_encode).collect();
+            let size = one_line_size(spec, &lines, room, h);
+            lines.iter().any(|line| spec.font.width(line, size) > room)
+        }
+        FieldType::Checkbox | FieldType::Signature => false,
     }
 }
 
@@ -489,6 +519,26 @@ mod tests {
             below > 0.0 && above > 0.0 && (above - below).abs() < size * 0.1,
             "{size}pt capitals sit {below} over the box's floor and {above} under its top"
         );
+    }
+
+    #[test]
+    fn a_value_overflows_only_where_the_smallest_size_cannot_fit_it() {
+        let mut line = text(Some("Ada"));
+        line.rect = [0.0, 0.0, 150.0, 20.0];
+        assert!(!overflows(&line));
+        line.value = Some("Sample ".repeat(6));
+        assert!(!overflows(&line), "a long line shrinks to fit");
+        line.value = Some("Sample ".repeat(30));
+        assert!(overflows(&line), "past 4pt it runs off the box");
+        line.value = Some("Sample ".repeat(6));
+        line.font_size = Some(12.0);
+        assert!(overflows(&line), "a widget's own size does not shrink");
+
+        let mut box_ = text(None);
+        paragraph(&mut box_, &"Sample text. ".repeat(40), [0.0, 0.0, 200.0, 60.0]);
+        assert!(!overflows(&box_), "a paragraph shrinks until its lines fit");
+        paragraph(&mut box_, &"Sample text. ".repeat(400), [0.0, 0.0, 200.0, 60.0]);
+        assert!(overflows(&box_), "past 4pt its last lines are cut off");
     }
 
     #[test]

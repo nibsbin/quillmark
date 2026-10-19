@@ -296,3 +296,23 @@ fn a_value_the_form_font_cannot_draw_warns_at_its_field_until_it_can() {
     session.update(&doc).expect("update");
     assert!(unencodable(&session).is_empty(), "WinAnsi draws every character");
 }
+
+#[test]
+fn a_value_cut_off_at_the_smallest_size_warns_at_its_field_until_it_fits() {
+    let overflowing = |session: &quillmark::LiveSession| -> Vec<String> {
+        session
+            .warnings()
+            .iter()
+            .filter(|d| d.code.as_deref() == Some("acroform::text_overflow"))
+            .map(|d| d.path.clone().unwrap_or_default())
+            .collect()
+    };
+
+    let long = "Sample name ".repeat(40);
+    let mut session = open_session(&FILLED.replace("Ada Lovelace", long.trim()));
+    assert_eq!(overflowing(&session), ["main.full_name"]);
+
+    let doc = Document::parse(FILLED).expect("parse markdown").document;
+    session.update(&doc).expect("update");
+    assert!(overflowing(&session).is_empty(), "the name fits its box");
+}

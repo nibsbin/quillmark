@@ -202,6 +202,7 @@ Opening an `acroform` quill and binding `form.yaml`.
 - `acroform::missing_form_pdf`
 - `acroform::missing_form_spec`
 - `acroform::stamped_parse_failed`
+- `acroform::text_overflow`
 - `acroform::unbindable_field`
 - `acroform::unencodable_text`
 
