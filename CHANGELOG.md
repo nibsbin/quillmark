@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.127.0 - 2026-10-20
+
+- feat(acroform): a bound field's `option` checks its box for one enum value
+- feat(acroform)!: an acroform quill's field spec is Form.yaml
+- feat(acroform): warn at a field whose text its box cuts off
+- feat(acroform): warn at a field whose value the form's font draws as `?`
+- fix(pdf): a one-line value is centred in its box, as a viewer centres it
+- fix(acroform)!: refuse a field box that shows nothing on its page
+- fix(pdf): a baked appearance wraps a multiline value and fits its box
+
 ## v0.126.2 - 2026-10-19
 
 A `text` or `richtext` field caps its characters with `max:`, warning past
