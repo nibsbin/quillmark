@@ -132,7 +132,7 @@ impl FieldSpec {
 #[derive(Debug, Clone, PartialEq)]
 pub enum FieldType {
     Text { multiline: bool },
-    /// A checkbox with the engine's fixed on-state ([`CHECKBOX_ON_STATE`]).
+    /// A checkbox with Quillmark's fixed on-state ([`CHECKBOX_ON_STATE`]).
     Checkbox,
     /// A dropdown over `options`, bare display strings.
     Choice { options: Vec<String> },

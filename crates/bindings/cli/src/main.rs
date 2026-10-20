@@ -16,7 +16,7 @@ static VERSION: LazyLock<String> = LazyLock::new(|| {
 
 #[derive(Parser)]
 #[command(name = "quillmark")]
-#[command(about = "Command-line interface for Quillmark: a schema-driven document engine", long_about = None)]
+#[command(about = "Command-line interface for Quillmark: a schema-driven document framework", long_about = None)]
 #[command(version = VERSION.as_str())]
 struct Cli {
     #[command(subcommand)]

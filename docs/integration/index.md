@@ -1,6 +1,6 @@
 # Integrating Quillmark
 
-Quillmark embeds in an app through two published bindings (**Python** (`quillmark` on PyPI) and **JavaScript/WASM** (`@quillmark/wasm` on npm)) over one core engine. Rust consumers use the crates directly ([docs.rs](https://docs.rs/quillmark)).
+Quillmark embeds in an app through two published bindings (**Python** (`quillmark` on PyPI) and **JavaScript/WASM** (`@quillmark/wasm` on npm)) over one core library. Rust consumers use the crates directly ([docs.rs](https://docs.rs/quillmark)).
 
 Three objects carry every integration:
 

@@ -22,7 +22,7 @@ pub const QUILLMARK_MULTILINE_KEY: &str = "quillmark:multiline";
 /// counts: elements on an array, characters on a text field. A cap warns and
 /// never refuses, so it rides a `quillmark:` annotation rather than JSON
 /// Schema's asserting `maxItems` / `maxLength`, which a standard validator
-/// would enforce against a document the engine renders.
+/// would enforce against a document Quillmark renders.
 pub const QUILLMARK_MAX_ITEMS_KEY: &str = "quillmark:maxItems";
 pub const QUILLMARK_MAX_LENGTH_KEY: &str = "quillmark:maxLength";
 
@@ -58,7 +58,7 @@ fn discriminant_schema(field: &FieldSchema) -> serde_json::Value {
     );
     // The model layer keeps `""` out of `values:` (it is not a choice), but this
     // projection describes what is *wire-valid*, and the blank is: without it a
-    // standard JSON-Schema validator rejects a value the engine accepts.
+    // standard JSON-Schema validator rejects a value Quillmark accepts.
     schema.insert(
         "enum".to_string(),
         serde_json::Value::Array(
@@ -406,7 +406,7 @@ main:
 
     /// One `max:` in Quill.yaml, two keywords on the wire: the unit a reader
     /// of the declaration takes from the sibling `type:` is in the keyword's
-    /// name here, and no asserting JSON Schema keyword refuses what the engine
+    /// name here, and no asserting JSON Schema keyword refuses what Quillmark
     /// renders.
     #[test]
     fn max_crosses_as_the_keyword_that_names_its_unit() {

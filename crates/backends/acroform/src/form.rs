@@ -7,7 +7,7 @@
 //! and tooltip from the resolved schema, so the two cannot drift; a widget in
 //! `widgets` has no schema field (a signer fills it) and declares its own
 //! `type`. Unknown keys are ignored, so a later minor that only adds keys loads
-//! on any engine reading its major.
+//! on any Quillmark release reading its major.
 
 use quillmark_core::error::{Diagnostic, Severity, YamlError};
 use quillmark_core::version::Version;

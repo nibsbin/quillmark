@@ -1316,7 +1316,7 @@ impl CarrierTag {
 
 /// What a tag named `name` reports where its opening tag drops: a wrapper as
 /// its element, a `qm-*` name outside the grammar as its bad name, and any
-/// other tag by its name. `qm-anchor`, the engine's own read-only spelling of
+/// other tag by its name. `qm-anchor`, Quillmark's own read-only spelling of
 /// an anchor, is written to be dropped and reports nothing.
 fn dropped_tag(name: &str) -> Option<Dropped> {
     let lower = name.to_ascii_lowercase();

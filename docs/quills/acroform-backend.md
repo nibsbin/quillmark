@@ -27,7 +27,7 @@ The background's cross-reference data is a classic `xref` table. One held in a c
 Nulling the key (PyMuPDF's `xref_set_key` sets a key to `null` rather than deleting it) strips the catalog entry alone, and the old widget annotations stay live in the page `/Annots`. A background whose page `/Annots` hold a `/Subtype /Widget`, written directly or referenced, is refused as `pdf::existing_acroform` too, whatever its catalog holds, and the message names the page.
 
 !!! note "Where the assets come from"
-    Producing a clean `form.pdf` + `Form.yaml` from a raw source PDF (decrypt, strip, extract, verify) is the job of a separate *quillification* layer and is out of scope for the engine; the engine checks the result of the stripping, not how it was reached. V1 quills hand-author both assets; the `sample_form` fixture in `crates/fixtures/resources/quills/sample_form/` is a worked example.
+    Producing a clean `form.pdf` + `Form.yaml` from a raw source PDF (decrypt, strip, extract, verify) is the job of a separate *quillification* layer and is out of scope for Quillmark, which checks the result of the stripping, not how it was reached. V1 quills hand-author both assets; the `sample_form` fixture in `crates/fixtures/resources/quills/sample_form/` is a worked example.
 
 ## `Quill.yaml`
 
@@ -160,7 +160,7 @@ Note what is **absent** from the bound fields: no `type`, `options`, or `multili
 | `page` | yes | 0-based page index into `form.pdf`. |
 | `rect` | yes | `{x, y, w, h}` in **PDF points** (1/72"), **top-left origin**, page-relative (see below). A box with no width or height, or wholly off its page, is a load error (`acroform::invalid_field_rect`). |
 | `tooltip` | no | Overrides the widget's `/TU`. When omitted, the field inherits the schema field's `description`. |
-| `option` | no | One value of an `enum` field. The widget is a checkbox of its own, checked when the field holds that value, and its `/TU` defaults to the field's description followed by the value. Bind one per value to lay out a printed group of boxes that answers one question. A variant container binds its discriminant, `classification.value`. A field that is not an `enum`, or a value outside it, is a load error (`acroform::invalid_option`). The boxes are separate fields, so a viewer does not keep them exclusive when a person ticks them by hand. `option` is `quillmark/form@0.3.0` vocabulary: an engine before 0.127 ignores it and draws a dropdown in the box, so a quill using it declares `requires: ">=0.127"`. |
+| `option` | no | One value of an `enum` field. The widget is a checkbox of its own, checked when the field holds that value, and its `/TU` defaults to the field's description followed by the value. Bind one per value to lay out a printed group of boxes that answers one question. A variant container binds its discriminant, `classification.value`. A field that is not an `enum`, or a value outside it, is a load error (`acroform::invalid_option`). The boxes are separate fields, so a viewer does not keep them exclusive when a person ticks them by hand. `option` is `quillmark/form@0.3.0` vocabulary: Quillmark before 0.127 ignores it and draws a dropdown in the box, so a quill using it declares `requires: ">=0.127"`. |
 
 ### Unbound-widget keys (`widgets`)
 
@@ -205,7 +205,7 @@ A page whose canvas box is under a point per side carries no canvas to place any
 
 ### Schema versioning and unknown keys
 
-`schema` follows the convention `quillmark/form@<version>`, hand-set at the last format change (never auto-derived from a crate version). The current format is **`quillmark/form@0.3.0`**, which adds a bound field's `option`; a `0.2` file reads unchanged. Unknown *keys* are **ignored, not rejected**, so the format grows additively under a later minor: every `0.x` from `0.2` on is read (an engine before 0.126 reads only `0.2.x`), and a new major is where a break goes. A version below `0.2` or under another major is rejected: a `form@0.1.0` file (which restated `type`/`options`/`multiline` on each field) fails to load with `acroform::invalid_form_spec`.
+`schema` follows the convention `quillmark/form@<version>`, hand-set at the last format change (never auto-derived from a crate version). The current format is **`quillmark/form@0.3.0`**, which adds a bound field's `option`; a `0.2` file reads unchanged. Unknown *keys* are **ignored, not rejected**, so the format grows additively under a later minor: every `0.x` from `0.2` on is read (Quillmark before 0.126 reads only `0.2.x`), and a new major is where a break goes. A version below `0.2` or under another major is rejected: a `form@0.1.0` file (which restated `type`/`options`/`multiline` on each field) fails to load with `acroform::invalid_form_spec`.
 
 ### Opinionated styling
 
@@ -239,7 +239,7 @@ Absolute-index addressing (`$cards.0.from`) is **not accepted** in `form@0.2.0`:
 This lets a **static, fixed-capacity** form lay out a bounded number of card slots across its existing pages: each slot a bound field with its own `page`, bound to a distinct instance.
 
 !!! warning "Static forms only"
-    `acroform` stamps over a fixed, pre-existing page set. It never composes content, appends continuation pages, or merges PDFs. A document carrying more card instances than the form has slots is the author's concern, not the engine's.
+    `acroform` stamps over a fixed, pre-existing page set. It never composes content, appends continuation pages, or merges PDFs. A document carrying more card instances than the form has slots is the author's concern, not Quillmark's.
 
 ## Signature fields
 

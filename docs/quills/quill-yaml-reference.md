@@ -26,7 +26,7 @@ typst:        # Optional: backend-specific configuration
 
 Root-level `fields:` is not supported; define the main document's field schemas under `main.fields`.
 
-`Quill.yaml` is parsed strictly. Unknown keys in the `quill:` section or the backend's section, unknown top-level sections, malformed `ui:` blocks, and field schemas that can't be parsed all produce errors: they are never silently dropped. Every error is collected in a single pass, so authors see all problems at once; the one exception is a [`requires`](#quill-section) floor the engine is below, which is reported alone. Run `quillmark validate <quill_dir>` to surface them.
+`Quill.yaml` is parsed strictly. Unknown keys in the `quill:` section or the backend's section, unknown top-level sections, malformed `ui:` blocks, and field schemas that can't be parsed all produce errors: they are never silently dropped. Every error is collected in a single pass, so authors see all problems at once; the one exception is a [`requires`](#quill-section) floor above the running Quillmark release, which is reported alone. Run `quillmark validate <quill_dir>` to surface them.
 
 ---
 
@@ -48,9 +48,9 @@ Every Quill.yaml must have a `quill` section with format metadata.
 | `ui`             | object | no       | Document-level UI metadata |
 | `requires`       | string | no       | The oldest Quillmark this quill loads on, as `">=MAJOR.MINOR"` or `">=MAJOR.MINOR.PATCH"` |
 
-`requires` is quoted: a bare `>` opens a YAML folded scalar. An engine older
+`requires` is quoted: a bare `>` opens a YAML folded scalar. A Quillmark release older
 than it refuses the quill with one `quill::engine_too_old` error, ahead of every
-other check, so keys it has not learned yet do not read as typos; an engine from
+other check, so keys it has not learned yet do not read as typos; a release from
 before `requires` existed reports `requires` itself as `quill::unknown_key`. Any
 other spelling, whitespace included, is `quill::invalid_requires`.
 
@@ -71,7 +71,7 @@ space each fail the load with `quill::invalid_homepage`, as anything else does.
 
 Neither key reaches the plate or the blueprint; both surface on
 `Quill.metadata` and `quillmark info`. They arrive in the same release as
-`requires`, so an older engine reports them as `quill::unknown_key` whether or
+`requires`, so an older Quillmark reports them as `quill::unknown_key` whether or
 not the quill sets `requires`.
 
 A backend's own settings live under its backend-named section, not in `quill:`.
@@ -150,7 +150,7 @@ main:
 | `title`       | string            | no       | The field's label, a literal (see [`title`](#title)) |
 | `description` | string            | no       | Help text, one line: a line break, `\|` block scalars included, fails the load with `quill::description_multiline`, since the blueprint prints it in a single `# …` comment |
 | `default`     | matches `type`    | no       | The value the **majority of authors want**. When the cell is omitted, the default is filled in — at any depth, whether or not the container above it was authored — and the blueprint renders that concrete value with a type-only annotation, shippable as-is (see [`default`](#default)). Declared on a **cell**: a leaf, an `array` or a `matrix`. On an `object` it is a load error (`quill::default_on_namespace`), since its properties hold their own. |
-| `values`      | array of strings  | for `enum` | The closed set of allowed string values: the **choices**. Required on every `enum` field. Declaring `""` is a load error — every enum also accepts its [blank](#the-blank-values-is-for-choices-not-for-the-absence-of-one), which the engine supplies. |
+| `values`      | array of strings  | for `enum` | The closed set of allowed string values: the **choices**. Required on every `enum` field. Declaring `""` is a load error — every enum also accepts its [blank](#the-blank-values-is-for-choices-not-for-the-absence-of-one), which Quillmark supplies. |
 | `ui`          | object            | no       | UI rendering hints (see [UI Properties](#ui-properties)) |
 | `items`       | object            | for `array` | Element schema for an `array` field (a nested field schema). Required on every array. |
 | `properties`  | object            | for `object` | Nested field schemas for an `object` typed dictionary (or an array's `object`-typed `items`). Required on every `object` field. |
@@ -351,7 +351,7 @@ as a marking such as `UNCLASSIFIED` is, the id is that text.
 #### The blank: `values:` is for choices, not for the absence of one
 
 Every `enum` accepts one value beyond its `values:` list — the **blank**, spelled
-`""`. The engine supplies it; you never declare it, and declaring `""` in
+`""`. Quillmark supplies it; you never declare it, and declaring `""` in
 `values:` is a load error (`quill::enum_blank_member`).
 
 That is what a document says when nobody has answered. A field with no `default:`
@@ -715,7 +715,7 @@ qualifications:
   order. A plate wanting another order sorts the rows itself. An added item's
   `title` is a cell with an address, so `qm.ink(row.value, "title")` prints it with
   its click-to-edit region, where `row.title` prints it plainly.
-- The engine does not compare titles: an added item titled as a roster member
+- Quillmark does not compare titles: an added item titled as a roster member
   prints beside it.
 - The ids in the blueprint's `# matrix<…>` annotation are all a model sees of
   the roster, so on an open matrix name them as their titles read
@@ -1119,7 +1119,7 @@ A quill holding no `plate.typ` and declaring no `plate_file` fails to render as 
 
 A `.` step or an empty one drops, so `./plate.typ` names `plate.typ` and `tpl//layout.typ` names `tpl/layout.typ`, the path every diagnostic and `quillmark workspace` give. A leading `/` or a `..` step is refused as `typst::plate_missing`, its hint naming the spelling from the quill root, and so is a `plate_file` naming no file. A `plate_file` naming a file at a path holding a `\`, which Typst refuses, fails as `typst::plate_path_invalid`: separate the path with `/`, and rename a file whose own name holds a `\`. So does a `plate_file` that is not a string, or that names no path once its `.` and empty steps drop, such as `""` or `./`.
 
-Any other key under `typst` fails the load as `quill::unknown_backend_key`, its hint listing the valid keys. A `typst` section that is a scalar or a sequence fails as `quill::invalid_backend_section`, and an empty one, `typst:` alone or holding only comments, reads as no keys. A quill using a key a later release adds declares that release in [`requires`](#quill-section), so an older engine reports `quill::engine_too_old` rather than the key. Packages are not declared here: a quill vendors them under `packages/`, as the [Typst Backend Guide](typst-backend.md#typst-packages) describes.
+Any other key under `typst` fails the load as `quill::unknown_backend_key`, its hint listing the valid keys. A `typst` section that is a scalar or a sequence fails as `quill::invalid_backend_section`, and an empty one, `typst:` alone or holding only comments, reads as no keys. A quill using a key a later release adds declares that release in [`requires`](#quill-section), so an older Quillmark reports `quill::engine_too_old` rather than the key. Packages are not declared here: a quill vendors them under `packages/`, as the [Typst Backend Guide](typst-backend.md#typst-packages) describes.
 
 ---
 

@@ -18,7 +18,7 @@ pub enum IslandType {
     /// Mark-carrying, shape-normalized (one column count, `\n` the only
     /// line-break char a cell keeps, each knob key absent at its default and
     /// `widths` settled to the column count). A knob key holding a value
-    /// outside its set rides as a key the engine does not name does, and reads
+    /// outside its set rides as a key Quillmark does not name does, and reads
     /// as absent.
     Table,
     /// `{url, alt}`. No cell model, no shape invariants.

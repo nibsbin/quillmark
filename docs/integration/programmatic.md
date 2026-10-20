@@ -57,7 +57,7 @@ Markdown authoring, the [blueprint](../quills/blueprint.md) (for LLMs), and thes
 
 ## Addressing cards for re-render
 
-Card mutators address by index, and the engine offers no durable card handle: a `remove_card` / `add_card` moves every index after it. For patch-and-re-render automation (a source row changed, re-render the document), carry your own key in the card's `$ext` under a namespace you own, and resolve the index when patching:
+Card mutators address by index, and Quillmark offers no durable card handle: a `remove_card` / `add_card` moves every index after it. For patch-and-re-render automation (a source row changed, re-render the document), carry your own key in the card's `$ext` under a namespace you own, and resolve the index when patching:
 
 ```python
 ext = doc.cards[index]["ext"] or {}                                # at build time
@@ -67,7 +67,7 @@ idx = next(i for i, c in enumerate(doc.cards)                      # at patch ti
 quill.writer(doc).set_all({"qty": new_qty}, card=idx)
 ```
 
-`$ext` round-trips through Markdown and the storage DTO and never reaches a backend. The engine guarantees nothing about its contents: no uniqueness, no collision check, no repair. A key duplicated across two cards resolves to whichever the scan hits first.
+`$ext` round-trips through Markdown and the storage DTO and never reaches a backend. Quillmark guarantees nothing about its contents: no uniqueness, no collision check, no repair. A key duplicated across two cards resolves to whichever the scan hits first.
 
 Patching one card at a time is for a document that is no longer a pure projection of its source data: where data → document is a pure function, rebuild instead.
 

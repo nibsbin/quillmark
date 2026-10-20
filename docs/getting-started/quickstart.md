@@ -161,7 +161,7 @@ This paragraph is the document body. *Markdown* works here.
         let quill = quill_from_path("my_quill")?;
         let doc = quill.parse(&std::fs::read_to_string("document.md")?)?.document;
 
-        // The engine reads no clock: the caller passes the render date.
+        // Quillmark reads no clock: the caller passes the render date.
         let today = "2026-03-14".parse()?;
         let options = RenderOptions::default().with_output_format(OutputFormat::Pdf);
         let result = Quillmark::new().render(&quill, &doc, today, &options)?;

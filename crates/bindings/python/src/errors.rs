@@ -1,9 +1,9 @@
-//! A refusal the engine minted raises `QuillmarkError` carrying a non-empty
+//! A refusal Quillmark minted raises `QuillmarkError` carrying a non-empty
 //! `.diagnostics` list; an argument the binding cannot convert at all raises
-//! `ValueError` before the engine is called, described by no diagnostic. The line
+//! `ValueError` before Quillmark is called, described by no diagnostic. The line
 //! runs between shape and content: a card dict that will not deserialize is a
 //! `ValueError`, one that deserializes and then violates an invariant is the
-//! engine's refusal.
+//! Quillmark's refusal.
 
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;

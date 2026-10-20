@@ -74,7 +74,7 @@ impl Quillmark {
     /// Open a live render session for `doc` against `quill`'s backend.
     ///
     /// `today` is the render date: a `today` date field renders as it, and so
-    /// does a Typst plate's `datetime.today()`. The engine reads no clock, so
+    /// does a Typst plate's `datetime.today()`. Quillmark reads no clock, so
     /// the host passes its local date.
     pub fn open(
         &self,

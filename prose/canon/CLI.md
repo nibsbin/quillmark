@@ -5,7 +5,7 @@
 
 ## TL;DR
 
-`quillmark-cli` is a `clap` surface over the engine holding no logic of its own:
+`quillmark-cli` is a `clap` surface over Quillmark holding no logic of its own:
 `render` turns a quill + markdown into PDF/SVG/PNG, `check` reads documents
 against a quill's schema, `validate` reads a quill's configuration and compiles
 its plate, `schema`/`blueprint`/`info` introspect a quill without rendering
@@ -68,7 +68,7 @@ them.
   A render that fails adds `cli::example_render_failed`. `--verbose` names
   whether the quill has an example, so a misspelled one reads as none.
 - **The render date is the local date.** `render`, `validate` and `workspace` supply it
-  to the engine, which reads no clock; `--today YYYY-MM-DD` on `render` or
+  to Quillmark, which reads no clock; `--today YYYY-MM-DD` on `render` or
   `workspace` pins it for a reproducible render. The local offset unreadable,
   the date is UTC's.
 - **`workspace` hands the plate to Typst's tooling.** It writes

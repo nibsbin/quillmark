@@ -4,7 +4,7 @@
 
 ## TL;DR
 
-Quillmark is a schema-driven document engine: it turns Markdown with card-yaml
+Quillmark is a schema-driven document framework: it turns Markdown with card-yaml
 blocks into a fully typeset document (PDF, SVG, PNG). A `Quill` is declarative
 data: no backend, engine, or filesystem needed to construct or read it. Its
 schema drives validation and scaffolding (parse / validate / schema / seed /
@@ -101,7 +101,7 @@ docs carry that input contract.
 
 ### `bindings/*`
 
-Language surfaces over the one core engine: `quillmark-python` (PyO3, PyPI),
+Language surfaces over the one core library: `quillmark-python` (PyO3, PyPI),
 `quillmark-wasm` (wasm-bindgen, npm), and `quillmark-cli` (the `quillmark`
 binary). See [BINDINGS.md](BINDINGS.md).
 

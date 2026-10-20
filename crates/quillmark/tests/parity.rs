@@ -1,5 +1,5 @@
 //! The parity corpus, `crates/fixtures/resources/parity/parity.json`, asserted
-//! on every surface the engine owns (`prose/canon/PARITY.md` § "The corpus").
+//! on every surface Quillmark owns (`prose/canon/PARITY.md` § "The corpus").
 
 #![cfg(feature = "typst")]
 

@@ -8,7 +8,7 @@ fn load(requires: &str, extra: &str) -> Result<(QuillConfig, Vec<Diagnostic>), V
 
 #[test]
 fn a_floor_this_engine_meets_loads() {
-    load("\">=0.1\"", "").expect("0.1 is below any released engine");
+    load("\">=0.1\"", "").expect("0.1 is below any Quillmark release");
     let release = format!(
         "\">={}.{}.{}\"",
         env!("CARGO_PKG_VERSION_MAJOR"),
@@ -24,7 +24,7 @@ fn a_floor_above_this_engine_is_the_one_error() {
         "\">=9999.0\"",
         "  from_the_future: true\nnew_section: {}\ntypst:\n  from_the_future: true\n",
     )
-        .expect_err("9999.0 is above this engine");
+        .expect_err("9999.0 is above this Quillmark release");
     assert_eq!(codes(&refused), ["quill::engine_too_old"]);
 }
 

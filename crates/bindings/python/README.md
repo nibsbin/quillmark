@@ -1,6 +1,6 @@
 # Quillmark: Python bindings
 
-Python bindings for Quillmark, a schema-driven document engine.
+Python bindings for Quillmark, a schema-driven document framework.
 
 Maintained by [borb-sh](https://github.com/borb-sh).
 

@@ -62,7 +62,7 @@ pub fn declines(id: &str) -> &'static [BlockConstruct] {
 /// `quill::unknown_backend_key`, so a key becomes valid only once its backend
 /// reads it.
 ///
-/// `None` for an id the table does not name: no build of this engine renders
+/// `None` for an id the table does not name: no build of Quillmark renders
 /// it, so its section loads unchecked and a render refuses the id itself as
 /// `engine::backend_not_found`.
 pub fn config_keys(id: &str) -> Option<&'static [&'static str]> {
@@ -155,7 +155,7 @@ pub fn declined_construct(
     }
 }
 
-/// English enough for the engine's own sentence; a consumer wording this
+/// English enough for Quillmark's own sentence; a consumer wording this
 /// itself reads `construct` and `count` off `args` instead.
 fn plural(construct: BlockConstruct, count: usize) -> String {
     let (one, name) = match construct {

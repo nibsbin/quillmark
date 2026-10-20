@@ -18,7 +18,7 @@ A vulnerability, report it privately:
 
 - A document that runs Typst code, reads a file outside its quill, or reaches the network.
 - A quill that reads outside its own file tree or reaches the network.
-- A document that panics the engine.
+- A document that panics Quillmark.
 - A Markdown link in a document that reaches SVG or PDF output as a script link.
 
 Not a vulnerability, open an ordinary issue:

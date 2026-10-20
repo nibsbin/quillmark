@@ -76,12 +76,12 @@ template surfaces as a render-time error, not a load error.
 
 One required top-level section, `quill` (bundle metadata); optional `main`
 (document fields), `card_kinds` (card kind definitions), and a backend-named
-section (`typst`). Top-level keys naming a backend are reserved, and the engine
+section (`typst`). Top-level keys naming a backend are reserved, and Quillmark
 reads exactly one: the section named by `quill.backend`. A section named for any
 other backend is `quill::unknown_section`, the same refusal a typo gets. Every
 key, type, and UI property is documented in the
 [Quill.yaml reference](../../docs/quills/quill-yaml-reference.md); what follows
-is what the engine enforces.
+is what Quillmark enforces.
 
 Field names must be `snake_case` (match `[a-z][a-z0-9_]*`). Capitalized or `$`-prefixed keys are rejected at config parse time with `quill::invalid_field_name`: document-level metadata sits on dedicated `$`-prefixed keys in the plate JSON (`$quill`, `$body`, `$cards`, `$kind`), and user fields stay lowercase so they cannot shadow it.
 
@@ -108,11 +108,11 @@ Identity resolution:
   `quill::unknown_key` error. A backend's own settings (e.g. the Typst plate)
   live under the backend-named section, never in `quill:`, and reach a backend
   as `QuillConfig::backend_config`.
-- `quill.requires` (`">=MAJOR.MINOR[.PATCH]"`) is a floor on the engine's
+- `quill.requires` (`">=MAJOR.MINOR[.PATCH]"`) is a floor on Quillmark's
   crate version. It is read before anything else in the file, and a floor above
-  the running engine is the load's only error, `quill::engine_too_old`: strict
-  parsing would otherwise report a newer engine's keys as typos. The floor is
-  checked and not stored on `QuillConfig`. The engine's version is its release
+  the running Quillmark is the load's only error, `quill::engine_too_old`: strict
+  parsing would otherwise report a newer Quillmark's keys as typos. The floor is
+  checked and not stored on `QuillConfig`. Quillmark's version is its release
   with any prerelease suffix dropped, so a release candidate meets its own
   release's floor, and a build of `main` carries the last released version
   until the release bump.

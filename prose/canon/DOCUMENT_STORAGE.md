@@ -142,7 +142,7 @@ admits it, then its own body. Its `$ext` drops, since `$ext` reaches no render
 and the body does. What the fold lands is new content: an island id the body
 above already holds is minted anew, the next `isl-{n}` past the highest in
 either body (§ Island-id determinism), and an anchor whose id it already holds
-drops whole, since the engine mints no anchor id (§ Anchor-id identity). Every
+drops whole, since Quillmark mints no anchor id (§ Anchor-id identity). Every
 later card moves up one index.
 
 ## Byte-stability
@@ -509,14 +509,14 @@ follow from that.
 
 |                     | Island `id`                                        | Anchor `id`                                        |
 | ------------------- | -------------------------------------------------- | -------------------------------------------------- |
-| Minted by           | the engine at import or fold, the caller on insert | the caller                                         |
+| Minted by           | Quillmark at import or fold, the caller on insert  | the caller                                         |
 | Because             | content determines it: the nth island minted      | the referent is external; no content determines it |
 | Unique across       | the `Content`'s islands                            | the `Content`'s prose marks                        |
 | Required            | yes: `insert` rejects the empty id                 | yes: the empty id is rejected                     |
 | On collision        | `insert` rejects; `validate` scans                 | `add` rejects                                      |
 | Markdown round-trip | re-minted identically                              | carried by revise; spelled read-only by the annotated export |
 
-A card is addressed by index and carries no id handle. A consumer needing a durable per-card key carries one in `$ext` under its own namespace ([CARDS.md](CARDS.md) § Out-of-band Metadata), which the engine round-trips and never interprets.
+A card is addressed by index and carries no id handle. A consumer needing a durable per-card key carries one in `$ext` under its own namespace ([CARDS.md](CARDS.md) § Out-of-band Metadata), which Quillmark round-trips and never interprets.
 
 Each section below states one handle's policy whole.
 
@@ -564,14 +564,14 @@ The policy: **an anchor id is caller-supplied, unique per `Content`, opaque and
 invariant while the mark lives; the mark is best-effort under edits and
 read-only in markdown.**
 
-- **Caller-supplied.** The engine mints no anchor id and cannot: only the
+- **Caller-supplied.** Quillmark mints no anchor id and cannot: only the
   consumer knows the referent. Each consumer (editor, MCP writer) supplies its
-  own; the runtime persists it verbatim. Engine-minting is a non-goal by
+  own; the runtime persists it verbatim. Minting in core is a non-goal by
   design: a counter is history-dependent (the same final content reached two
   ways carries different ids: the ambient source the twin rule forbids) and
   forfeits referent-convergence (two `add`s for one thread would mint two
   handles). A client wanting generated ids mints them client-side and supplies
-  them; the auto-fallback middle ground (engine mints when the caller omits) is
+  them; the auto-fallback middle ground (Quillmark mints when the caller omits) is
   a non-goal too.
 - **Unique per `Content`.** `add` *rejects* a collision: not replace (which
   silently retargets a live thread) nor coexist (already incoherent: an anchor

@@ -120,7 +120,7 @@ page owns the full selector semantics.
 
 Quill names are `[a-z][a-z0-9_]*`, at most 64 characters. A `$quill` name may
 carry the collection the quill comes from, `$quill: borb.usaf_memo@1.2`, under
-the same rule; the host resolves the collection, and the engine pairs the
+the same rule; the host resolves the collection, and Quillmark pairs the
 document with its quill by the name after the `.`.
 
 ## Payload Data Types

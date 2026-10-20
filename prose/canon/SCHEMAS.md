@@ -33,8 +33,8 @@ Supported field types:
 | `array` | Ordered list; requires an `items:` element schema (e.g. `items: { type: text }` for a list of lines, `items: { type: object, properties: … }` for a typed table). Optional `max:`, the element count past which the surplus leaves the page ([Cardinality](#cardinality)) |
 | `matrix` | A vocabulary someone ticks; requires a `members:` roster, and `open: true` admits items a document adds. A cell whose value is the set of held items: each held id maps to an object of the field's `properties:` (the columns), and an unheld member is absent. See [Matrix](#matrix) |
 | `object` | Structured map; requires `properties:` |
-| `date` | A strict calendar date `YYYY-MM-DD`, or the keyword `today` ([The render date](#the-render-date-today)). Rejects any time component (a time-bearing string is a `datetime`, not a truncated date). The common case in a document engine, so it is the unmarked date type. Stored verbatim; lowers to a native Typst `datetime(year:, month:, day:)`, with `qm.ink(dict, key, ..)` for a click-to-edit rendering (see `PLATE_DATA.md`) |
-| `datetime` | A strict offset-less wall-clock datetime `YYYY-MM-DDThh:mm[:ss]`, seconds optional (zero-filled). Rejects timezone offsets (`Z`, `±HH:MM`), the space separator, fractional seconds, and a bare date (which is a `date`). An offset is **rejected, never dropped**: the engine does no zone math, keeping wall-clock semantics end to end. Stored verbatim; lowers the same way over the six-component `datetime(year:, .., second:)` |
+| `date` | A strict calendar date `YYYY-MM-DD`, or the keyword `today` ([The render date](#the-render-date-today)). Rejects any time component (a time-bearing string is a `datetime`, not a truncated date). The common case in a document framework, so it is the unmarked date type. Stored verbatim; lowers to a native Typst `datetime(year:, month:, day:)`, with `qm.ink(dict, key, ..)` for a click-to-edit rendering (see `PLATE_DATA.md`) |
+| `datetime` | A strict offset-less wall-clock datetime `YYYY-MM-DDThh:mm[:ss]`, seconds optional (zero-filled). Rejects timezone offsets (`Z`, `±HH:MM`), the space separator, fractional seconds, and a bare date (which is a `date`). An offset is **rejected, never dropped**: Quillmark does no zone math, keeping wall-clock semantics end to end. Stored verbatim; lowers the same way over the six-component `datetime(year:, .., second:)` |
 | `text` | Open **unformatted** text over the same canonical content (`Content`) as `richtext` (same media type, nav, and regions) but a **literal** codec (`from_plaintext`/`to_plaintext`): delimiters stay literal, no markup, verbatim round-trip. One line; `multiline: true` admits line breaks. Constrained mark-/island-free (`Content::is_plain`); a formatted wire content is rejected (`validation::not_plain`), not stripped. **Rests as the literal string** — in the *document*. A plate receives the content object, exactly as for `richtext` (no backend reads the `text` annotation), and a plate that computes with the value takes its `str` through `qm.str(..)` ([PLATE_DATA.md](PLATE_DATA.md)), every character recovered because the value carries no marks, whitespace normalized |
 | `richtext` | Rich **formatted** prose over a canonical content (`Content`); markdown is a projection of it. One paragraph (exactly one `Para` line, no container, no islands); `multiline: true` admits block structure (paragraphs, lists, containers). A `richtext` spells `multiline:` either way, `true` or `false`, and its absence is a load error. The pre-richtext `markdown` spelling and the retired `type: richtext(inline)` token are schema load errors (`quill::field_parse_error`). **Rests as the canonical content object** |
 
@@ -598,10 +598,10 @@ what follows for literals and for absence.
 | Rung | Source | Persisted into a `Document`? | Renders? |
 |---|---|---|---|
 | top | authored value | yes: it *is* the document content | yes |
-| | `default:` | **never** by the engine: lives in the schema, interpolated only into the ephemeral render projection | yes: the fidelity value |
+| | `default:` | **never** by Quillmark: lives in the schema, interpolated only into the ephemeral render projection | yes: the fidelity value |
 | floor | the field's `blank` (`blank`) | never ([Non-persist invariant](#blank-filled-render)) | last resort |
 
-The engine never writes a `default` into a document: it lives in `Quill.yaml`,
+Quillmark never writes a `default` into a document: it lives in `Quill.yaml`,
 the render path interpolates it into the plate-JSON projection only, and seeding
 deliberately omits it (persisting it would be redundant and would freeze it
 against a schema change). A default's *value* becomes document content only
@@ -609,7 +609,7 @@ when a consumer writes it from where it is shown: `blueprint()` emits it as
 literal text in its reference *string* (the concrete default value, shippable
 as-is), and an editor may show it as an unset field's value until an edit
 commits it. What a consumer writes is ordinary **authored** content: the
-consumer committed it, not the engine.
+consumer committed it, not Quillmark.
 
 No surface owns a precedence *policy*; each **projection cuts the same ladder**
 at a different rung, and the per-rung producers are shared (`blank` for the
@@ -622,7 +622,7 @@ field maps rather than a sort key):
 | `blueprint` document | non-blank `default:` › empty | empty cell (blank at render) | annotated string, [BLUEPRINT.md](BLUEPRINT.md) |
 | seeding | kind `seed:` › absent | (deferred to render floor) | committed `Document`: [Document seeding](#document-seeding) |
 | add-card (into a document) | the `$seed` overlay's block, else the kind's `seed:` block › absent | (deferred to render floor) | a new composable `Card`: [Document seeding](#document-seeding) |
-| editor (consumer-side) | authored › `default:` › blank, resolved per field and **tagged with its source rung** | blank | the engine's [`resolve()`](#the-resolved-value-view-resolve) resolved-value view: value and source rung per field |
+| editor (consumer-side) | authored › `default:` › blank, resolved per field and **tagged with its source rung** | blank | Quillmark's [`resolve()`](#the-resolved-value-view-resolve) resolved-value view: value and source rung per field |
 | values (`reader.get()`) | authored only, as stored: an absent field stays absent, a scalar shorthand stays a shorthand | **none**: an absent field reads absent | the [values form](#the-values-form): the field's value with content leaves as their codec's text |
 
 ### Cells and namespaces
@@ -665,7 +665,7 @@ that section.
 
 The consumer-side `Document`-payload × schema join is a **non-goal**:
 [`resolve()`](#the-resolved-value-view-resolve) supersedes it. The
-editor reads value and source rung from one engine call rather than re-cutting
+editor reads value and source rung from one core call rather than re-cutting
 the ladder in consumer code. Diagnostics stay `Quill::validate`'s
 (a consumer merges them with its own diagnostic producers regardless), and schema
 guidance (labels, descriptions, groups) reads from `Quill::schema`.
@@ -760,7 +760,7 @@ survives every write through this lane.
 
 ## Blank-filled render
 
-**A document that renders is complete.** The engine's one requirement is that
+**A document that renders is complete.** Quillmark's one requirement is that
 it be *well-formed* ([What blocks a render](#what-blocks-a-render)); an absent or
 present-null cell renders and draws no diagnostic (see
 [Native validation](#native-validation)). No field is required and no verdict
@@ -820,8 +820,8 @@ or projected, at element position inside an `array` as well as at the top level.
 The two projections differ deliberately: `Quill::schema` is the *declaration*
 view and emits `values:` verbatim (injecting the blank would emit a schema that
 fails to load), while the transform schema is the *wire* contract and emits
-`enum: ["", …values]`, so a standard JSON-Schema validator accepts what the
-engine accepts. A consumer's picker keeps unset a real, re-selectable option,
+`enum: ["", …values]`, so a standard JSON-Schema validator accepts what
+Quillmark accepts. A consumer's picker keeps unset a real, re-selectable option,
 never a vanishing placeholder. Unset is `removeField`, the one unset verb; a
 stored `""` is an [answer](#optional-cells) and outranks a `default:`.
 `ui.blank_title` labels the blank wherever a consumer draws it.
@@ -852,7 +852,7 @@ something: the branch is what makes the world's fields readable without a guard
 wherever a `date` value is, authored or declared as a `default:`, at any depth.
 It is not a `datetime` value.
 
-The engine reads no clock. The date is a required input to the compile,
+Quillmark reads no clock. The date is a required input to the compile,
 supplied by the host at every door that turns a document into plate data:
 `compile_data` / `compile_checked`, `Quill::resolve` / `reader.resolve`, and
 `Quillmark::open` / `Quillmark::render`. A `today` cell and a Typst plate's
@@ -873,7 +873,7 @@ for every `update`.
 
 ## What blocks a render
 
-**A render fails only where the engine would have to invent what the author
+**A render fails only where Quillmark would have to invent what the author
 wrote.** Everything else renders, and input no declaration claims warns. Input
 other than a well-formed answer falls in one of three classes:
 
@@ -891,7 +891,7 @@ meaning: every character renders, a break as a space. No render reads
 `$seed`, so every check on it warns, a malformed overlay value included.
 
 **Malformed is fatal because the plate is total.** A declared cell always holds
-a value ([Blank-filled render](#blank-filled-render)), so a value the engine
+a value ([Blank-filled render](#blank-filled-render)), so a value Quillmark
 cannot read leaves it only substitutes, and each asserts something false. The
 blank says nobody answered. A `default:` says the author accepted it. A guessed
 coercion picks a meaning. `meeting_type: Regular` against

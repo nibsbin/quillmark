@@ -36,7 +36,7 @@ The engine caches no quills: `Quillmark::render` takes a `&Quill` the caller own
 
 ## Untrusted input
 
-A document is data. Its text reaches a plate escaped, never as Typst code, and it names no file outside the quill. The engine does not bound what it costs to render; the host does, as above.
+A document is data. Its text reaches a plate escaped, never as Typst code, and it names no file outside the quill. Quillmark does not bound what it costs to render; the host does, as above.
 
 A quill is code. A plate is a Typst program, and an acroform quill's `form.pdf` is parsed in full; `quill_from_path` skips symlinks, refuses any file over 50 MiB, and caps neither file count nor total size. Load a quill from someone you do not trust inside the same bounded worker as its renders.
 

@@ -485,7 +485,7 @@ fn a_nonsense_font_size_falls_back_to_auto_rather_than_forging_a_da() {
     }
 }
 
-/// A checkbox's `/DA` is the engine's check font, registered in `/DR` for a
+/// A checkbox's `/DA` is Quillmark's check font, registered in `/DR` for a
 /// viewer synthesizing the `/MK /CA` caption under `/NeedAppearances` (in
 /// Helvetica the check glyph is the digit `4`). Its `font` names nothing, so
 /// registering it would emit an unreferenced Type1 object; a text widget's is

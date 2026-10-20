@@ -4,7 +4,7 @@
 
 ## TL;DR
 
-Quillmark exposes one core engine through several language surfaces: Python (PyO3), WebAssembly (wasm-bindgen), and a CLI binary. Every surface drives the same `quillmark` core: the same `Document`/`Quill`/`Card` model, the same `serde` diagnostics, and the same capability principle. Surfaces differ only in language idiom, packaging, and which extras they expose (canvas preview is WASM-only).
+Quillmark exposes one core library through several language surfaces: Python (PyO3), WebAssembly (wasm-bindgen), and a CLI binary. Every surface drives the same `quillmark` core: the same `Document`/`Quill`/`Card` model, the same `serde` diagnostics, and the same capability principle. Surfaces differ only in language idiom, packaging, and which extras they expose (canvas preview is WASM-only).
 
 ## Shared model
 

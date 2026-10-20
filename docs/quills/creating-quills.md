@@ -54,7 +54,7 @@ Three types hold text, and two questions pick one:
 
 Pick before a corpus exists. Changing a declared type reinterprets every value already stored in that field, and `text` → `richtext` is lossy: see [Choosing among `enum`, `text`, and `richtext`](quill-yaml-reference.md#choosing-among-enum-text-and-richtext).
 
-When you declare an `enum`, list only the real choices. Every enum also accepts a **blank** (`""`) that the engine supplies — what a document says when nobody has answered — so you never declare it, and declaring `""` in `values:` is a load error. If the empty state is itself a decision worth recording, make it a member (`undecided`, `waived`), because the blank means nobody chose and a member means someone chose "none". See [the blank](quill-yaml-reference.md#the-blank-values-is-for-choices-not-for-the-absence-of-one).
+When you declare an `enum`, list only the real choices. Every enum also accepts a **blank** (`""`) that Quillmark supplies — what a document says when nobody has answered — so you never declare it, and declaring `""` in `values:` is a load error. If the empty state is itself a decision worth recording, make it a member (`undecided`, `waived`), because the blank means nobody chose and a member means someone chose "none". See [the blank](quill-yaml-reference.md#the-blank-values-is-for-choices-not-for-the-absence-of-one).
 
 ## 3. Write `plate.typ`
 

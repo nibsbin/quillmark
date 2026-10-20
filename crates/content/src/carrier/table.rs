@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 const AUTO: &str = "auto";
 
 /// The props value attribute `name` spells with `value`, or `None` for a name
-/// the engine does not name or a value outside its spelling: `widths` is
+/// Quillmark does not name or a value outside its spelling: `widths` is
 /// whitespace-separated tokens, each a decimal [weight](is_weight) or `auto`;
 /// `align` is one of [`TABLE_ALIGNS`]; `headless` is bare.
 pub(crate) fn prop(name: &str, value: &str) -> Option<Value> {

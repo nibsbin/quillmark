@@ -73,7 +73,7 @@ fn field_da(spec: &FieldSpec) -> Vec<u8> {
 
 /// The face a widget's value is set in, as `(resource name, base font)`, or
 /// `None` for a signature — the one type carrying no value. A checkbox's is the
-/// engine's check font, so `font` names nothing on either.
+/// Quillmark's check font, so `font` names nothing on either.
 fn value_font(spec: &FieldSpec) -> Option<(&'static str, &'static [u8])> {
     match spec.field_type {
         FieldType::Text { .. } | FieldType::Choice { .. } => {
