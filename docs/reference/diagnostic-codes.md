@@ -196,12 +196,15 @@ Opening an `acroform` quill and binding `form.yaml`.
 
 - `acroform::dangling_binding`
 - `acroform::field_page_out_of_range`
+- `acroform::invalid_field_rect`
 - `acroform::invalid_form_spec`
 - `acroform::legacy_form_json`
 - `acroform::missing_form_pdf`
 - `acroform::missing_form_spec`
 - `acroform::stamped_parse_failed`
+- `acroform::text_overflow`
 - `acroform::unbindable_field`
+- `acroform::unencodable_text`
 
 ## `pdf::`
 

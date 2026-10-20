@@ -213,6 +213,12 @@ fn winansi_byte(c: char) -> Option<u8> {
     }
 }
 
+/// How many characters of `s` a baked appearance draws as `?`: those WinAnsi
+/// (CP1252) cannot represent.
+pub fn unencodable_chars(s: &str) -> usize {
+    s.chars().filter(|&c| winansi_byte(c).is_none()).count()
+}
+
 /// Transcode `s` to WinAnsi (CP1252) bytes, substituting `?` for any code point
 /// WinAnsi cannot represent.
 pub(crate) fn winansi_encode(s: &str) -> Vec<u8> {

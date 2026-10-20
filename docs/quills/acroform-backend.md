@@ -158,7 +158,7 @@ Note what is **absent** from the bound fields: no `type`, `options`, or `multili
 | `name` | yes | The widget's `/T` entry: unique across **both** `fields` and `widgets`. |
 | `schema_field` | yes | The document field this widget binds to. Resolved against the quill schema at load; a dangling path is a load error (`acroform::dangling_binding`), not a silent blank. |
 | `page` | yes | 0-based page index into `form.pdf`. |
-| `rect` | yes | `{x, y, w, h}` in **PDF points** (1/72"), **top-left origin**, page-relative (see below). |
+| `rect` | yes | `{x, y, w, h}` in **PDF points** (1/72"), **top-left origin**, page-relative (see below). A box with no width or height, or wholly off its page, is a load error (`acroform::invalid_field_rect`). |
 | `tooltip` | no | Overrides the widget's `/TU`. When omitted, the field inherits the schema field's `description`. |
 
 ### Unbound-widget keys (`widgets`)
@@ -262,7 +262,7 @@ The PDF is the real deliverable, and the canvas rasterizes the same stamp but fo
 
 Each widget is a real field carrying `/NeedAppearances` **and** a baked `/AP` appearance stream drawing its current value. The two split the work: a viewer that synthesizes appearances (Acrobat, Chrome/pdfium, Preview.app, pdf.js's forms layer) rebuilds each value from `/V` and `/DA`, refitting it as the user types; a consumer that synthesizes nothing (a raster pipeline, Ghostscript, the canvas) draws the baked stream and shows the value rather than an empty box.
 
-The baked stream fits the value as a viewer's auto-size does: a one-line value shrinks until it fits the box's width, and a multiline value breaks at spaces into lines of the box's width, shrinking until they fit its height, down to 4 pt.
+The baked stream fits the value as a viewer's auto-size does: a one-line value shrinks until it fits the box's width, and a multiline value breaks at spaces into lines of the box's width, shrinking until they fit its height, down to 4 pt. A value that does not fit even at 4 pt is cut off at the box's edge, and the session warns `acroform::text_overflow` at its field.
 
 A checkbox bakes both of its states, checked or not: `/AP << /N << /Yes … /Off … >> >>`, with `/AS` and `/V` naming the current one. `Yes` draws the check mark and `Off` draws nothing, the background owning the box itself. A later stage that fills the delivered PDF toggles a box by renaming `/AS` and `/V`, as pypdf does, with no appearance to regenerate.
 
@@ -270,7 +270,7 @@ A checkbox bakes both of its states, checked or not: `/AP << /N << /Yes … /Off
 
 The `/V` a stamped field carries is always faithful, and a synthesizing viewer renders from it. The **baked stream is an approximation** in three ways, because it commits to one encoding and one measurement where a form renderer would defer. In all three the delivered `/V` is correct, only the drawn pixels differ, and no diagnostic is raised.
 
-- **Non-WinAnsi characters draw as `?`.** The stream encodes text as WinAnsi (CP1252). Any code point outside that range (CJK, emoji, and many symbols) is substituted with `?`, while `/V` keeps full Unicode (UTF-16BE). A field whose value is `日本語` shows correctly in Acrobat but as `???` on the canvas.
+- **Non-WinAnsi characters draw as `?`.** The stream encodes text as WinAnsi (CP1252). Any code point outside that range (CJK, emoji, and many symbols) is substituted with `?`, while `/V` keeps full Unicode (UTF-16BE). A field whose value is `日本語` shows correctly in Acrobat but as `???` on the canvas. The session warns `acroform::unencodable_text` at each such field, with how many characters it draws as `?`.
 - **Justification is not applied.** The stream draws from the box's left edge; `/Q` (the `align` dial) moves the text only in a viewer that re-synthesizes.
 - **Overflow is clipped.** A value wider or taller than its field box is clipped to the box by the appearance's `/BBox`, whereas a synthesizing viewer wraps or scrolls it. A canvas can therefore look truncated where the same field in Acrobat is complete.
 

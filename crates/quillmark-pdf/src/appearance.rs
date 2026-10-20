@@ -29,6 +29,10 @@ const TEXT_INSET: f32 = 2.0;
 /// Inset, in points, between the box's top edge and the first baseline.
 const TEXT_TOP_INSET: f32 = 1.0;
 
+/// How much of a line's size sits above its baseline, as a viewer reckons it
+/// when it centres a one-line value in its box.
+const ONE_LINE_RISE: f32 = 0.65;
+
 /// Line height = point size × this.
 const LINE_SPACING: f32 = 1.2;
 
@@ -74,11 +78,41 @@ fn wrapped(spec: &FieldSpec, value: &str, room: f32, h: f32) -> (f32, Vec<Vec<u8
     }
     loop {
         let lines = wrap(spec.font, value, room, size);
-        let height = TEXT_TOP_INSET + size + (lines.len().max(1) - 1) as f32 * size * LINE_SPACING;
-        if height <= h || size <= MIN_SIZE {
+        if lines_height(size, lines.len()) <= h || size <= MIN_SIZE {
             return (size, lines);
         }
         size = (size - SIZE_STEP).max(MIN_SIZE);
+    }
+}
+
+fn lines_height(size: f32, lines: usize) -> f32 {
+    TEXT_TOP_INSET + size + (lines.max(1) - 1) as f32 * size * LINE_SPACING
+}
+
+/// Whether the baked appearance cuts off some of `spec`'s value: a line wider
+/// than the box, or wrapped lines taller than it, at the size it draws them,
+/// which an auto-sized value reaches only at its smallest, 4 pt.
+pub fn overflows(spec: &FieldSpec) -> bool {
+    let [x0, y0, x1, y1] = spec.rect;
+    let (w, h) = (x1 - x0, y1 - y0);
+    let Some(value) = spec.value.as_deref() else {
+        return false;
+    };
+    if !(w > 0.0 && h > 0.0) {
+        return false;
+    }
+    let room = w - 2.0 * TEXT_INSET;
+    match &spec.field_type {
+        FieldType::Text { multiline: true } => {
+            let (size, lines) = wrapped(spec, value, room, h);
+            lines_height(size, lines.len()) > h
+        }
+        FieldType::Text { multiline: false } | FieldType::Choice { .. } => {
+            let lines: Vec<Vec<u8>> = value.lines().map(winansi_encode).collect();
+            let size = one_line_size(spec, &lines, room, h);
+            lines.iter().any(|line| spec.font.width(line, size) > room)
+        }
+        FieldType::Checkbox | FieldType::Signature => false,
     }
 }
 
@@ -127,6 +161,10 @@ fn wrap(font: FormFont, value: &str, room: f32, size: f32) -> Vec<Vec<u8>> {
         lines.push(line);
     }
     lines
+}
+
+fn one_line_baseline(h: f32, size: f32) -> f32 {
+    (h - size * ONE_LINE_RISE) * 0.5
 }
 
 /// Larger than [`text_size`]: the check glyph reads a touch small.
@@ -178,13 +216,12 @@ pub(crate) fn of(spec: &FieldSpec) -> Option<Normal> {
         FieldType::Text { multiline: false } => {
             let lines: Vec<Vec<u8>> = spec.value.as_deref()?.lines().map(winansi_encode).collect();
             let size = one_line_size(spec, &lines, room, h);
-            (
-                spec.font.resource_name(),
-                size,
-                TEXT_INSET,
-                h - size - TEXT_TOP_INSET,
-                lines,
-            )
+            let y = if lines.len() == 1 {
+                one_line_baseline(h, size)
+            } else {
+                h - size - TEXT_TOP_INSET
+            };
+            (spec.font.resource_name(), size, TEXT_INSET, y, lines)
         }
         FieldType::Choice { .. } => {
             let line = winansi_encode(spec.value.as_deref()?);
@@ -193,7 +230,7 @@ pub(crate) fn of(spec: &FieldSpec) -> Option<Normal> {
                 spec.font.resource_name(),
                 size,
                 TEXT_INSET,
-                (h - size) * 0.5,
+                one_line_baseline(h, size),
                 vec![line],
             )
         }
@@ -359,8 +396,8 @@ mod tests {
         assert_eq!(ap.bbox, [228.0, 20.0], "the field box's own extent");
         let drawn = String::from_utf8_lossy(&ap.content).into_owned();
         assert!(
-            drawn.contains("\n2 7 Td\n"),
-            "the first baseline is inset from the box's own top-left: {drawn}"
+            drawn.contains("\n2 6.1 Td\n"),
+            "a one-line value is inset from the box's left and centred in its height: {drawn}"
         );
     }
 
@@ -462,6 +499,46 @@ mod tests {
 
         spec.font_size = Some(10.0);
         assert_eq!(shown(&spec).0, 10.0);
+    }
+
+    #[test]
+    fn a_shrunk_line_stays_centred_in_its_box() {
+        let mut spec = text(Some("Lt Col Casey B. Sample, DSN 555-0100, Comm (555) 555-0100"));
+        spec.rect = [0.0, 0.0, 150.0, 20.0];
+        let (size, _) = shown(&spec);
+        let drawn = content(&spec);
+        let baseline: f32 = drawn
+            .lines()
+            .find_map(|l| l.strip_prefix("2 ")?.strip_suffix(" Td"))
+            .and_then(|y| y.parse().ok())
+            .expect("the line is placed");
+        let cap_height = size * 0.718;
+        let (below, above) = (baseline, 20.0 - baseline - cap_height);
+        assert!(size < 12.0, "the line shrinks to {size}pt");
+        assert!(
+            below > 0.0 && above > 0.0 && (above - below).abs() < size * 0.1,
+            "{size}pt capitals sit {below} over the box's floor and {above} under its top"
+        );
+    }
+
+    #[test]
+    fn a_value_overflows_only_where_the_smallest_size_cannot_fit_it() {
+        let mut line = text(Some("Ada"));
+        line.rect = [0.0, 0.0, 150.0, 20.0];
+        assert!(!overflows(&line));
+        line.value = Some("Sample ".repeat(6));
+        assert!(!overflows(&line), "a long line shrinks to fit");
+        line.value = Some("Sample ".repeat(30));
+        assert!(overflows(&line), "past 4pt it runs off the box");
+        line.value = Some("Sample ".repeat(6));
+        line.font_size = Some(12.0);
+        assert!(overflows(&line), "a widget's own size does not shrink");
+
+        let mut box_ = text(None);
+        paragraph(&mut box_, &"Sample text. ".repeat(40), [0.0, 0.0, 200.0, 60.0]);
+        assert!(!overflows(&box_), "a paragraph shrinks until its lines fit");
+        paragraph(&mut box_, &"Sample text. ".repeat(400), [0.0, 0.0, 200.0, 60.0]);
+        assert!(overflows(&box_), "past 4pt its last lines are cut off");
     }
 
     #[test]

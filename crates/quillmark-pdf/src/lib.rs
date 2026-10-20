@@ -20,7 +20,9 @@ mod writer;
 #[doc(hidden)]
 pub mod testkit;
 
+pub use appearance::overflows;
 pub use error::PdfError;
+pub use writer::unencodable_chars;
 pub use stamp::{
     regions_of, stamp, AppearanceStates, StampOptions, CHECKBOX_ON_STATE, CHECK_FONT,
     CHECK_FONT_RESOURCE, CHECK_GLYPH,

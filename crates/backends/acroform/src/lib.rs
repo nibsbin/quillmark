@@ -16,9 +16,9 @@ use quillmark_core::quill::{FileTreeNode, QuillConfig};
 use quillmark_core::session::SessionHandle;
 use quillmark_core::{
     backend::Backend,
-    error::{RenderError, RenderResult},
+    error::{Diagnostic, RenderError, RenderResult, Severity},
     quill::{CalendarDate, Quill},
-    region::RenderedRegion,
+    region::{plate_addr_to_doc_path, RenderedRegion},
     session::{ChangeSet, LiveSession},
     types::{Artifact, OutputFormat, RenderOptions},
 };
@@ -69,6 +69,7 @@ impl Backend for AcroformBackend {
         } = read_form(source)?;
         let field_specs = resolve_field_specs(&bound, json_data);
         let raster = stamp_raster(&base_pdf, &field_specs)?;
+        let warnings = value_warnings(&field_specs, json_data);
 
         Ok(LiveSession::new(
             Box::new(AcroformSession {
@@ -77,6 +78,7 @@ impl Backend for AcroformBackend {
                 field_specs,
                 canvas_boxes,
                 raster,
+                warnings,
             }),
             source.config().clone(),
             today,
@@ -162,6 +164,71 @@ pub fn resolves_schema_address(config: &QuillConfig, path: &str) -> bool {
     bind::bind(config, "", path).is_ok()
 }
 
+/// The warnings on what the baked appearance draws of each field's value, one
+/// of each code per field, anchored at the field: `acroform::unencodable_text`
+/// where it draws characters as `?`, and `acroform::text_overflow` where it
+/// cuts the value off.
+fn value_warnings(field_specs: &[FieldSpec], json_data: &serde_json::Value) -> Vec<Diagnostic> {
+    let card_kinds: Vec<Option<&str>> = json_data
+        .get("$cards")
+        .and_then(serde_json::Value::as_array)
+        .map(|cards| {
+            cards
+                .iter()
+                .map(|card| card.get("$kind").and_then(serde_json::Value::as_str))
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut warned = std::collections::BTreeSet::new();
+    let mut warnings = Vec::new();
+    for spec in field_specs {
+        let (Some(field), Some(value)) = (spec.schema_field.as_deref(), spec.value.as_deref()) else {
+            continue;
+        };
+        let path = || {
+            plate_addr_to_doc_path(field, &card_kinds)
+                .map_or_else(|| field.to_string(), |path| path.to_string())
+        };
+        let count = quillmark_pdf::unencodable_chars(value);
+        if count > 0 && warned.insert((field, "acroform::unencodable_text")) {
+            warnings.push(
+                Diagnostic::new(
+                    Severity::Warning,
+                    format!(
+                        "{count} character(s) in this field are outside the form's font and \
+                         draw as `?` in the preview and wherever the form's own appearance shows"
+                    ),
+                )
+                .with_code("acroform::unencodable_text".to_string())
+                .with_path(path())
+                .with_hint(
+                    "The filled field keeps the full text, and a viewer that redraws the field \
+                     (Acrobat, Chrome, pdf.js) shows it."
+                        .to_string(),
+                ),
+            );
+        }
+        if quillmark_pdf::overflows(spec) && warned.insert((field, "acroform::text_overflow")) {
+            warnings.push(
+                Diagnostic::new(
+                    Severity::Warning,
+                    "this field's text does not fit its box even at the smallest size, so the \
+                     preview cuts it off"
+                        .to_string(),
+                )
+                .with_code("acroform::text_overflow".to_string())
+                .with_path(path())
+                .with_hint(
+                    "The filled field keeps the full text; shorten it to show all of it on the \
+                     printed form."
+                        .to_string(),
+                ),
+            );
+        }
+    }
+    warnings
+}
+
 fn resolve_field_specs(bound: &[BoundWidget], json_data: &serde_json::Value) -> Vec<FieldSpec> {
     bound
         .iter()
@@ -201,6 +268,8 @@ struct AcroformSession {
     /// [`stamp_raster`] of `field_specs`: the canvas path holds pages rather
     /// than bytes to reparse per paint.
     raster: HayroPdf,
+    /// [`value_warnings`] of `field_specs`.
+    warnings: Vec<Diagnostic>,
 }
 
 impl SessionHandle for AcroformSession {
@@ -276,6 +345,7 @@ impl SessionHandle for AcroformSession {
     ) -> Result<ChangeSet, RenderError> {
         let field_specs = resolve_field_specs(&self.bound, json_data);
         let raster = stamp_raster(&self.base_pdf, &field_specs)?;
+        self.warnings = value_warnings(&field_specs, json_data);
 
         let mut dirty_pages: Vec<usize> = self
             .field_specs
@@ -291,6 +361,10 @@ impl SessionHandle for AcroformSession {
         self.raster = raster;
 
         Ok(ChangeSet::new(self.canvas_boxes.len(), dirty_pages))
+    }
+
+    fn warnings(&self) -> &[Diagnostic] {
+        &self.warnings
     }
 }
 
