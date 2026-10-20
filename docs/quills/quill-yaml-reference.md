@@ -253,7 +253,7 @@ issued:
   default: today   # every document leaving the field unset renders on its render date
 ```
 
-The document stores `today`, not a date. The render supplies the date: the CLI and the WASM and Python bindings use the local date unless given one (`quillmark render --today 2026-03-14`, `engine.render(quill, doc, opts, "2026-03-14")`, `engine.render(..., today=date(2026, 3, 14))`). A plate's `datetime.today()` returns the same date. A document that writes a date instead pins it.
+The document stores `today`, not a date. The render supplies the date: the CLI and the WASM and Python bindings use the local date unless given one (`quillmark render --today 2026-03-14`, `quillmark.render(quill, doc, opts, "2026-03-14")`, `quillmark.render(..., today=date(2026, 3, 14))`). A plate's `datetime.today()` returns the same date. A document that writes a date instead pins it.
 
 #### Optional fields: `t?`
 

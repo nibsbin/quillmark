@@ -437,18 +437,18 @@ The label `<__qm_field__>` and metadata `kind: "__qm_field__"` are reserved for 
 
 PDF renders as a single artifact. SVG and PNG render one artifact per page.
 
-Python binding (rendering lives on the engine, not the quill):
+Python binding (rendering lives on `Quillmark`, not the quill):
 
 ```python
 from quillmark import OutputFormat
-result = engine.render(quill, doc, OutputFormat.PDF)   # or .SVG, .PNG
+result = quillmark.render(quill, doc, OutputFormat.PDF)   # or .SVG, .PNG
 ```
 
-WASM/JS binding (rendering lives on the engine, not the quill):
+WASM/JS binding (rendering lives on `Quillmark`, not the quill):
 
 ```javascript
-await engine.render(quill, doc, { format: 'png' });           // 144 PPI
-await engine.render(quill, doc, { format: 'png', ppi: 300 });  // print quality
+await quillmark.render(quill, doc, { format: 'png' });           // 144 PPI
+await quillmark.render(quill, doc, { format: 'png', ppi: 300 });  // print quality
 ```
 
 PNG resolution is set via the `ppi` option (default **144**, 2× at 72pt/inch, suitable for retina previews):

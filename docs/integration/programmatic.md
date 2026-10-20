@@ -19,7 +19,7 @@ Markdown authoring, the [blueprint](../quills/blueprint.md) (for LLMs), and thes
     ```python
     from quillmark import Document, Quill, Quillmark, OutputFormat
 
-    engine = Quillmark()
+    quillmark = Quillmark()
     quill = Quill.from_path("invoice-quill")
 
     doc = Document("invoice")                       # blank canvas
@@ -28,7 +28,7 @@ Markdown authoring, the [blueprint](../quills/blueprint.md) (for LLMs), and thes
     for item in row.items:
         w.add_card("line_item", {"desc": item.desc, "qty": item.qty})
 
-    result = engine.render(quill, doc, OutputFormat.PDF)
+    result = quillmark.render(quill, doc, OutputFormat.PDF)
     ```
 
 === "JavaScript"
@@ -44,7 +44,7 @@ Markdown authoring, the [blueprint](../quills/blueprint.md) (for LLMs), and thes
     for (const item of row.items) {
       w.addCard("line_item", { desc: item.desc, qty: item.qty });
     }
-    const result = await engine.render(quill, doc, { format: "pdf" });
+    const result = await quillmark.render(quill, doc, { format: "pdf" });
     ```
 
 `add_card` fuses build + typed-commit + insert in one atomic call: `at` inserts at an index, and absent it appends. Values convert in place at each boundary (Python objects, JS values); no surface asks you to serialize YAML.

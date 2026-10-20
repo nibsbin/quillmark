@@ -68,7 +68,7 @@ export interface CoreSurface {
  * failed init clears the memo. Each realm initializes its own copy.
  *
  * Both failure codes reject, so one `catch` covers the gate. Backends are not
- * initialized here: `Engine` instantiates one on first render against it.
+ * initialized here: `Quillmark` instantiates one on first render against it.
  *
  * @param source override the binary's source (bytes, a `Response`, a
  *   `WebAssembly.Module`, a URL) for hosts that route assets themselves or
@@ -246,7 +246,7 @@ export interface Artifact {
 /**
  * Options for one render, as a plain object. Any other key throws, `today`
  * included: the render
- * date is an argument of {@link Engine.render} and {@link Engine.open}, not an
+ * date is an argument of {@link Quillmark.render} and {@link Quillmark.open}, not an
  * option.
  */
 export interface RenderOptions {
@@ -391,17 +391,17 @@ export interface ChangeSet {
 /**
  * A backend registry entry. `load` is the lazy thunk returning the
  * dynamically-imported backend build module; `formats` is the required static
- * capability manifest, which is what makes `Engine.supportedFormats` free: it
+ * capability manifest, which is what makes `Quillmark.supportedFormats` free: it
  * answers from it without loading a backend binary or cloning a quill. A
- * malformed descriptor throws at `new Engine(...)`.
+ * malformed descriptor throws at `new Quillmark(...)`.
  */
 export interface BackendDescriptor {
 	load: () => Promise<unknown>;
 	formats: OutputFormat[];
 }
 
-/** Options for `new Engine(...)`, as a plain object. A key other than `backends` throws. */
-export interface EngineOptions {
+/** Options for `new Quillmark(...)`, as a plain object. A key other than `backends` throws. */
+export interface QuillmarkOptions {
 	/**
 	 * Extra or overriding backend descriptors, merged over the built-ins. Keys are
 	 * backend ids (as declared by `Quill.yaml`'s `backend:` and reported by
@@ -423,8 +423,8 @@ export interface EngineOptions {
  * `engine::backend_not_found`, the capability probes included. The diagnostic's
  * `hint` names the registered ids.
  */
-export declare class Engine {
-	constructor(options?: EngineOptions);
+export declare class Quillmark {
+	constructor(options?: QuillmarkOptions);
 
 	/**
 	 * Render `doc` against `quill` in one shot. Both handles are read
@@ -482,6 +482,13 @@ export declare class Engine {
 	 */
 	supportedFormats(quill: Quill): Promise<OutputFormat[]>;
 }
+
+/** @deprecated Use {@link Quillmark}; `Engine` is the same class. */
+export declare const Engine: typeof Quillmark;
+/** @deprecated Use {@link Quillmark}. */
+export type Engine = Quillmark;
+/** @deprecated Use {@link QuillmarkOptions}. */
+export type EngineOptions = QuillmarkOptions;
 
 /**
  * Iterative render session over a compiled snapshot. `free()` when done.
@@ -805,7 +812,7 @@ export declare class DocumentReader {
 	 * projection would use and the rung it came from (`authored` / `default` /
 	 * `blank`). The one read that blank-fills and coerces; {@link get} reports
 	 * what the document carries. Value and provenance only; diagnostics stay
-	 * `quill.validate`'s. `today` reads as on {@link Engine.open}; an editor
+	 * `quill.validate`'s. `today` reads as on {@link Quillmark.open}; an editor
 	 * pairing it with a session passes the session's opening date.
 	 */
 	resolve(today?: string): Resolved;

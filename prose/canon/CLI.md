@@ -16,8 +16,8 @@ them.
 
 ## Contract
 
-- **`render`, `validate` and `check --regions` need the engine.** Each
-  constructs `Quillmark` to resolve the quill's backend; `check` / `schema` /
+- **`render`, `validate` and `check --regions` need `Quillmark`.** Each
+  constructs one to resolve the quill's backend; `check` / `schema` /
   `blueprint` / `info` load the quill with `quillmark::quill_from_path` and read
   the pure config-read operations a `Quill` already carries
   ([QUILL.md](QUILL.md)). `validate --no-render` compiles nothing: it reads
@@ -42,7 +42,7 @@ them.
   carrier, then every `Quill::validate` warning, each naming unclaimed input
   ([SCHEMAS.md](SCHEMAS.md#what-blocks-a-render)) less
   `backend::declined_construct`, then the compile's, a decline among them
-  ([ERROR.md](ERROR.md#warning-flow)). The engine's one-shot render carries
+  ([ERROR.md](ERROR.md#warning-flow)). `Quillmark::render` carries
   the last two; the CLI adds the parse carrier. A render that fails returns no
   result, so the CLI prints the parse carrier and every `Quill::validate`
   warning itself, `backend::declined_construct` among them, ahead of the

@@ -63,9 +63,9 @@ cargo add quillmark
 ```rust
 use quillmark::{quill_from_path, CalendarDate, OutputFormat, Quillmark, RenderOptions};
 
-// A `Quill` is declarative data: no engine needed to load it.
+// A `Quill` is declarative data: no `Quillmark` needed to load it.
 let quill = quill_from_path("path/to/quill")?;
-let engine = Quillmark::new();
+let quillmark = Quillmark::new();
 
 let markdown = r#"~~~
 $quill: my_quill
@@ -80,7 +80,7 @@ title: Example
 let doc = quill.parse(markdown)?.document;
 // Quillmark reads no clock: the host passes its local date.
 let today: CalendarDate = "2026-03-14".parse()?;
-let result = engine.render(
+let result = quillmark.render(
     &quill,
     &doc,
     today,

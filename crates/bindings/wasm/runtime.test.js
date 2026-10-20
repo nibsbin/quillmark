@@ -1,6 +1,6 @@
 /**
  * The canonical `@quillmark/wasm` API end to end: a CORE quill and
- * document handed to `Engine` render correctly, the engine cloning them into the
+ * document handed to `Quillmark` render correctly, which clones them into the
  * Typst backend's memory on demand without the caller ever seeing a backend
  * handle.
  */
@@ -10,6 +10,7 @@ import os from 'node:os'
 import path from 'node:path'
 import vm from 'node:vm'
 import {
+  Quillmark,
   Engine,
   DocumentWriter,
   CardWriter,
@@ -631,22 +632,22 @@ describe('@quillmark/wasm: container run boundaries', () => {
   })
 })
 
-describe('@quillmark/wasm: Engine (hidden core→backend crossing)', () => {
+describe('@quillmark/wasm: Quillmark (hidden core→backend crossing)', () => {
   // Warm the lazy Typst-backend import + first Typst compile once, outside any
-  // timed test. `Engine.render` dynamically `import()`s the backend wasm binary
+  // timed test. `Quillmark.render` dynamically `import()`s the backend wasm binary
   // on first render: a one-time cost (large module instantiation) that on a
   // cold CI runner alone can approach the per-test ceiling. Paying it here keeps
   // the individual render tests warm (sub-second, like the SVG case) so a tight
   // per-test `testTimeout` still catches a genuine hang. The hook carries its own
   // generous timeout for the cold load.
   beforeAll(async () => {
-    await new Engine().render(makeRuntimeQuill(), Document.fromMarkdown(TEST_MARKDOWN), {
+    await new Quillmark().render(makeRuntimeQuill(), Document.fromMarkdown(TEST_MARKDOWN), {
       format: 'pdf',
     })
   }, 120000)
 
   it('renders a core Quill + Document to PDF without exposing a backend handle', async () => {
-    const engine = new Engine()
+    const engine = new Quillmark()
     const quill = makeRuntimeQuill()
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
 
@@ -657,7 +658,7 @@ describe('@quillmark/wasm: Engine (hidden core→backend crossing)', () => {
     expect(result.artifacts[0].bytes.length).toBeGreaterThan(0)
 
     // The caller's canonical handles survive the render (clones were transient
-    // and freed inside the engine; the originals are untouched).
+    // and freed inside `Quillmark`; the originals are untouched).
     expect(quill.backendId).toBe('typst')
     expect(doc.quillRef).toBe('test_quill')
   })
@@ -671,7 +672,7 @@ describe('@quillmark/wasm: Engine (hidden core→backend crossing)', () => {
     const loadCodes = doc.warnings.map((d) => d.code)
     expect(loadCodes).toContain('parse::unsupported_yaml_tag')
 
-    const result = await new Engine().render(quill, doc, { format: 'svg' })
+    const result = await new Quillmark().render(quill, doc, { format: 'svg' })
     expect(result.artifacts.length).toBeGreaterThan(0)
     expect(result.warnings.map((d) => d.code)).not.toContain('parse::unsupported_yaml_tag')
     expect(doc.warnings.map((d) => d.code)).toEqual(loadCodes)
@@ -680,7 +681,7 @@ describe('@quillmark/wasm: Engine (hidden core→backend crossing)', () => {
   // A counting descriptor loader for the lazy-load / coalescing invariants below.
   function countingEngine() {
     let loaded = 0
-    const engine = new Engine({
+    const engine = new Quillmark({
       backends: {
         typst: {
           load: () => {
@@ -710,7 +711,7 @@ describe('@quillmark/wasm: Engine (hidden core→backend crossing)', () => {
   })
 
   it('no backend manifest drifts from the loaded backend', async () => {
-    const engine = new Engine()
+    const engine = new Quillmark()
     const mod = await import('../../../pkg/render/wasm.js')
     for (const quill of [makeRuntimeQuill(), Quill.fromTree(makeSampleFormQuill())]) {
       const manifestFormats = await engine.supportedFormats(quill)
@@ -726,19 +727,23 @@ describe('@quillmark/wasm: Engine (hidden core→backend crossing)', () => {
 
   it('throws at construction for a malformed backend descriptor (names the id)', () => {
     // A backend entry must be a descriptor `{ load, formats }`; a bare thunk is rejected.
-    expect(() => new Engine({ backends: { typst: () => import('../../../pkg/render/wasm.js') } })).toThrow(
+    expect(() => new Quillmark({ backends: { typst: () => import('../../../pkg/render/wasm.js') } })).toThrow(
       /typst/
     )
     // Missing/invalid manifest fields also fail fast at construction.
     expect(
-      () => new Engine({ backends: { mybackend: { load: () => Promise.resolve({}) } } })
+      () => new Quillmark({ backends: { mybackend: { load: () => Promise.resolve({}) } } })
     ).toThrow(/mybackend/)
     expect(
       () =>
-        new Engine({
+        new Quillmark({
           backends: { mybackend: { load: () => Promise.resolve({}), formats: 'pdf' } }
         })
     ).toThrow(/mybackend/)
+  })
+
+  it('exports `Engine` as a deprecated alias of `Quillmark`', () => {
+    expect(Engine).toBe(Quillmark)
   })
 
   it('an options object is a plain object, every own key of it counts, and every key it reads is accepted', async () => {
@@ -746,7 +751,7 @@ describe('@quillmark/wasm: Engine (hidden core→backend crossing)', () => {
       expect(isQuillmarkError(err), String(err)).toBe(true)
       return err.diagnostics[0].message
     }
-    const engine = new Engine()
+    const engine = new Quillmark()
     const quill = makeRuntimeQuill()
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     const render = (options) => engine.render(quill, doc, options)
@@ -762,14 +767,14 @@ describe('@quillmark/wasm: Engine (hidden core→backend crossing)', () => {
       expect(message(await render(options).catch((e) => e))).toContain(refusal)
     }
     for (const [options, refusal] of [
-      [Object.create({ backends: {} }), 'Engine options must be a plain object'],
+      [Object.create({ backends: {} }), 'Quillmark options must be a plain object'],
       [Object.defineProperty({}, 'backend', { value: {} }), 'unknown key `backend`'],
       [new Map([['backends', {}]]), 'not a `Map`'],
-      [new (class { backends = {} })(), 'Engine options must be a plain object'],
+      [new (class { backends = {} })(), 'Quillmark options must be a plain object'],
       [{ backends: {}, backend: undefined }, 'unknown key `backend`'],
       [Object.create(Object.assign(Object.create(null), { backend: {} })), 'unknown key `backend`'],
     ]) {
-      expect(message(caughtFrom(() => new Engine(options)))).toContain(refusal)
+      expect(message(caughtFrom(() => new Quillmark(options)))).toContain(refusal)
     }
 
     const plains = [
@@ -779,7 +784,7 @@ describe('@quillmark/wasm: Engine (hidden core→backend crossing)', () => {
     ]
     for (const plain of plains) {
       expect((await render(Object.assign(plain(), { format: 'svg' }))).outputFormat).toBe('svg')
-      expect(() => new Engine(Object.assign(plain(), { backends: {} }))).not.toThrow()
+      expect(() => new Quillmark(Object.assign(plain(), { backends: {} }))).not.toThrow()
     }
 
     const session = await engine.open(quill, doc)
@@ -794,12 +799,12 @@ describe('@quillmark/wasm: Engine (hidden core→backend crossing)', () => {
     }
   })
 
-  it('an options object whose read throws is refused, and the engine still renders', async () => {
+  it('an options object whose read throws is refused, and `Quillmark` still renders', async () => {
     const message = (err) => {
       expect(isQuillmarkError(err), String(err)).toBe(true)
       return err.diagnostics[0].message
     }
-    const engine = new Engine()
+    const engine = new Quillmark()
     const quill = makeRuntimeQuill()
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     const revoked = Proxy.revocable({}, {})
@@ -812,8 +817,8 @@ describe('@quillmark/wasm: Engine (hidden core→backend crossing)', () => {
       expect(message(await engine.render(quill, doc, options).catch((e) => e))).toContain(
         'render options must be a plain object, not one whose read throws'
       )
-      expect(message(caughtFrom(() => new Engine(options)))).toContain(
-        'Engine options must be a plain object, not one whose read throws'
+      expect(message(caughtFrom(() => new Quillmark(options)))).toContain(
+        'Quillmark options must be a plain object, not one whose read throws'
       )
     }
     expect(message(await engine.render(quill, doc, revoked.proxy).catch((e) => e))).toContain('revoked')
@@ -822,11 +827,11 @@ describe('@quillmark/wasm: Engine (hidden core→backend crossing)', () => {
 
   // A loader that wraps the real backend module so `Quill.fromTree` calls are
   // counted (and still delegate to the real implementation). Used to prove the
-  // per-Engine quill-clone cache materializes the backend quill once per
+  // per-instance quill-clone cache materializes the backend quill once per
   // canonical instance instead of per render/open call.
   function fromTreeCountingEngine(options) {
     let fromTreeCalls = 0
-    const engine = new Engine({
+    const engine = new Quillmark({
       ...options,
       backends: {
         typst: {
@@ -914,7 +919,7 @@ author: Smoke Author
 
 A single line of body ink.`
 
-    const engine = new Engine()
+    const engine = new Quillmark()
     const quill = makeRuntimeQuill()
     const doc = Document.fromMarkdown(SMOKE_MARKDOWN)
     const session = await engine.open(quill, doc)
@@ -998,7 +1003,7 @@ A single line of body ink.`
   })
 
   it('rejects an unregistered backend with engine::backend_not_found, probes like renders', async () => {
-    const engine = new Engine()
+    const engine = new Quillmark()
     // A quill whose declared backend has no loader.
     const yaml = `quill:
   name: mystery
@@ -1013,9 +1018,9 @@ main:
     const quill = Quill.fromTree(new Map([['Quill.yaml', new TextEncoder().encode(yaml)]]))
     const doc = quill.seedDocument()
     for (const [call, verb] of [
-      [() => engine.render(quill, doc), 'engine.render'],
-      [() => engine.load(quill), 'engine.load'],
-      [() => engine.supportedFormats(quill), 'engine.supportedFormats'],
+      [() => engine.render(quill, doc), 'quillmark.render'],
+      [() => engine.load(quill), 'quillmark.load'],
+      [() => engine.supportedFormats(quill), 'quillmark.supportedFormats'],
     ]) {
       const caught = await call().then(
         () => expect.unreachable(`${verb} resolved against an unregistered backend`),
@@ -1046,7 +1051,7 @@ main:
 
   it('a failed backend load rejects and the next call retries', async () => {
     let attempts = 0
-    const engine = new Engine({
+    const engine = new Quillmark({
       backends: {
         typst: {
           load: () =>
@@ -1080,9 +1085,9 @@ main:
     // Both caller handles are snapshotted before the first await inside
     // render/open (the backend load: a real suspension point on first call),
     // so a synchronous free() right after the call cannot race the clone. Each
-    // engine below is fresh, so its first call has the load pending when
+    // instance below is fresh, so its first call has the load pending when
     // free() runs.
-    const renderEngine = new Engine()
+    const renderEngine = new Quillmark()
     const renderQuill = makeRuntimeQuill()
     const renderDoc = Document.fromMarkdown(TEST_MARKDOWN)
     const pendingRender = renderEngine.render(renderQuill, renderDoc, { format: 'svg' })
@@ -1091,7 +1096,7 @@ main:
     const result = await pendingRender
     expect(result.artifacts.length).toBeGreaterThan(0)
 
-    const openEngine = new Engine()
+    const openEngine = new Quillmark()
     const openQuill = makeRuntimeQuill()
     const openDoc = Document.fromMarkdown(TEST_MARKDOWN)
     const pendingOpen = openEngine.open(openQuill, openDoc)
@@ -1108,7 +1113,7 @@ main:
   it('a trapped render rejects as runtime::backend_trapped, not as the borrowed clone', async () => {
     // A trap leaves the doc clone borrowed, so its `free()` throws; the
     // rejection must still be the trap.
-    const engine = new Engine({
+    const engine = new Quillmark({
       backends: {
         typst: {
           load: async () => {
@@ -1155,7 +1160,7 @@ main:
 
   it('a RangeError or InternalError for stack exhaustion rejects as runtime::backend_trapped, any other as itself', async () => {
     const throwingEngine = (err) =>
-      new Engine({
+      new Quillmark({
         backends: {
           typst: {
             load: async () => {
@@ -1205,7 +1210,7 @@ main:
     // (see "handles from another copy" below), so they have to be real. Same
     // Proxy-over-the-real-module shape as fromTreeCountingEngine, so the quill
     // clone left cached is a real backend quill and only `fromStored` misbehaves.
-    const engine = new Engine({
+    const engine = new Quillmark({
       backends: {
         typst: {
           load: async () => {
@@ -1239,7 +1244,7 @@ main:
 
 // A duplicate install is two copies of this package: two core builds, two
 // linear memories, two distinct `Quill`/`Document` classes. A handle never
-// crosses between them. The writer and reader binds, `Engine` and
+// crosses between them. The writer and reader binds, `Quillmark` and
 // `LiveSession.update` check and throw in contract, naming `npm ls`; the last
 // two are the seams that cross as data and would otherwise silently work. A
 // by-reference core method is left to wasm-bindgen's own `_assertClass`, which
@@ -1297,7 +1302,7 @@ describe('@quillmark/wasm: handles from another copy (duplicate install)', () =>
 
   // Both handle positions on every bind, derived: an exported class whose bare
   // construction refuses for want of a `Quill` takes handles, so it is a bind.
-  // `Engine` and `LiveSession` construct bare, so the filter drops them without
+  // `Quillmark` and `LiveSession` construct bare, so the filter drops them without
   // naming them. Cross-checked against the method name each bind reports, so a
   // fifth bind fails here until it is named.
   const BIND_METHOD = new Map([
@@ -1332,7 +1337,7 @@ describe('@quillmark/wasm: handles from another copy (duplicate install)', () =>
     expectForeign(() => quill.reader(foreignDoc(doc)), 'quill.reader(doc)')
   })
 
-  // Engine is the seam with no `_assertClass` to front-run: it crosses into
+  // `Quillmark` is the seam with no `_assertClass` to front-run: it crosses into
   // backend memory as data, so a foreign handle would render correctly and pay
   // a per-copy quill clone cache for it. It checks instead. Inside the class the
   // check is structural (`#backendOf` is the only route to `backendId`, and
@@ -1341,15 +1346,15 @@ describe('@quillmark/wasm: handles from another copy (duplicate install)', () =>
   // The quill half is DERIVED: a fifth verb is held to the rule with no label to
   // get wrong, and a verb naming a `Quill` without reading it fails the same
   // line as one that forgot the check.
-  it('holds every Engine verb to the quill-first rule (derived)', async () => {
-    const engine = new Engine()
+  it('holds every Quillmark verb to the quill-first rule (derived)', async () => {
+    const engine = new Quillmark()
     const quill = makeRuntimeQuill()
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
-    const verbs = Object.getOwnPropertyNames(Engine.prototype).filter((n) => n !== 'constructor')
+    const verbs = Object.getOwnPropertyNames(Quillmark.prototype).filter((n) => n !== 'constructor')
     expect(verbs.length).toBeGreaterThan(0)
     for (const verb of verbs) {
       // A getter takes no argument, so nothing gates it.
-      expect(typeof Object.getOwnPropertyDescriptor(Engine.prototype, verb).value).toBe('function')
+      expect(typeof Object.getOwnPropertyDescriptor(Quillmark.prototype, verb).value).toBe('function')
       // `await` normalizes the sync and promise-returning verbs.
       let caught
       try {
@@ -1357,8 +1362,8 @@ describe('@quillmark/wasm: handles from another copy (duplicate install)', () =>
       } catch (e) {
         caught = e
       }
-      expect(caught, `engine.${verb} accepted a foreign Quill`).toBeDefined()
-      assertForeign(caught, `engine.${verb}`)
+      expect(caught, `quillmark.${verb} accepted a foreign Quill`).toBeDefined()
+      assertForeign(caught, `quillmark.${verb}`)
     }
   })
 
@@ -1366,19 +1371,19 @@ describe('@quillmark/wasm: handles from another copy (duplicate install)', () =>
   // doc carries `toStored`, so a verb skipping `requireLocalDoc` would succeed and
   // pass a derived assertion. Which verbs take a `Document` is guarded
   // structurally inside `#withClones` and named here at the boundary.
-  it('refuses a foreign Document at every Engine entry point taking one', async () => {
-    const engine = new Engine()
+  it('refuses a foreign Document at every Quillmark entry point taking one', async () => {
+    const engine = new Quillmark()
     const quill = makeRuntimeQuill()
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     await expectForeignAsync(
       engine.render(quill, foreignDoc(doc)),
-      'engine.render(quill, doc)'
+      'quillmark.render(quill, doc)'
     )
-    await expectForeignAsync(engine.open(quill, foreignDoc(doc)), 'engine.open(quill, doc)')
+    await expectForeignAsync(engine.open(quill, foreignDoc(doc)), 'quillmark.open(quill, doc)')
   })
 
   it('refuses a foreign Document on session.update', async () => {
-    const engine = new Engine()
+    const engine = new Quillmark()
     const quill = makeRuntimeQuill()
     const session = await engine.open(quill, Document.fromMarkdown(TEST_MARKDOWN))
     try {
@@ -1424,12 +1429,12 @@ describe('@quillmark/wasm: handles from another copy (duplicate install)', () =>
       expectForeign(() => quillA.reader(docB), 'quill.reader(doc)')
       expectForeign(() => new DocumentWriter(quillB, docA), 'quill.writer(doc)')
 
-      const engine = new Engine()
-      await expectForeignAsync(engine.render(quillA, docB), 'engine.render(quill, doc)')
-      await expectForeignAsync(engine.load(quillB), 'engine.load(quill)')
+      const engine = new Quillmark()
+      await expectForeignAsync(engine.render(quillA, docB), 'quillmark.render(quill, doc)')
+      await expectForeignAsync(engine.load(quillB), 'quillmark.load(quill)')
       await expectForeignAsync(
         engine.supportedFormats(quillB),
-        'engine.supportedFormats(quill)'
+        'quillmark.supportedFormats(quill)'
       )
 
       // Nothing we did freed or mutated the caller's handles.
@@ -1486,7 +1491,7 @@ main:
   })
 
   it('renders the field and the plate on the same date, and refuses a non-date', async () => {
-    const engine = new Engine()
+    const engine = new Quillmark()
     const result = await engine.render(quill(), doc(), { format: 'svg' }, '2026-03-14')
     expect(result.outputFormat).toBe('svg')
 
