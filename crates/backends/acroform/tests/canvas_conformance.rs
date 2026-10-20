@@ -211,12 +211,12 @@ fields:
     )
     .expect("replace form.pdf");
     tree.insert(
-        "form.yaml",
+        "Form.yaml",
         FileTreeNode::File {
             contents: FORM_YAML.as_bytes().to_vec(),
         },
     )
-    .expect("replace form.yaml");
+    .expect("replace Form.yaml");
 
     let quill = Quill::from_tree(tree).expect("load patched quill");
     let doc = Document::parse(FILLED).expect("parse markdown").document;

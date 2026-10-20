@@ -247,7 +247,7 @@ fn validate_without_rendering_refuses_a_plate_a_render_refuses() {
     }
 }
 
-/// `validate --no-render` reads an acroform quill's `form.yaml` as `open`
+/// `validate --no-render` reads an acroform quill's `Form.yaml` as `open`
 /// does: one held as `form.json`, absent, or unparseable fails it.
 #[test]
 fn validate_without_rendering_refuses_a_form_spec_a_render_refuses() {
@@ -262,13 +262,13 @@ fn validate_without_rendering_refuses_a_form_spec_a_render_refuses() {
         }
         dir
     };
-    let spec = std::fs::read(form.join("form.yaml")).expect("read form.yaml");
+    let spec = std::fs::read(form.join("Form.yaml")).expect("read Form.yaml");
 
-    ok(&["validate", quill(Some(("form.yaml", &spec))).path().to_str().unwrap(), "--no-render"]);
+    ok(&["validate", quill(Some(("Form.yaml", &spec))).path().to_str().unwrap(), "--no-render"]);
     for (spec, code) in [
         (Some(("form.json", &spec[..])), "acroform::legacy_form_json"),
         (None, "acroform::missing_form_spec"),
-        (Some(("form.yaml", &b"fields: [\n"[..])), "acroform::invalid_form_spec"),
+        (Some(("Form.yaml", &b"fields: [\n"[..])), "acroform::invalid_form_spec"),
     ] {
         let dir = quill(spec);
         let out = run(&["validate", dir.path().to_str().unwrap(), "--no-render"]);

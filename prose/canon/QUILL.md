@@ -69,7 +69,7 @@ Validation rules:
 Core reads no backend-specific assets at load time. A backend resolves its own
 inputs from the file bundle when it opens a session (the Typst backend reads
 `plate.typ` at the quill root, or the file `typst.plate_file` names; the
-acroform backend reads `form.pdf` / `form.yaml`), so a missing or malformed
+acroform backend reads `form.pdf` / `Form.yaml`), so a missing or malformed
 template surfaces as a render-time error, not a load error.
 
 ## `Quill.yaml` Rules

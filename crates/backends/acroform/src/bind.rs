@@ -1,4 +1,4 @@
-//! Resolve every `form.yaml` field against the two static inputs (the quill
+//! Resolve every `Form.yaml` field against the two static inputs (the quill
 //! schema and the background geometry) into the session's value-free widget
 //! layer. Pure in the quill, so it runs once at open: a widget bound to a
 //! nonexistent field or an out-of-range page is a load error, not a silent blank.
@@ -10,7 +10,7 @@ use quillmark_pdf::FieldType as WidgetType;
 
 use crate::form::{BoundField, FormSpec, Rect, UnboundWidget, WidgetKind};
 
-/// A `form.yaml` field with its static parts resolved: `rect` is final
+/// A `Form.yaml` field with its static parts resolved: `rect` is final
 /// bottom-left PDF geometry, and the widget type is value-free.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BoundWidget {
@@ -24,7 +24,7 @@ pub struct BoundWidget {
     pub max_len: Option<u32>,
 }
 
-/// Why binding a `form.yaml` field failed. Every variant is a load error.
+/// Why binding a `Form.yaml` field failed. Every variant is a load error.
 #[derive(Debug)]
 pub enum BindError {
     /// A `schema_field` path does not resolve; names the failing segment.
@@ -74,12 +74,12 @@ impl std::fmt::Display for BindError {
                 segment,
             } => write!(
                 f,
-                "form.yaml field {name:?} binds schema_field {path:?}, but segment {segment:?} \
+                "Form.yaml field {name:?} binds schema_field {path:?}, but segment {segment:?} \
                  does not resolve against the quill schema"
             ),
             BindError::Unbindable { name, path, ty } => write!(
                 f,
-                "form.yaml field {name:?} binds schema_field {path:?}, which resolves to schema \
+                "Form.yaml field {name:?} binds schema_field {path:?}, which resolves to schema \
                  type `{ty}`: no widget can render it; bind a scalar, enum, boolean, or an array \
                  of those instead"
             ),
@@ -89,11 +89,11 @@ impl std::fmt::Display for BindError {
                 page_count,
             } => write!(
                 f,
-                "form.yaml field {name:?} targets page {page} but `form.pdf` has {page_count} page(s)"
+                "Form.yaml field {name:?} targets page {page} but `form.pdf` has {page_count} page(s)"
             ),
             BindError::BadRect { name, page, rect } => write!(
                 f,
-                "form.yaml field {name:?} has rect {{ x: {}, y: {}, w: {}, h: {} }}, which shows \
+                "Form.yaml field {name:?} has rect {{ x: {}, y: {}, w: {}, h: {} }}, which shows \
                  nothing on page {page}: `w` and `h` must be positive and the box must overlap the page",
                 rect.x, rect.y, rect.w, rect.h
             ),

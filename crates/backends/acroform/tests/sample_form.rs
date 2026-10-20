@@ -61,7 +61,7 @@ fn fixture_renders_structurally_valid_filled_pdf() {
     assert_eq!(af.get(b"SigFlags").unwrap().as_i64().unwrap(), 1);
     assert_eq!(af.get(b"Fields").unwrap().as_array().unwrap().len(), 10);
 
-    // The form.yaml field carries no `tooltip`, so `/TU` is inherited from the
+    // The Form.yaml field carries no `tooltip`, so `/TU` is inherited from the
     // schema field's `description`.
     let full = widget(&doc, af, "FullName");
     assert_eq!(full.get(b"V").unwrap().as_str().unwrap(), b"Ada Lovelace");
@@ -218,7 +218,7 @@ fn apply_rebinds_values_and_reports_dirty_pages() {
     );
 }
 
-/// One region per schema-bound field, in form.yaml order, which is stamping
+/// One region per schema-bound field, in Form.yaml order, which is stamping
 /// order: the fixture's four unbound widgets produce none.
 #[test]
 fn regions_follow_form_yaml_order_which_is_stamping_order() {
