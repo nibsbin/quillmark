@@ -10,7 +10,7 @@ keywords = ["richtext", "markdown", "content-model", "text-editing"]
 categories = ["text-processing", "parser-implementations"]
 description = "Content model (splice-shaped USV text with line attributes, marks, and islands), canonical serialization, edit deltas, and richtext/plaintext codecs for Quillmark"
 # The leaf content-model crate: `quillmark-core` depends on it for the storage
-# body type, so it carries no dependency on the document engine. Published
+# body type, so it carries no dependency on the rest of the framework. Published
 # because `quillmark-core` (published) depends on it.
 publish = true
 

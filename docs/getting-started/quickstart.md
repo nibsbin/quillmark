@@ -96,7 +96,7 @@ This paragraph is the document body. *Markdown* works here.
     memory rather than reading the directory:
 
     ```javascript
-    import { init, Engine } from "@quillmark/wasm";
+    import { init, Quillmark } from "@quillmark/wasm";
 
     const { Quill } = await init();
     const enc = new TextEncoder();
@@ -132,8 +132,8 @@ This paragraph is the document body. *Markdown* works here.
     This paragraph is the document body. *Markdown* works here.
     `);
 
-    const engine = new Engine();
-    const result = await engine.render(quill, doc, { format: "pdf" });
+    const quillmark = new Quillmark();
+    const result = await quillmark.render(quill, doc, { format: "pdf" });
     const pdfBytes = result.artifacts[0].bytes;
     ```
 
@@ -161,7 +161,7 @@ This paragraph is the document body. *Markdown* works here.
         let quill = quill_from_path("my_quill")?;
         let doc = quill.parse(&std::fs::read_to_string("document.md")?)?.document;
 
-        // The engine reads no clock: the caller passes the render date.
+        // A render reads no clock: the caller passes the render date.
         let today = "2026-03-14".parse()?;
         let options = RenderOptions::default().with_output_format(OutputFormat::Pdf);
         let result = Quillmark::new().render(&quill, &doc, today, &options)?;

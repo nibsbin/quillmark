@@ -65,7 +65,7 @@ A present `type: date` / `type: datetime` field is a native `datetime`; a blank 
 #if qm.data.issued != none { .. }                                        // presence
 ```
 
-`datetime.today()` returns the render date the host supplied, the same date a `today` field renders as. The engine reads no clock, and the host owns the time zone, so an `offset:` is ignored: `datetime.today(offset: 0)` is the host's date, not UTC's.
+`datetime.today()` returns the render date the host supplied, the same date a `today` field renders as. A render reads no clock, and the host owns the time zone, so an `offset:` is ignored: `datetime.today(offset: 0)` is the host's date, not UTC's.
 
 Everything except the two `qm.ink` calls is ordinary Typst, because the value is an ordinary `datetime`. On a date address, `qm.ink(dict, key, ..args)` prints the date as `datetime.display` would with the same patterns, its default display with none; a blank date gives `none`, and a pattern on any other address fails the render. Reach for `qm.data.<field>` whenever you want the value itself: math, comparison, components, or handing it to a package. The two print the same text and differ only in [editor previews](editor-regions.md#dates-print-through-qmink), where `qm.ink` keeps the printed date clickable.
 
@@ -437,18 +437,19 @@ The label `<__qm_field__>` and metadata `kind: "__qm_field__"` are reserved for 
 
 PDF renders as a single artifact. SVG and PNG render one artifact per page.
 
-Python binding (rendering lives on the engine, not the quill):
+Python binding (rendering lives on `Quillmark`, not the quill):
 
 ```python
-from quillmark import OutputFormat
-result = engine.render(quill, doc, OutputFormat.PDF)   # or .SVG, .PNG
+from quillmark import OutputFormat, Quillmark
+quillmark = Quillmark()
+result = quillmark.render(quill, doc, OutputFormat.PDF)   # or .SVG, .PNG
 ```
 
-WASM/JS binding (rendering lives on the engine, not the quill):
+WASM/JS binding (rendering lives on `Quillmark`, not the quill):
 
 ```javascript
-await engine.render(quill, doc, { format: 'png' });           // 144 PPI
-await engine.render(quill, doc, { format: 'png', ppi: 300 });  // print quality
+await quillmark.render(quill, doc, { format: 'png' });           // 144 PPI
+await quillmark.render(quill, doc, { format: 'png', ppi: 300 });  // print quality
 ```
 
 PNG resolution is set via the `ppi` option (default **144**, 2× at 72pt/inch, suitable for retina previews):

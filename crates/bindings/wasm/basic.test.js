@@ -1,7 +1,7 @@
 /**
  * The Document API over the canonical flow:
  * `Quill.fromTree(tree)` → `Document.fromMarkdown(markdown)` →
- * `engine.render(quill, doc, opts)`, against the Typst backend build.
+ * `quillmark.render(quill, doc, opts)`, against the Typst backend build.
  */
 
 import { describe, it, expect } from 'vitest'
@@ -150,7 +150,7 @@ describe('Document JSON DTO: toStored / fromStored', () => {
   })
 })
 
-describe('Quill.fromTree + engine.render', () => {
+describe('Quill.fromTree + quillmark.render', () => {
   it('should accept a plain object tree (Record<string, Uint8Array>)', () => {
     const fromObject = Quill.fromTree(
       Object.fromEntries(makeQuill({ name: 'test_quill', plate: TEST_PLATE })),

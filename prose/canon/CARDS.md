@@ -10,7 +10,7 @@ Cards are structured-data blocks inline within document content. All cards are s
 ## Card, row, matrix
 
 **Main by default.** A document is a form on `main`, nested where its data
-nests. The engine nests to any depth: a `richtext` at depth lowers as content,
+nests. Quillmark nests to any depth: a `richtext` at depth lowers as content,
 and `refs.2.org` is a writable address. The card stream is the mechanism for
 *parts*, not the only mechanism for nesting.
 
@@ -178,7 +178,7 @@ reached through `card_mut` is refused after placement too. It answers
 keyed by composable card-kind, is a **sparse overlay** of the user fields (plus
 an optional reserved `$body` string) a freshly-added card of that kind inherits.
 
-**Twin in structure, not in key.** `$ext` is keyed by a free-form *namespace* a consumer owns and the engine never inspects; `$seed` is keyed by a validated composable *card-kind*, and its value is an overlay. The verbs follow the keys. `$ext` moves whole — `ext` / `store_ext` / `remove_ext` — because a map the engine never reads is one its consumer merges for itself: a namespaced write is the read spread over the new slot. `$seed` is addressed per kind — `store_seed_overlay` / `remove_seed_overlay` — matching the `seedOverlay` read and the `SeedOverlay` type.
+**Twin in structure, not in key.** `$ext` is keyed by a free-form *namespace* a consumer owns and Quillmark never inspects; `$seed` is keyed by a validated composable *card-kind*, and its value is an overlay. The verbs follow the keys. `$ext` moves whole — `ext` / `store_ext` / `remove_ext` — because a map Quillmark never reads is one its consumer merges for itself: a namespaced write is the read spread over the new slot. `$seed` is addressed per kind — `store_seed_overlay` / `remove_seed_overlay` — matching the `seedOverlay` read and the `SeedOverlay` type.
 
 ````markdown
 ~~~

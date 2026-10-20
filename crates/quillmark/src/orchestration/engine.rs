@@ -11,14 +11,14 @@ use std::sync::Arc;
 
 /// A backend registry and render dispatcher: the sole home of
 /// backend-dependent surface, resolving a [`Quill`]'s *declared* backend at
-/// render time. Quill loading needs no engine — see [`Quill::from_tree`] or
+/// render time. Quill loading needs no `Quillmark` — see [`Quill::from_tree`] or
 /// [`quill_from_path`](crate::quill_from_path).
 pub struct Quillmark {
     backends: HashMap<String, Arc<dyn Backend>>,
 }
 
 impl Quillmark {
-    /// An engine with a backend registered per enabled cargo feature.
+    /// A `Quillmark` with a backend registered per enabled cargo feature.
     pub fn new() -> Self {
         // `mut` is unused when no backend features are enabled (e.g. a
         // Typst-less core build).
@@ -74,7 +74,7 @@ impl Quillmark {
     /// Open a live render session for `doc` against `quill`'s backend.
     ///
     /// `today` is the render date: a `today` date field renders as it, and so
-    /// does a Typst plate's `datetime.today()`. The engine reads no clock, so
+    /// does a Typst plate's `datetime.today()`. A render reads no clock, so
     /// the host passes its local date.
     pub fn open(
         &self,

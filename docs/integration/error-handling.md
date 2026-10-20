@@ -2,7 +2,7 @@
 
 Every failure (parse, validation, quill config, backend compile) travels as a **`Diagnostic`**, and each binding raises a single error type that always carries a non-empty `diagnostics` list. Consumers route on a diagnostic's namespaced `code`, never on an exception subclass.
 
-One thing never reaches a diagnostic: an argument the binding cannot convert at all. Python raises `ValueError` for a non-finite float, an int past 64 bits, a value whose type has no JSON form, or a malformed `path` sequence — the engine never sees the call.
+One thing never reaches a diagnostic: an argument the binding cannot convert at all. Python raises `ValueError` for a non-finite float, an int past 64 bits, a value whose type has no JSON form, or a malformed `path` sequence — core never sees the call.
 
 ## The Diagnostic shape
 
@@ -22,10 +22,11 @@ One thing never reaches a diagnostic: an argument the binding cannot convert at 
 === "Python"
 
     ```python
-    from quillmark import QuillmarkError
+    from quillmark import OutputFormat, Quillmark, QuillmarkError
 
+    quillmark = Quillmark()
     try:
-        result = engine.render(quill, doc, OutputFormat.PDF)
+        result = quillmark.render(quill, doc, OutputFormat.PDF)
     except QuillmarkError as exc:
         for d in exc.diagnostics:            # always non-empty
             print(d.severity, d.code, d.message)
@@ -39,7 +40,7 @@ One thing never reaches a diagnostic: an argument the binding cannot convert at 
     import { isQuillmarkError } from "@quillmark/wasm";
 
     try {
-      const result = await engine.render(quill, doc, { format: "pdf" });
+      const result = await quillmark.render(quill, doc, { format: "pdf" });
     } catch (err) {
       if (!isQuillmarkError(err)) throw err;
       for (const d of err.diagnostics) {     // always non-empty
@@ -79,7 +80,7 @@ Fatality is a two-value ladder: `Error` blocks the stage that emits it; `Warning
     - The writer's `reviseDocument` returns it among its receipt's `warnings`, and Python's `revise_document` returns the list.
     - `addCard` returns it as a list, anchored under the placed card; `importMarkdown` and `rebase` return it beside the content, with no path.
 - **Validation warnings**: `quill.validate(doc)` returns every diagnostic, and its severity says whether the document renders ([full rule](https://github.com/borb-sh/quillmark/blob/main/prose/canon/SCHEMAS.md#what-blocks-a-render)):
-    - An `Error` is input the engine cannot read as written, such as a value that is not its field's type or an enum value outside `values:`. The render fails.
+    - An `Error` is input Quillmark cannot read as written, such as a value that is not its field's type or an enum value outside `values:`. The render fails.
     - A `Warning` is input no declaration claims: a card with an undeclared `$kind` (`validation::unknown_card`), a body under `body.enabled: false` (`validation::body_disabled`), a key the schema does not declare (`validation::unknown_field`, whose hint names the likely fix), a stranded variant cell (`validation::out_of_variant`), elements past `max:` (`validation::cardinality`), characters past a text field's `max:` (`validation::over_length`), and the `$seed` checks. The document renders without it. A one-shot render carries these warnings on `result.warnings`, ahead of the compile's; a live session's warnings do not, so an editor reads `quill.validate(doc)` beside them.
 
     A line break inside a one-line `text` value warns too (`validation::line_break_folded`), and renders as a space.

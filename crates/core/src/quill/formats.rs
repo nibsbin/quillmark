@@ -149,7 +149,7 @@ pub fn parse_date(s: &str) -> Option<(i32, u8, u8)> {
 /// Parse a strict offset-less wall-clock datetime `YYYY-MM-DDThh:mm[:ss]` to
 /// `(year, month, day, hour, minute, second)`, seconds zero-filled when absent:
 /// the `type: datetime` grammar. Rejects timezone offsets (`Z`, `±HH:MM`),
-/// the space separator, fractional seconds, and a bare date. The engine keeps
+/// the space separator, fractional seconds, and a bare date. Quillmark keeps
 /// wall-clock semantics end to end and does no zone math, so an offset is an
 /// error at the seam, never a silently dropped component; the whose-wall-clock
 /// decision is forced to the consumer boundary where the context lives. `None`

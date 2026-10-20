@@ -1,6 +1,6 @@
 //! # Quillmark
 //!
-//! Quillmark is a schema-driven document engine that turns Markdown
+//! Quillmark is a schema-driven document framework that turns Markdown
 //! with card-yaml metadata blocks into a fully typeset document (PDF, SVG, PNG).
 //!
 //! Markdown enters through the bound door: `Quill::parse` conforms the
@@ -10,11 +10,11 @@
 //! use quillmark::{quill_from_path, CalendarDate, OutputFormat, Quillmark, RenderOptions};
 //!
 //! let quill = quill_from_path("path/to/quill").unwrap();
-//! let engine = Quillmark::new();
+//! let quillmark = Quillmark::new();
 //! let today = CalendarDate::new(2026, 3, 14).unwrap(); // the host's local date
 //!
 //! let doc = quill.parse("~~~\n$quill: my_quill\n$kind: main\ntitle: Hello\n~~~\n\n# Hello World").unwrap().document;
-//! let result = engine.render(&quill, &doc, today, &RenderOptions::default().with_output_format(OutputFormat::Pdf)).unwrap();
+//! let result = quillmark.render(&quill, &doc, today, &RenderOptions::default().with_output_format(OutputFormat::Pdf)).unwrap();
 //! ```
 //!
 //! Or no Markdown at all: a blank canvas and the schema-bound writer.

@@ -5,12 +5,12 @@ use std::error::Error;
 /// per declared kind, every field at its `default:` or blank.
 pub fn demo(quill_dir: &str, render_output: &str) -> Result<(), Box<dyn Error>> {
     let quill_path = quills_path(quill_dir);
-    let engine = quillmark::Quillmark::new();
+    let quillmark = quillmark::Quillmark::new();
     let quill = quillmark::quill_from_path(quill_path.clone()).expect("Failed to load quill");
 
     let parsed = quill.seed_document();
 
-    let rendered = engine.render(
+    let rendered = quillmark.render(
         &quill,
         &parsed,
         quillmark::CalendarDate::new(2026, 3, 14).expect("a calendar day"),

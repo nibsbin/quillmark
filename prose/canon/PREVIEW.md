@@ -337,7 +337,7 @@ Slack is a screen quantity — what a finger or a hand-held mouse
 misses by — so a tolerance fixed in points shrinks under the cursor as the page
 is drawn smaller, which is where the target is already hardest to hit. A
 consumer converts its own slack at the scale it displays the page, CSS px per
-point, and passes the result; the engine holds no default because it cannot
+point, and passes the result; Quillmark holds no default because it cannot
 see that scale.
 
 **Nearest, not a grown box.** The nearest placement within `tolPt` answers,
@@ -353,7 +353,7 @@ same distance above it, and a point off the text block resolves to nothing.
 
 ## TypeScript surface
 
-Capability and rendering live on the **engine** (it holds the resolved
+Capability and rendering live on **`Quillmark`** (it holds the resolved
 backend); `Quill` is declarative data. Canvas is in the backend builds only.
 
 The declarations are `crates/bindings/wasm/runtime/runtime.d.ts`, which carries
@@ -384,7 +384,7 @@ Canvas ships with the render build:
 
 | Build                       | Backends       | Canvas | Notes                                                                  |
 | --------------------------- | -------------- | ------ | ---------------------------------------------------------------------- |
-| `pkg/core/` (no features)   | —              | no     | `Document` + `Quill` only; no engine, no Typst                         |
+| `pkg/core/` (no features)   | —              | no     | `Document` + `Quill` only; no `Quillmark`, no Typst                    |
 | `pkg/render/` (`render`)    | typst, acroform | yes    | Typst: native page raster; acroform: hayro raster of the stamped PDF    |
 
 Canvas paint is independent of the output formats a backend emits: acroform

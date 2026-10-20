@@ -169,7 +169,7 @@ pub fn is_quill_name(name: &str) -> bool {
 /// A `$quill` reference: `[<collection>.]<name>[@<selector>]`.
 ///
 /// `name` is the quill's own `Quill.yaml` name. `collection` names the
-/// collection a host resolves it in; the engine never reads it, so a loaded
+/// collection a host resolves it in; Quillmark never reads it, so a loaded
 /// quill answers a reference whatever collection it names.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct QuillReference {

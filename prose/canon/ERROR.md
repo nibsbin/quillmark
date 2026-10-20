@@ -43,12 +43,12 @@ Three surfaces return one directly (`value::from_yaml_str`, `QuillValue::from_ya
 Its `line`/`column` are document coordinates, not block-relative ones:
 
 - The engine reports a position inside the string it parsed: the fence content with its CRLF line ends read as LF, line-for-line, minus the whitespace `trim` takes off the front. The assembler translates that position onto the document.
-- `to_diagnostic()` renders it as a `Location` against `DOCUMENT_FILE` (`input.md`). Markdown reaches the engine as a string, so the anchor names the input rather than a path on disk.
+- `to_diagnostic()` renders it as a `Location` against `DOCUMENT_FILE` (`input.md`). Markdown reaches core as a string, so the anchor names the input rather than a path on disk.
 - The message names the block instead of repeating a number (`YAML error in the root card-yaml block: …`, `… in card-yaml block 2: …`). The engine's own snippet inside it stays block-relative, as the engine rendered it.
 
 **`RenderError`**: the main rendering error, a struct carrying a non-empty
 `Vec<Diagnostic>` (`RenderError::new` / `from_diag` / `coded(code, message)`
-for the one-error-diagnostic case every engine-side refusal takes;
+for the one-error-diagnostic case every Quillmark-side refusal takes;
 `diagnostics()` borrows,
 `into_diagnostics()` consumes). There is no failure taxonomy beyond the
 diagnostics themselves: the machine-routable identity of a failure is each
@@ -258,7 +258,7 @@ Python and WASM bindings delegate to core types:
 
 **WASM delivery follows the function kind, not the failure kind.** A synchronous verb throws; a promise-returning verb rejects; nothing does both.
 
-- The promise-returning surface is `init` plus the four `Engine` verbs (`render`, `open`, `load`, `supportedFormats`). A programming error reached through one of them (a handle that is not this copy's, `runtime::not_a_quill` / `runtime::not_a_document`; an unregistered backend, `engine::backend_not_found`) arrives as a rejection like any other failure.
+- The promise-returning surface is `init` plus the four `Quillmark` verbs (`render`, `open`, `load`, `supportedFormats`). A programming error reached through one of them (a handle that is not this copy's, `runtime::not_a_quill` / `runtime::not_a_document`; an unregistered backend, `engine::backend_not_found`) arrives as a rejection like any other failure.
 - A `WebAssembly.RuntimeError` from a backend build's `render`, `open`, or `LiveSession` `update` / `render` / `paint` becomes `runtime::backend_trapped`, the trap on `cause`, and so does a `RangeError` or `InternalError` for stack or memory exhaustion, the engines' report of a native stack overflow inside wasm. The trap leaves the module-scoped instance undefined; the host discards the realm.
 - `init` is the one promise-returning export not declared `async`: its memo is returned by identity rather than re-wrapped per call. Its conflict guard therefore returns `Promise.reject(runtime::init_conflict)` where an `async` body would have converted a throw.
 - A synchronous throw from `init` would lose the rule at exactly one export, and silently: `Promise<void>` cannot declare it, so the declaration invites `init(BYTES).catch(…)` and the throw escapes.
@@ -358,7 +358,7 @@ Implementation: `crates/core/src/quill/validation.rs` (the `ValidationError`
 `Diagnostic.path` is a **document-model** anchor into a typed `Document`:
 one canonical grammar, one serializer, one parser: `DocPath`
 (`crates/core/src/path.rs`). Every emit site constructs a `DocPath`; no site
-assembles a path with `format!`, so the engine never ships two shapes for one
+assembles a path with `format!`, so Quillmark never ships two shapes for one
 anchor.
 
 | Anchor | Path |
@@ -424,11 +424,11 @@ labels) ride the `DocPath` serializer with their prefix as a leading segment.
 
 `message` is the canonical English rendering. `args` is what it interpolates, keyed by name, so a consumer with its own string table selects a sentence by `code` and fills it itself. `code` + `args` is the substitution unit; `code` + `message` is not.
 
-Values keep their JSON shape (`allowed` arrives as a list, `len` as a number) because joining and pluralizing are locale decisions, not the engine's.
+Values keep their JSON shape (`allowed` arrives as a list, `len` as a number) because joining and pluralizing are locale decisions, not Quillmark's.
 
-**Engine prose never rides under a key.** Where a message bottoms out in text minted per-site (`CoercionError`'s `reason`, the ~20 `parse::invalid_structure` sites, another codec's error), that text stays in `message` and contributes no arg. A consumer's own sentence is then coarser than ours (`edit::field_coercion_failed` says which field and which target type, not which of a dozen ways the value failed to become one). That is the contract, not a gap in it: a coarser sentence a consumer owns beats a fluent one half in the wrong language. The full-fidelity alternative (a key holding English) is worse than omission, because the fallback below cannot fire on a key that is present.
+**Quillmark prose never rides under a key.** Where a message bottoms out in text minted per-site (`CoercionError`'s `reason`, the ~20 `parse::invalid_structure` sites, another codec's error), that text stays in `message` and contributes no arg. A consumer's own sentence is then coarser than ours (`edit::field_coercion_failed` says which field and which target type, not which of a dozen ways the value failed to become one). That is the contract, not a gap in it: a coarser sentence a consumer owns beats a fluent one half in the wrong language. The full-fidelity alternative (a key holding English) is worse than omission, because the fallback below cannot fire on a key that is present.
 
-**Falling back is wholesale.** A formatter whose template needs a key that is absent renders `message`, never a sentence with a hole in it. It takes `hint` from the engine in the same breath: the hint is the same English as the message tail (`ValidationError`'s `Display` appends it verbatim), so translating one and passing the other through ships a two-language diagnostic. Localize a code and you own both sentences; fall back and you take both.
+**Falling back is wholesale.** A formatter whose template needs a key that is absent renders `message`, never a sentence with a hole in it. It takes `hint` from Quillmark in the same breath: the hint is the same English as the message tail (`ValidationError`'s `Display` appends it verbatim), so translating one and passing the other through ships a two-language diagnostic. Localize a code and you own both sentences; fall back and you take both.
 
 **`hint` needs no code of its own.** It is a function of `code` and `args`. Most hints are per-code constants. `type_mismatch_hint` branches only on whether a default exists, which is why `default` is present as a key exactly when the schema declares one, rather than present-and-null; the two card-kind hints branch only on whether `allowed` is empty. Any datum a hint branches on is message-relevant by definition and belongs in `args`; a parallel `hint_code` would be derived state on the wire, free to drift.
 
@@ -524,7 +524,7 @@ Because those codes carry no args, every consumer template falls back on them by
   hint: Check variable spelling
 ```
 
-One printer, reached from every surface: the CLI, Python's `str(diagnostic)`, and WASM's `formatDiagnostic(d)`. A consumer surfacing the engine's English calls it rather than holding a copy of the layout. A consumer wording its own selects by `code` + `args` (§ "Diagnostic args") and owns the layout with the sentence.
+One printer, reached from every surface: the CLI, Python's `str(diagnostic)`, and WASM's `formatDiagnostic(d)`. A consumer surfacing Quillmark's English calls it rather than holding a copy of the layout. A consumer wording its own selects by `code` + `args` (§ "Diagnostic args") and owns the layout with the sentence.
 
 **Consolidated printing**: the CLI pretty-prints every diagnostic a `RenderError` carries, one per line, to stderr.
 

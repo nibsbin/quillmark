@@ -19,7 +19,7 @@
 
 ## Backends
 
-A backend's engine-side seam is canon; its quill-authoring surface is a `docs/`
+A backend's core-side seam is canon; its quill-authoring surface is a `docs/`
 page and its internals are rustdoc.
 
 - **[CONVERT.md](CONVERT.md)** - How the Typst backend lowers a `Content` value to Typst markup
@@ -31,6 +31,6 @@ page and its internals are rustdoc.
 
 ## Bindings
 
-- **[BINDINGS.md](BINDINGS.md)** - Language surfaces (Python, WASM, CLI) over the one core engine
+- **[BINDINGS.md](BINDINGS.md)** - Language surfaces (Python, WASM, CLI) over the one core library
 - **[CLI.md](CLI.md)** - Command-line interface
 - **[PREVIEW.md](PREVIEW.md)** - WASM live preview: LiveSession (update/ChangeSet) + multi-backend canvas paint (Typst, acroform)

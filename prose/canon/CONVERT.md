@@ -7,8 +7,8 @@
 The Typst backend lowers a `Content` value to Typst markup with
 `emit_content`, which walks the content: lines, anchored marks, embedded
 islands, and never re-parses markdown. Alongside the markup it records a
-per-segment source map (`content ↔ generated` byte windows). This is the only
-markup-producing path in the render engine. Markdown reaches the content once, at
+per-segment source map (`content ↔ generated` byte windows). This is the render
+path's only markup producer. Markdown reaches the content once, at
 ingest, in `quillmark-content::import`; the normative rules for *which* markdown
 a content can hold live in [markdown-spec.md §6](../references/markdown-spec.md);
 this page documents how the backend lowers the content it produces.
@@ -248,7 +248,7 @@ reads and the shape the WASM boundary pins:
   it. No backend resolves `url` (see [Declined images](#declined-images)).
 
 The `IslandType` dispatch (`crates/content/src/island.rs`) owns these shapes
-engine-side; the WASM surface pins them as `TableProps` / `ImageProps` /
+Rust-side; the WASM surface pins them as `TableProps` / `ImageProps` /
 `TableCell` and types `ContentIsland.props` per the closed `type`
 (`crates/bindings/wasm/src/engine.rs`).
 

@@ -5,7 +5,7 @@
 
 ## TL;DR
 
-`quillmark-cli` is a `clap` surface over the engine holding no logic of its own:
+`quillmark-cli` is a `clap` surface over the `quillmark` crate, holding no logic of its own:
 `render` turns a quill + markdown into PDF/SVG/PNG, `check` reads documents
 against a quill's schema, `validate` reads a quill's configuration and compiles
 its plate, `schema`/`blueprint`/`info` introspect a quill without rendering
@@ -16,8 +16,8 @@ them.
 
 ## Contract
 
-- **`render`, `validate` and `check --regions` need the engine.** Each
-  constructs `Quillmark` to resolve the quill's backend; `check` / `schema` /
+- **`render`, `validate` and `check --regions` need `Quillmark`.** Each
+  constructs one to resolve the quill's backend; `check` / `schema` /
   `blueprint` / `info` load the quill with `quillmark::quill_from_path` and read
   the pure config-read operations a `Quill` already carries
   ([QUILL.md](QUILL.md)). `validate --no-render` compiles nothing: it reads
@@ -42,7 +42,7 @@ them.
   carrier, then every `Quill::validate` warning, each naming unclaimed input
   ([SCHEMAS.md](SCHEMAS.md#what-blocks-a-render)) less
   `backend::declined_construct`, then the compile's, a decline among them
-  ([ERROR.md](ERROR.md#warning-flow)). The engine's one-shot render carries
+  ([ERROR.md](ERROR.md#warning-flow)). `Quillmark::render` carries
   the last two; the CLI adds the parse carrier. A render that fails returns no
   result, so the CLI prints the parse carrier and every `Quill::validate`
   warning itself, `backend::declined_construct` among them, ahead of the
@@ -68,7 +68,7 @@ them.
   A render that fails adds `cli::example_render_failed`. `--verbose` names
   whether the quill has an example, so a misspelled one reads as none.
 - **The render date is the local date.** `render`, `validate` and `workspace` supply it
-  to the engine, which reads no clock; `--today YYYY-MM-DD` on `render` or
+  to core, which never reads a clock; `--today YYYY-MM-DD` on `render` or
   `workspace` pins it for a reproducible render. The local offset unreadable,
   the date is UTC's.
 - **`workspace` hands the plate to Typst's tooling.** It writes

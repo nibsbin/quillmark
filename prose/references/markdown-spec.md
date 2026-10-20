@@ -283,7 +283,7 @@ Quill and collection names match `/^[a-z][a-z0-9_]*$/`, at most 64
 characters each. The selector is a pin, not a
 resolver: this spec fixes the surface syntax accepted on the `$quill` line,
 and matching a partial selector against a set of installed versions belongs to
-a layer above the engine.
+a layer above Quillmark.
 
 ## 4. Block Detection
 
@@ -356,8 +356,8 @@ collide, because field names exclude the `$` sigil.
 - Body text is preserved verbatim: whitespace, line endings, and inline
   CommonMark are untouched by the splitter.
 
-How the engine serialises this model onto the wire for backends (the plate JSON)
-is an engine concern, outside this markdown standard.
+How Quillmark serialises this model onto the wire for backends (the plate JSON)
+lies outside this markdown standard.
 
 ## 6. Markdown Content
 

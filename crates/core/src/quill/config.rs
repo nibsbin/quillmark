@@ -196,7 +196,7 @@ impl CoercionError {
     /// [`Diagnostic::args`](crate::error::Diagnostic::args).
     ///
     /// `path` stays behind: it is a schema-space anchor that `ERROR.md`
-    /// § "Three grammars, one that crosses" keeps engine-internal. So does
+    /// § "Three grammars, one that crosses" keeps internal to Quillmark. So does
     /// `reason`, English minted at ~20 coercion arms and sometimes wrapping a
     /// decode error's own prose, which a key would interpolate into a
     /// translated sentence.
@@ -1329,7 +1329,7 @@ impl QuillConfig {
     /// Reject `>`, `;`, `|` in enum literals (reserved by the blueprint inline
     /// annotation grammar — `<format>` close, role separator, enum value
     /// separator — with no escape syntax), and reject `""`, which is the
-    /// engine-supplied blank rather than a choice.
+    /// Quillmark-supplied blank rather than a choice.
     fn validate_enum_literals(
         field: &FieldSchema,
         owner_label: &str,
@@ -1342,7 +1342,7 @@ impl QuillConfig {
                         Severity::Error,
                         format!(
                             "{} declares `\"\"` in `values:`. The blank is not a \
-                             choice: it is supplied by the engine and always \
+                             choice: it is supplied by Quillmark and always \
                              accepted.",
                             owner_label
                         ),
@@ -2141,7 +2141,7 @@ impl QuillConfig {
     }
 
     /// `quill.requires` is `>=MAJOR.MINOR[.PATCH]`, a floor on this crate's
-    /// version, which every engine crate shares.
+    /// version, which every Quillmark crate shares.
     fn check_engine_floor(requires: &serde_json::Value) -> Result<(), Diagnostic> {
         use std::str::FromStr;
         let invalid = |shown: String| {
@@ -2216,7 +2216,7 @@ impl QuillConfig {
             }
         };
 
-        // Ahead of every other check: a quill written for a newer engine may
+        // Ahead of every other check: a quill written for a newer Quillmark may
         // carry keys this one would report as typos.
         if let Some(requires) = quill_section.get("requires") {
             if let Err(diag) = Self::check_engine_floor(requires) {

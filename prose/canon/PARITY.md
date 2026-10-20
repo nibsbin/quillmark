@@ -8,7 +8,7 @@
 A content construct has one form, its stored JSON, and markdown, the op wire
 and the Typst lowering are codecs or projections of it. This page states the
 invariants every surface keeps and a matrix of what each surface does with each
-construct. A conformance corpus pins every row: an engine test asserts its
+construct. A conformance corpus pins every row: a Rust test asserts its
 markdown, stored JSON, op wire, Typst lowering, validate and signal cells.
 
 ## Invariants
@@ -136,8 +136,8 @@ diff-rebase alone. The row's corpus entry pins the spelling under
 | `island.table.cell.align`: a cell's horizontal alignment | spells | spells | spells | honors | silent: honored | none |
 | `island.table.cell.valign`: a cell's vertical alignment | spells | spells | spells | honors | silent: honored | none |
 | `island.table.cell.align_valign`: both, over a cell holding marks | spells | spells | spells | honors | silent: honored | none |
-| `island.table.props.unnamed`: a props key the engine does not name | drops silently | carries opaquely | carries opaquely | drops silently | drops silently | none |
-| `island.table.cell.unnamed`: a cell key the engine does not name | drops silently | carries opaquely | carries opaquely | drops silently | drops silently | none |
+| `island.table.props.unnamed`: a props key Quillmark does not name | drops silently | carries opaquely | carries opaquely | drops silently | drops silently | none |
+| `island.table.cell.unnamed`: a cell key Quillmark does not name | drops silently | carries opaquely | carries opaquely | drops silently | drops silently | none |
 | `island.table.cell.value`: a cell `valign` outside its set | drops silently | carries opaquely | carries opaquely | drops silently | drops silently | none |
 | `island.table.props.value`: a table `align` outside its set | drops silently | carries opaquely | carries opaquely | drops silently | drops silently | none |
 | `island.table.props.widths`: column weights, `null` an auto-fit column | spells | spells | spells | honors | silent: honored | none |
@@ -147,7 +147,7 @@ diff-rebase alone. The row's corpus entry pins the spelling under
 | `island.image` | spells | spells | spells | declines with a signal | declines with a signal | `backend::declined_construct`, `image` |
 
 A table re-imports from its pipe syntax, so `to_markdown` and `revise` both
-mint it without a key the engine does not name.
+mint it without a key Quillmark does not name.
 
 `widths`, `align` and `headless` are spelled on a `qm-table` wrapper
 ([markdown-spec.md](../references/markdown-spec.md) §6.4). Each is absent at
@@ -157,7 +157,7 @@ A cell's `align` and `valign` are spelled on a `qm-cell` pair around the cell's
 whole content (§6.4).
 
 A table or cell key holding a value outside its set rests as written and rides
-as a key the engine does not name does.
+as a key Quillmark does not name does.
 
 ### Spellings
 
@@ -186,7 +186,7 @@ above, or markup the content does not store.
 | `carrier.element.stray_close.tight`: an element close tag with nothing open, tight above markdown it keeps | silent: honored | n/a | n/a | n/a | n/a | none |
 | `carrier.table`: the reserved `qm-table` around a table | spells | spells | spells | honors | silent: honored | none |
 | `carrier.table.holds_other`: a `qm-table` around anything but one table | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `qm-table` |
-| `carrier.table.attr`: a `qm-table` attribute the engine does not name | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `qm-table[foo]` |
+| `carrier.table.attr`: a `qm-table` attribute Quillmark does not name | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `qm-table[foo]` |
 | `carrier.table.value`: a `qm-table` attribute value outside its spelling | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `qm-table[widths]` |
 | `carrier.cell.partial`: a `qm-cell` pair around part of a cell | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `qm-cell` |
 | `carrier.cell.value`: a `qm-cell` attribute value outside its spelling | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `qm-cell[valign]` |
@@ -262,5 +262,5 @@ Each binding holds what only it can break, the crossing: every entry's
 `fromStored`; Python's `tests/test_parity.py` through `Document.from_markdown`
 and a stored load.
 
-A construct enters the engine with its row and its entry, and a change to what
+A construct enters Quillmark with its row and its entry, and a change to what
 a surface does with one edits both.

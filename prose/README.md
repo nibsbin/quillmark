@@ -20,9 +20,9 @@ for quill authors and integrators. The two cover the same subjects from opposite
 ends, and the division is by *audience*, not by topic:
 
 - **Canon** documents the design contract: the model, the invariants, and why
-  a seam sits where it does. Its reader is changing the engine.
+  a seam sits where it does. Its reader is changing Quillmark.
 - **`docs/`** documents the task: authoring a quill, filling a form, persisting
-  a document. Its reader is using the engine.
+  a document. Its reader is using Quillmark.
 
 Neither restates the other. A `docs/` page links up to its canon page for the
 full model (`Full model: [ERROR.md](…)`); a canon page links down to `docs/` for

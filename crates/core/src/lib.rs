@@ -1,6 +1,6 @@
 //! # Quillmark Core
 //!
-//! Foundational types for the Quillmark document engine: the
+//! Foundational types for the Quillmark document framework: the
 //! [`document::Document`] model and its `~~~` card-yaml blocks, the
 //! [`quill::Quill`] format bundle, the [`backend::Backend`] seam output
 //! backends implement, and structured diagnostics carrying source locations.

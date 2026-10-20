@@ -173,7 +173,7 @@ pub struct Diagnostic {
     /// One code carries one key set, tabulated in `prose/canon/ERROR.md`
     /// § "Diagnostic args" and tested against it. Values keep their JSON
     /// shape, so joining and pluralizing stay the consumer's locale decisions.
-    /// Engine prose never rides under a key.
+    /// Quillmark prose never rides under a key.
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     pub args: BTreeMap<String, serde_json::Value>,
 }
@@ -412,7 +412,7 @@ fn tilde_code_hint(info: Option<&str>) -> String {
     }
 }
 
-/// The document a [`ParseError`] points at. Markdown reaches the engine as a
+/// The document a [`ParseError`] points at. Markdown reaches core as a
 /// string, so the anchor names the input rather than a path on disk.
 pub const DOCUMENT_FILE: &str = "input.md";
 
@@ -560,7 +560,7 @@ impl RenderError {
     }
 
     /// A failure carrying one error diagnostic under `code`, the shape most
-    /// engine-side refusals take. One needing a hint takes
+    /// Quillmark-side refusals take. One needing a hint takes
     /// [`coded_hint`](Self::coded_hint); one needing a path or args builds its
     /// diagnostic and goes through [`from_diag`](Self::from_diag).
     pub fn coded(code: &str, message: impl Into<String>) -> Self {

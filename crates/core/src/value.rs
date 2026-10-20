@@ -54,7 +54,7 @@ pub(crate) fn depth_check_meta_map<E>(
     Ok(map)
 }
 
-/// The one YAML reading every engine parse shares: only `true` and `false`,
+/// The one YAML reading every Quillmark parse shares: only `true` and `false`,
 /// in any letter case, are booleans, and YAML 1.1's words (`y`, `no`, `On`,
 /// `OFF`) stay strings. Comments reach no value, so none is buffered, and a run
 /// of them meets no count limit. With aliases expanded, scalar and tag bytes

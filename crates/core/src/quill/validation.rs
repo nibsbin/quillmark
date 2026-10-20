@@ -332,7 +332,7 @@ fn yaml_scalar_type(value: &serde_json::Value) -> &'static str {
     match value {
         serde_json::Value::Null => "null",
         serde_json::Value::Bool(_) => "boolean",
-        // An `integer` is the engine's `i64`. A numeric literal past that range
+        // An `integer` is Quillmark's `i64`. A numeric literal past that range
         // is a `number`, the type that does carry it, which keeps the mismatch
         // hint ("change the schema's `type:` to `{actual}`") true.
         serde_json::Value::Number(n) => {

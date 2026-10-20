@@ -2,7 +2,7 @@
 name = "quillmark-cli"
 version.workspace = true
 edition.workspace = true
-description = "Command-line interface for Quillmark, a schema-driven document engine"
+description = "Command-line interface for Quillmark, a schema-driven document framework"
 license.workspace = true
 include.workspace = true
 readme = "README.md"

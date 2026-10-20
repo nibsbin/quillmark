@@ -78,7 +78,7 @@ describe('@quillmark/wasm: the static surface, before init', () => {
       const caught = caughtFrom(() => new runtime[name]())
       // Pre-init a class's only reachable member is its constructor, so this is
       // the whole pre-init contract for a class. The writer/reader binds refuse
-      // for want of a Quill; `Engine` and `LiveSession` take no handle and
+      // for want of a Quill; `Quillmark` and `LiveSession` take no handle and
       // succeed, which is the exemption executed rather than declared.
       if (caught !== undefined) {
         expect(runtime.isQuillmarkError(caught), `${name} threw outside the model`).toBe(true)
