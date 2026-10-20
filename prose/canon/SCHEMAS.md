@@ -852,7 +852,7 @@ something: the branch is what makes the world's fields readable without a guard
 wherever a `date` value is, authored or declared as a `default:`, at any depth.
 It is not a `datetime` value.
 
-Quillmark reads no clock. The date is a required input to the compile,
+Core never reads a clock. The date is a required input to the compile,
 supplied by the host at every door that turns a document into plate data:
 `compile_data` / `compile_checked`, `Quill::resolve` / `reader.resolve`, and
 `Quillmark::open` / `Quillmark::render`. A `today` cell and a Typst plate's

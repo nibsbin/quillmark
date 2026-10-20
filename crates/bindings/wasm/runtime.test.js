@@ -1,7 +1,7 @@
 /**
  * The canonical `@quillmark/wasm` API end to end: a CORE quill and
- * document handed to `Quillmark` render correctly, which clones them into the
- * Typst backend's memory on demand without the caller ever seeing a backend
+ * document handed to `Quillmark` render correctly, `Quillmark` cloning them into
+ * the Typst backend's memory on demand without the caller ever seeing a backend
  * handle.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'

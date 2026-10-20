@@ -101,8 +101,7 @@ A load failure surfaces as `runtime::init_failed`, whose hint names that line.
 ## API
 
 ### `new Quillmark(options?)`
-Create the render dispatcher. `Engine` is a deprecated alias of `Quillmark`,
-and `EngineOptions` of `QuillmarkOptions`. Routes each quill to its backend by
+Create the render dispatcher. Routes each quill to its backend by
 `quill.backendId`, lazily loads that backend binary, and renders: cloning the
 quill/document into the backend's memory and freeing the clones internally.
 `render`, `open`, `load`, and `supportedFormats` are **async** (the first call
@@ -111,7 +110,8 @@ Each entry is a descriptor (`{ [backendId]: { load, formats } }`) where `load`
 is the lazy thunk returning the backend module and `formats` is the
 **required** static capability manifest. A malformed descriptor throws at
 `new Quillmark(...)`, naming the backend id, and so does any options key other
-than `backends`.
+than `backends`. `Engine` is a deprecated alias of `Quillmark`, and
+`EngineOptions` of `QuillmarkOptions`.
 
 **The format probe is always free.** `supportedFormats` depends only on
 `quill.backendId`, and answers from the descriptor's required `formats`
@@ -124,9 +124,9 @@ compiles the document as it stood at the call. Mount the editor on core, start
 the load, and open once it lands:
 
 ```js
-void quillmark.load(quill);          // start the fetch as soon as the quill resolves
+void quillmark.load(quill);       // start the fetch as soon as the quill resolves
 mountEditor(quill, doc);          // core alone
-await quillmark.load(quill);         // memoized: the same load
+await quillmark.load(quill);      // memoized: the same load
 const session = await quillmark.open(quill, doc); // one compile, current document
 ```
 

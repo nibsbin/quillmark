@@ -166,8 +166,8 @@ export type {
 /**
  * The error every fallible method in this package throws: parse
  * (`Document.fromMarkdown`), document mutation, validation
- * (`Quill.fromTree`, `quill.validate`), and rendering (`engine.render`,
- * `engine.open`, `session.render`).
+ * (`Quill.fromTree`, `quill.validate`), and rendering (`quillmark.render`,
+ * `quillmark.open`, `session.render`).
  *
  * This is a STRUCTURAL interface, not a class: the WASM layer throws a real
  * `Error` and attaches `diagnostics` to it, so there is no constructor to

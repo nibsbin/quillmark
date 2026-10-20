@@ -18,7 +18,7 @@ No surface times a render for you: clock the `render` call. That is how a host f
 
 ## Concurrency
 
-`Quillmark`, `Quill`, and `Document` are `Send + Sync` (`crates/quillmark/tests/facade_surface.rs` pins this). One `Quillmark` serves many threads, and a loaded `Quill` is portable declarative data, shared rather than cloned per request. `LiveSession` is a per-document handle: open one per editing session.
+`Quillmark`, `Quill`, and `Document` are `Send + Sync` (`crates/quillmark/tests/facade_surface.rs` pins this). One `Quillmark` instance serves many threads, and a loaded `Quill` is portable declarative data, shared rather than cloned per request. `LiveSession` is a per-document handle: open one per editing session.
 
 Python's `Quillmark.render` releases the GIL while it compiles, so renders on separate threads run in parallel and an asyncio loop calling it through `asyncio.to_thread` keeps serving.
 
@@ -28,7 +28,7 @@ Python's `Quillmark.render` releases the GIL while it compiles, so renders on se
 
 **WASM memory only grows.** Linear memory never shrinks, so a module stays at the high-water mark of the largest render it has run. A long-lived tab or Node worker that renders one large document holds that memory until the realm is discarded.
 
-`Quillmark` caches no quills: `Quillmark::render` takes a `&Quill` the caller owns.
+`Quillmark::render` caches no quills: it takes a `&Quill` the caller owns. The WASM `Quillmark` caches a backend-memory clone of each `Quill` it renders in a `WeakMap` keyed on that `Quill`, so a clone's lifetime follows its `Quill`.
 
 ## Isolation
 

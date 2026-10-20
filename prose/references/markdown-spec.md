@@ -357,7 +357,7 @@ collide, because field names exclude the `$` sigil.
   CommonMark are untouched by the splitter.
 
 How Quillmark serialises this model onto the wire for backends (the plate JSON)
-is Quillmark's concern, outside this markdown standard.
+lies outside this markdown standard.
 
 ## 6. Markdown Content
 

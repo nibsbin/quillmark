@@ -78,7 +78,7 @@ title: Example
 
 // The bound door: parse and conform against the quill that will render it.
 let doc = quill.parse(markdown)?.document;
-// Quillmark reads no clock: the host passes its local date.
+// A render reads no clock: the host passes its local date.
 let today: CalendarDate = "2026-03-14".parse()?;
 let result = quillmark.render(
     &quill,

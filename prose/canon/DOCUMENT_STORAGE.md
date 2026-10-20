@@ -566,7 +566,7 @@ read-only in markdown.**
 
 - **Caller-supplied.** Quillmark mints no anchor id and cannot: only the
   consumer knows the referent. Each consumer (editor, MCP writer) supplies its
-  own; the runtime persists it verbatim. Minting in core is a non-goal by
+  own; the runtime persists it verbatim. Quillmark-side minting is a non-goal by
   design: a counter is history-dependent (the same final content reached two
   ways carries different ids: the ambient source the twin rule forbids) and
   forfeits referent-convergence (two `add`s for one thread would mint two

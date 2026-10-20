@@ -8,7 +8,7 @@
 A content construct has one form, its stored JSON, and markdown, the op wire
 and the Typst lowering are codecs or projections of it. This page states the
 invariants every surface keeps and a matrix of what each surface does with each
-construct. A conformance corpus pins every row: a core test asserts its
+construct. A conformance corpus pins every row: a Rust test asserts its
 markdown, stored JSON, op wire, Typst lowering, validate and signal cells.
 
 ## Invariants

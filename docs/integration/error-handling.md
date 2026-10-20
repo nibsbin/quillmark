@@ -2,7 +2,7 @@
 
 Every failure (parse, validation, quill config, backend compile) travels as a **`Diagnostic`**, and each binding raises a single error type that always carries a non-empty `diagnostics` list. Consumers route on a diagnostic's namespaced `code`, never on an exception subclass.
 
-One thing never reaches a diagnostic: an argument the binding cannot convert at all. Python raises `ValueError` for a non-finite float, an int past 64 bits, a value whose type has no JSON form, or a malformed `path` sequence — Quillmark never sees the call.
+One thing never reaches a diagnostic: an argument the binding cannot convert at all. Python raises `ValueError` for a non-finite float, an int past 64 bits, a value whose type has no JSON form, or a malformed `path` sequence — core never sees the call.
 
 ## The Diagnostic shape
 
@@ -22,8 +22,9 @@ One thing never reaches a diagnostic: an argument the binding cannot convert at 
 === "Python"
 
     ```python
-    from quillmark import QuillmarkError
+    from quillmark import OutputFormat, Quillmark, QuillmarkError
 
+    quillmark = Quillmark()
     try:
         result = quillmark.render(quill, doc, OutputFormat.PDF)
     except QuillmarkError as exc:

@@ -65,7 +65,7 @@ A present `type: date` / `type: datetime` field is a native `datetime`; a blank 
 #if qm.data.issued != none { .. }                                        // presence
 ```
 
-`datetime.today()` returns the render date the host supplied, the same date a `today` field renders as. Quillmark reads no clock, and the host owns the time zone, so an `offset:` is ignored: `datetime.today(offset: 0)` is the host's date, not UTC's.
+`datetime.today()` returns the render date the host supplied, the same date a `today` field renders as. A render reads no clock, and the host owns the time zone, so an `offset:` is ignored: `datetime.today(offset: 0)` is the host's date, not UTC's.
 
 Everything except the two `qm.ink` calls is ordinary Typst, because the value is an ordinary `datetime`. On a date address, `qm.ink(dict, key, ..args)` prints the date as `datetime.display` would with the same patterns, its default display with none; a blank date gives `none`, and a pattern on any other address fails the render. Reach for `qm.data.<field>` whenever you want the value itself: math, comparison, components, or handing it to a package. The two print the same text and differ only in [editor previews](editor-regions.md#dates-print-through-qmink), where `qm.ink` keeps the printed date clickable.
 
@@ -440,7 +440,8 @@ PDF renders as a single artifact. SVG and PNG render one artifact per page.
 Python binding (rendering lives on `Quillmark`, not the quill):
 
 ```python
-from quillmark import OutputFormat
+from quillmark import OutputFormat, Quillmark
+quillmark = Quillmark()
 result = quillmark.render(quill, doc, OutputFormat.PDF)   # or .SVG, .PNG
 ```
 

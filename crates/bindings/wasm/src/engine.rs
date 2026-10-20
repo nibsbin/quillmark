@@ -529,8 +529,9 @@ export interface ChangeBundle {
 }
 "#;
 
-/// A backend registry and render dispatcher, the JS `Quillmark`. Render build only:
-/// the core build constructs and validates quills without it.
+/// A backend registry and render dispatcher: the render build's `Quillmark`,
+/// which the runtime's public `Quillmark` wraps. Render build only: the core
+/// build constructs and validates quills without it.
 #[cfg(feature = "render")]
 #[wasm_bindgen]
 pub struct Quillmark {
