@@ -95,7 +95,7 @@ typst:
 }
 
 // The hand-authored `sample_form` fixture: a `acroform`-backend quill shipping a
-// stripped background (`form.pdf`) and a value-free field spec (`form.yaml`).
+// stripped background (`form.pdf`) and a value-free field spec (`Form.yaml`).
 // Loaded as a tree so the canvas tests can drive the acroform backend
 // (which rasterizes its stamped PDF) exactly like a typst quill.
 const SAMPLE_FORM_DIR = join(__dirname, '../../fixtures/resources/quills/sample_form/0.1.0')
@@ -104,7 +104,7 @@ export function makeSampleFormQuill() {
   return new Map([
     ['Quill.yaml', new Uint8Array(readFileSync(join(SAMPLE_FORM_DIR, 'Quill.yaml')))],
     ['form.pdf', new Uint8Array(readFileSync(join(SAMPLE_FORM_DIR, 'form.pdf')))],
-    ['form.yaml', new Uint8Array(readFileSync(join(SAMPLE_FORM_DIR, 'form.yaml')))],
+    ['Form.yaml', new Uint8Array(readFileSync(join(SAMPLE_FORM_DIR, 'Form.yaml')))],
   ])
 }
 

@@ -38,7 +38,7 @@ caller formatting `{err}` reads the same sentence a binding reads off `message`.
 
 It exists so no public signature names `serde-saphyr`. A third-party error type in a published signature chains this crate's major to that crate's, and to the choice of engine at all; the workspace pins `~1.0` and keeps the engine an implementation detail. That promise covers the message as much as the type, which is why the sanitizer is inside the adapter rather than beside it.
 
-Three surfaces return one directly (`value::from_yaml_str`, `QuillValue::from_yaml_str`, `QuillConfig::schema_yaml`). `value::from_yaml_str` deserializes into the caller's type, so a missing or mistyped key is located as a syntax error is. `QuillConfig::from_yaml_with_warnings` converts through it to `quill::yaml_parse_error`, and the acroform backend to `acroform::invalid_form_spec` against `form.yaml`. The card-yaml path does not travel this way: it becomes `ParseError::YamlErrorWithLocation`, which additionally knows the enclosing block.
+Three surfaces return one directly (`value::from_yaml_str`, `QuillValue::from_yaml_str`, `QuillConfig::schema_yaml`). `value::from_yaml_str` deserializes into the caller's type, so a missing or mistyped key is located as a syntax error is. `QuillConfig::from_yaml_with_warnings` converts through it to `quill::yaml_parse_error`, and the acroform backend to `acroform::invalid_form_spec` against `Form.yaml`. The card-yaml path does not travel this way: it becomes `ParseError::YamlErrorWithLocation`, which additionally knows the enclosing block.
 
 Its `line`/`column` are document coordinates, not block-relative ones:
 
@@ -409,7 +409,7 @@ confused with it:
   body terminal. The ordinal counts cards of that kind, where a `DocPath` card
   index counts every card (with cards `note`, `annotation`, `note`,
   `$cards.note.1` is `cards.note[2]`). A template-author contract (`qm.form-field(field: "refs.2")`,
-  `qm.ink(..)`, every published `form.yaml`), so it keeps its own spelling
+  `qm.ink(..)`, every published `Form.yaml`), so it keeps its own spelling
   (renaming it is a blast radius) and translates to `DocPath` before it crosses.
 - **Schema-space coercion anchors**: `CoercionError` keeps its own
   `card_kinds.<kind>.<field>` / bare-field anchors, a schema-declaration

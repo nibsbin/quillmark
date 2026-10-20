@@ -1,6 +1,6 @@
-//! `form.yaml` wire types and parsing (`form@0.2.0`).
+//! `Form.yaml` wire types and parsing (`form@0.2.0`).
 //!
-//! `form.yaml` is the durable, value-free placement + binding layer of a
+//! `Form.yaml` is the durable, value-free placement + binding layer of a
 //! `acroform` quill. It carries only what the quill schema cannot know: where a
 //! widget sits (`page`/`rect`) and which logical field it binds. A bound field
 //! in `fields` names a `schema_field` and derives its kind, options, multiline
@@ -14,9 +14,9 @@ use quillmark_core::version::Version;
 use serde::Deserialize;
 
 /// The field spec's file name at the quill root.
-pub const FORM_YAML: &str = "form.yaml";
+pub const FORM_YAML: &str = "Form.yaml";
 
-/// The `schema` tag prefix every `form.yaml` must carry.
+/// The `schema` tag prefix every `Form.yaml` must carry.
 pub const SCHEMA_PREFIX: &str = "quillmark/form@";
 
 /// The oldest version read. Any later version under the same major is read too,
@@ -27,7 +27,7 @@ const OLDEST_READ: Version = Version {
     patch: 0,
 };
 
-/// A parsed `form.yaml`.
+/// A parsed `Form.yaml`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct FormSpec {
     /// Widgets bound to a [`FieldSchema`](quillmark_core::quill::FieldSchema).
@@ -50,6 +50,10 @@ pub struct BoundField {
     pub rect: Rect,
     #[serde(default)]
     pub tooltip: Option<String>,
+    /// The `enum` value that checks this widget, a box of its own: one per
+    /// value lays out a group of boxes answering one question.
+    #[serde(default)]
+    pub option: Option<String>,
 }
 
 /// A widget bound to no schema field, so its intrinsics are declared here.
@@ -89,7 +93,7 @@ pub enum WidgetKind {
     Signature,
 }
 
-/// Why a `form.yaml` failed to parse.
+/// Why a `Form.yaml` failed to parse.
 #[derive(Debug)]
 pub enum FormParseError {
     NotUtf8,
@@ -125,7 +129,7 @@ impl FormParseError {
         "acroform::invalid_form_spec"
     }
 
-    /// A YAML failure keeps its line and column as a `Location` in `form.yaml`.
+    /// A YAML failure keeps its line and column as a `Location` in `Form.yaml`.
     pub fn to_diagnostic(&self) -> Diagnostic {
         match self {
             FormParseError::Yaml(e) => e.to_diagnostic(self.code(), FORM_YAML),
@@ -143,7 +147,7 @@ struct SchemaTag {
 }
 
 impl FormSpec {
-    /// Parse and validate the bytes of a `form.yaml`.
+    /// Parse and validate the bytes of a `Form.yaml`.
     pub fn parse(bytes: &[u8]) -> Result<FormSpec, FormParseError> {
         let text = std::str::from_utf8(bytes).map_err(|_| FormParseError::NotUtf8)?;
         let tag: SchemaTag =

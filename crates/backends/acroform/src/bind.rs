@@ -1,4 +1,4 @@
-//! Resolve every `form.yaml` field against the two static inputs (the quill
+//! Resolve every `Form.yaml` field against the two static inputs (the quill
 //! schema and the background geometry) into the session's value-free widget
 //! layer. Pure in the quill, so it runs once at open: a widget bound to a
 //! nonexistent field or an out-of-range page is a load error, not a silent blank.
@@ -10,7 +10,7 @@ use quillmark_pdf::FieldType as WidgetType;
 
 use crate::form::{BoundField, FormSpec, Rect, UnboundWidget, WidgetKind};
 
-/// A `form.yaml` field with its static parts resolved: `rect` is final
+/// A `Form.yaml` field with its static parts resolved: `rect` is final
 /// bottom-left PDF geometry, and the widget type is value-free.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BoundWidget {
@@ -22,9 +22,11 @@ pub struct BoundWidget {
     pub tooltip: Option<String>,
     /// The bound text field's `max:`, the character cap its widget carries.
     pub max_len: Option<u32>,
+    /// The value that checks this checkbox, where it is one option's box.
+    pub option: Option<String>,
 }
 
-/// Why binding a `form.yaml` field failed. Every variant is a load error.
+/// Why binding a `Form.yaml` field failed. Every variant is a load error.
 #[derive(Debug)]
 pub enum BindError {
     /// A `schema_field` path does not resolve; names the failing segment.
@@ -51,6 +53,14 @@ pub enum BindError {
         page: usize,
         rect: Rect,
     },
+    /// An `option:` on a field that is not an `enum`, or naming none of its
+    /// values, or on a variant container rather than its discriminant.
+    BadOption {
+        name: String,
+        path: String,
+        option: String,
+        values: Vec<String>,
+    },
 }
 
 impl BindError {
@@ -61,6 +71,7 @@ impl BindError {
             BindError::Unbindable { .. } => "acroform::unbindable_field",
             BindError::PageOutOfRange { .. } => "acroform::field_page_out_of_range",
             BindError::BadRect { .. } => "acroform::invalid_field_rect",
+            BindError::BadOption { .. } => "acroform::invalid_option",
         }
     }
 }
@@ -74,12 +85,12 @@ impl std::fmt::Display for BindError {
                 segment,
             } => write!(
                 f,
-                "form.yaml field {name:?} binds schema_field {path:?}, but segment {segment:?} \
+                "Form.yaml field {name:?} binds schema_field {path:?}, but segment {segment:?} \
                  does not resolve against the quill schema"
             ),
             BindError::Unbindable { name, path, ty } => write!(
                 f,
-                "form.yaml field {name:?} binds schema_field {path:?}, which resolves to schema \
+                "Form.yaml field {name:?} binds schema_field {path:?}, which resolves to schema \
                  type `{ty}`: no widget can render it; bind a scalar, enum, boolean, or an array \
                  of those instead"
             ),
@@ -89,13 +100,23 @@ impl std::fmt::Display for BindError {
                 page_count,
             } => write!(
                 f,
-                "form.yaml field {name:?} targets page {page} but `form.pdf` has {page_count} page(s)"
+                "Form.yaml field {name:?} targets page {page} but `form.pdf` has {page_count} page(s)"
             ),
             BindError::BadRect { name, page, rect } => write!(
                 f,
-                "form.yaml field {name:?} has rect {{ x: {}, y: {}, w: {}, h: {} }}, which shows \
+                "Form.yaml field {name:?} has rect {{ x: {}, y: {}, w: {}, h: {} }}, which shows \
                  nothing on page {page}: `w` and `h` must be positive and the box must overlap the page",
                 rect.x, rect.y, rect.w, rect.h
+            ),
+            BindError::BadOption { name, path, option, values } if values.is_empty() => write!(
+                f,
+                "Form.yaml field {name:?} is checked by `option: {option:?}`, but schema_field \
+                 {path:?} is not an `enum`; a variant container binds its `.value`"
+            ),
+            BindError::BadOption { name, path, option, values } => write!(
+                f,
+                "Form.yaml field {name:?} is checked by `option: {option:?}`, which `enum` \
+                 {path:?} does not hold; its values are {values:?}"
             ),
         }
     }
@@ -125,11 +146,33 @@ fn bind_field(
     canvas_boxes: &[[f32; 4]],
 ) -> Result<BoundWidget, BindError> {
     let schema = bind(config, &field.name, &field.schema_field)?;
-    let field_type = project_kind(schema, &field.name, &field.schema_field)?;
-    let tooltip = field
-        .tooltip
-        .clone()
-        .or_else(|| schema.description.clone());
+    let field_type = match &field.option {
+        Some(option) => {
+            let bad = |values: &[String]| BindError::BadOption {
+                name: field.name.clone(),
+                path: field.schema_field.clone(),
+                option: option.clone(),
+                values: values.to_vec(),
+            };
+            let discriminant = field
+                .schema_field
+                .ends_with(&format!(".{VARIANT_DISCRIMINANT_KEY}"));
+            match &schema.r#type {
+                SchemaType::Enum { .. } if schema.is_variant_bearing() && !discriminant => {
+                    return Err(bad(&[]))
+                }
+                SchemaType::Enum { values } if values.contains(option) => WidgetType::Checkbox,
+                SchemaType::Enum { values } => return Err(bad(values)),
+                _ => return Err(bad(&[])),
+            }
+        }
+        None => project_kind(schema, &field.name, &field.schema_field)?,
+    };
+    let tooltip = field.tooltip.clone().or_else(|| match (&schema.description, &field.option) {
+        (Some(description), Some(option)) => Some(format!("{description}: {option}")),
+        (None, Some(option)) => Some(option.clone()),
+        (description, None) => description.clone(),
+    });
     Ok(BoundWidget {
         name: field.name.clone(),
         schema_field: Some(field.schema_field.clone()),
@@ -140,6 +183,7 @@ fn bind_field(
         max_len: schema.max.filter(|_| {
             matches!(schema.r#type, SchemaType::Text { .. } | SchemaType::RichText { .. })
         }),
+        option: field.option.clone(),
     })
 }
 
@@ -155,6 +199,7 @@ fn bind_unbound(
         field_type: widget_type(&widget.kind),
         tooltip: widget.tooltip.clone(),
         max_len: None,
+        option: None,
     })
 }
 
@@ -444,6 +489,39 @@ card_kinds:
         let c = config();
         let schema = bind(&c, "W", path)?;
         project_kind(schema, "W", path)
+    }
+
+    fn button(path: &str, option: &str) -> Result<BoundWidget, BindError> {
+        let field = BoundField {
+            name: "W".into(),
+            schema_field: path.into(),
+            page: 0,
+            rect: Rect { x: 72.0, y: 72.0, w: 12.0, h: 12.0 },
+            tooltip: None,
+            option: Some(option.into()),
+        };
+        bind_field(&field, &config(), &[[0.0, 0.0, 612.0, 792.0]])
+    }
+
+    #[test]
+    fn an_on_value_makes_an_enum_option_a_checkbox_of_its_own() {
+        let green = button("favorite_color", "green").expect("binds");
+        assert_eq!(green.field_type, WidgetType::Checkbox);
+        assert_eq!(green.option.as_deref(), Some("green"));
+        assert_eq!(green.tooltip.as_deref(), Some("green"), "each box says which value it is");
+        assert_eq!(button("classification.value", "CUI").unwrap().field_type, WidgetType::Checkbox);
+
+        for (path, option) in [
+            ("favorite_color", "purple"),
+            ("full_name", "Ada"),
+            ("agree", "true"),
+            ("classification", "CUI"),
+        ] {
+            let err = button(path, option).expect_err(path);
+            assert_eq!(err.code(), "acroform::invalid_option", "{path}");
+        }
+        let bare = button("classification", "CUI").unwrap_err().to_string();
+        assert!(bare.contains("binds its `.value`"), "{bare}");
     }
 
     #[test]
