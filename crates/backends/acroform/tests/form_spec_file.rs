@@ -1,7 +1,7 @@
 //! Which file an acroform quill's field spec is read from, and how a bad one
 //! is reported.
 
-use quillmark::{Document, Quillmark, RenderError};
+use quillmark::{Document, OutputFormat, Quillmark, RenderError, RenderOptions};
 use quillmark_core::quill::{FileTreeNode, Quill};
 
 mod common;
@@ -108,4 +108,41 @@ fn a_bad_form_yaml_locates_its_error() {
         located(&format!("{head}    page: 0\n    rect: {{ x: 0, y: 0, w: 1, h: 1 }}\n")),
         (5, 5),
     );
+}
+
+#[test]
+fn a_box_per_option_checks_the_one_the_document_chose() {
+    let mut spec: serde_json::Value =
+        quillmark_core::value::from_yaml_str(&fixture_form_yaml()).expect("the fixture parses");
+    let fields = spec["fields"].as_array_mut().expect("fields");
+    for (i, color) in ["red", "green", "blue"].iter().enumerate() {
+        fields.push(serde_json::json!({
+            "name": format!("Color_{color}"),
+            "schema_field": "favorite_color",
+            "option": color,
+            "page": 0,
+            "rect": { "x": 72 + 20 * i, "y": 700, "w": 12, "h": 12 },
+        }));
+    }
+    let tree = sample_form_with(&[("Form.yaml", &spec.to_string())]);
+    let quill = Quill::from_tree(tree).expect("Quill.yaml loads");
+    let markdown = DOC.replace("full_name: Ada Lovelace\n", "favorite_color: green\n");
+    let doc = Document::parse(&markdown).expect("parse markdown").document;
+    let result = Quillmark::new()
+        .render(
+            &quill,
+            &doc,
+            common::test_date(),
+            &RenderOptions::default().with_output_format(OutputFormat::Pdf),
+        )
+        .expect("render ok");
+
+    let pdf = lopdf::Document::load_mem(&result.artifacts[0].bytes).expect("reparse");
+    let af_ref = pdf.catalog().unwrap().get(b"AcroForm").unwrap().as_reference().unwrap();
+    let af = pdf.get_object(af_ref).unwrap().as_dict().unwrap();
+    let state = |color: &str| {
+        let w = common::widget(&pdf, af, &format!("Color_{color}"));
+        String::from_utf8(w.get(b"AS").unwrap().as_name().unwrap().to_vec()).unwrap()
+    };
+    assert_eq!([state("red"), state("green"), state("blue")], ["Off", "Yes", "Off"]);
 }

@@ -50,6 +50,10 @@ pub struct BoundField {
     pub rect: Rect,
     #[serde(default)]
     pub tooltip: Option<String>,
+    /// The `enum` value that checks this widget, a box of its own: one per
+    /// value lays out a group of boxes answering one question.
+    #[serde(default)]
+    pub option: Option<String>,
 }
 
 /// A widget bound to no schema field, so its intrinsics are declared here.

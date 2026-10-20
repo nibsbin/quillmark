@@ -198,6 +198,7 @@ Opening an `acroform` quill and binding `Form.yaml`.
 - `acroform::field_page_out_of_range`
 - `acroform::invalid_field_rect`
 - `acroform::invalid_form_spec`
+- `acroform::invalid_option`
 - `acroform::legacy_form_json`
 - `acroform::legacy_form_yaml`
 - `acroform::missing_form_pdf`
