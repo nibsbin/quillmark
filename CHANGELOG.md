@@ -2,13 +2,51 @@
 
 ## v0.127.0 - 2026-10-20
 
-- feat(acroform): a bound field's `option` checks its box for one enum value
-- feat(acroform)!: an acroform quill's field spec is Form.yaml
-- feat(acroform): warn at a field whose text its box cuts off
-- feat(acroform): warn at a field whose value the form's font draws as `?`
-- fix(pdf): a one-line value is centred in its box, as a viewer centres it
-- fix(acroform)!: refuse a field box that shows nothing on its page
-- fix(pdf): a baked appearance wraps a multiline value and fits its box
+Upgrade path: [0.126 → 0.127](docs/migrations/0.126-to-0.127.md). An acroform
+quill's field spec is `Form.yaml`, and one holding `form.yaml` fails to open,
+so no acroform quill opens on both 0.126 and 0.127. A field box with no area
+or wholly off its page fails to open, a baked appearance wraps and fits its
+value and centres a one-line one, a field whose text its box cuts off or
+whose font draws a character as `?` warns, and a bound field's `option:`
+checks its own box for one enum value.
+
+### PDF forms
+
+- feat(acroform)!: **an acroform quill's field spec is `Form.yaml`**,
+  capitalized as `Quill.yaml` is, where it was `form.yaml`; the contents need
+  no change. A quill holding `form.yaml`, alone or beside `Form.yaml`, fails
+  to open as the new `acroform::legacy_form_yaml`, whose hint names the
+  rename. There is no overlap window: 0.126 reports a `Form.yaml` quill as
+  `acroform::missing_form_spec`, so every acroform quill, and every tool that
+  writes one, moves with this release, and a quill declares
+  `requires: ">=0.127"`. (#2248)
+- feat(acroform): **a bound field's `option:` names one of its enum's values,
+  and its widget is a checkbox of its own**, checked when the field holds
+  that value, so a printed form's box-per-answer question ticks one box. Its
+  `/TU` defaults to the field's description and the value. An `option:` on a
+  field that is not an enum, naming no value of it, or on a variant container
+  rather than its `.value`, fails to open as `acroform::invalid_option`. An
+  engine before 0.127 draws a dropdown in the box. (#2248)
+- fix(acroform)!: **a `Form.yaml` field `rect` with no width or height, or
+  wholly off its page, fails to open as `acroform::invalid_field_rect`**,
+  naming the field and its rect, where it opened and rendered the value
+  nowhere. A box that only crosses its page's edge still loads. (#2245)
+- fix(pdf): **a baked appearance wraps a multiline value and fits its box.**
+  A multiline value breaks at spaces into lines of the box's width, inside a
+  word wider than the box, and an auto-sized one steps down from its box's
+  size until its lines fit the box's height; an auto-sized one-line value or
+  choice shrinks to the box's width, down to 4 pt. Each ran past the box's
+  edge, cut off on the canvas and in any consumer drawing the baked stream.
+  (#2244)
+- fix(pdf): **a one-line text value and a choice are centred in their box's
+  height**, the baseline a viewer centres a line on, where the baked
+  appearance set it a point under the box's top. (#2245)
+- feat(acroform): **a field whose text its box still cuts off warns
+  `acroform::text_overflow`**, and **one holding a character the form's
+  base-14 WinAnsi font draws as `?` warns `acroform::unencodable_text`**,
+  with the count of such characters; `/V` keeps the value whole. Both update
+  with each session update. `quillmark_pdf::overflows` answers the first from
+  the sizing the appearance draws with. (#2245)
 
 ## v0.126.2 - 2026-10-19
 
