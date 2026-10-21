@@ -428,6 +428,11 @@ pub(super) fn find_metadata_blocks(markdown: &str) -> Result<FenceScan, ParseErr
             if leading_spaces(rest) >= 4 {
                 break interrupting;
             }
+            // Past the depth the body import admits, markers read as text: every
+            // container closes at column zero, so no card turns on them.
+            if containers.len() >= crate::error::MAX_NESTING_DEPTH {
+                break true;
+            }
             if interrupting && is_setext_underline(rest) {
                 break false;
             }
