@@ -312,6 +312,13 @@ rule (D2). A *column-zero* `~~~` can never be block-scalar content (YAML
 requires scalar content to be indented past its key), so the closer is
 unambiguous.
 
+Outside a card-yaml block, the detector reads ordinary fenced code blocks as
+CommonMark does, containers included: a `~~~` line inside one is code, not an
+opener. A fenced code block inside a list item or block quote closes when its
+container does, without a closing fence and without the unclosed-fence warning.
+A column-zero line ends every container, so such a block never covers a
+column-zero `~~~` below it; only a code block opened at the top level does.
+
 Failure of D0, D1, or D2 delegates the `~~~` line to CommonMark (an unclosed
 `~~~` opener becomes a code block to EOF, with a non-fatal unclosed-fence
 warning). A document with no closed root block fails with `MissingQuill`

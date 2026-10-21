@@ -7,9 +7,11 @@
 //! pulldown excludes the closer's trailing newline from its span and we include
 //! it, so spans are compared with trailing `\n`/`\r` trimmed.
 
+use proptest::prelude::*;
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 
 use crate::document::fences::find_metadata_blocks;
+use crate::document::Document;
 
 fn pulldown_fence_spans(md: &str) -> Vec<(usize, usize)> {
     let mut opts = Options::empty();
@@ -189,4 +191,48 @@ fn scanner_agrees_with_commonmark_on_fixtures() {
         failures.join("\n\n")
     );
     assert!(checked > 0, "no fixtures exercised the cross-check");
+}
+
+/// One body line around list items, block quotes, and fences. A column-zero
+/// tilde fence is left out: it is a card opener, whose closer rule (D2)
+/// departs from CommonMark's by design.
+fn arb_body_line() -> impl Strategy<Value = String> {
+    let indent = prop::sample::select(vec!["", " ", "  ", "   ", "    ", "     ", "\t"]);
+    let lead = prop::sample::select(vec!["", "- ", "* ", "1. ", "2) ", "- - ", "> ", "-", "#"]);
+    let rest = prop::sample::select(vec!["```", "````", "~~~", "```rust", "code", "text", "* * *", ""]);
+    (indent, lead, rest).prop_map(|(indent, lead, rest)| {
+        let line = format!("{indent}{lead}{rest}");
+        if line.starts_with("~~~") {
+            format!(" {line}")
+        } else {
+            line
+        }
+    })
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(1000))]
+
+    /// A column-zero `~~~` below a blank line is a card exactly when CommonMark
+    /// opens a fenced block there, whatever list items and fences precede it,
+    /// and the document's cards survive the markdown loop.
+    #[test]
+    fn a_card_below_nested_fences_registers_as_commonmark_reads_it(
+        body in prop::collection::vec(arb_body_line(), 0..12)
+    ) {
+        let head = "~~~\n$quill: q\n$kind: main\n~~~\n\n";
+        let src = format!("{head}{}\n\n~~~\n$kind: x\n~~~\n\nafter\n", body.join("\n"));
+        let opener = src.rfind("~~~\n$kind: x").unwrap();
+
+        let scan = find_metadata_blocks(&src).unwrap();
+        let ours = scan.blocks.iter().any(|b| b.start == opener);
+        let commonmark = pulldown_fence_spans(&src).iter().any(|&(start, _)| start == opener);
+        prop_assert_eq!(ours, commonmark, "card at {} disagrees with CommonMark\n{}", opener, src);
+
+        let doc = Document::parse(&src).unwrap().document;
+        let once = doc.to_markdown();
+        let reparsed = Document::parse(&once).unwrap().document;
+        prop_assert_eq!(doc.cards().len(), reparsed.cards().len(), "card count moved\n{}", once);
+        prop_assert_eq!(&once, &reparsed.to_markdown(), "the loop did not settle");
+    }
 }
