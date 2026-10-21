@@ -145,22 +145,26 @@ impl<'m> Codegen<'m> {
     }
 
     /// Binds `ec` as a `#let _qm_cN = [\n{markup}\n]` block. The `\n` wrap opens
-    /// the block at a line boundary so line-anchored markup parses. Windows are
+    /// the block at a line boundary so line-anchored markup parses. An inline
+    /// emission escapes its anchors and binds as `[{markup}]`, since a wrapping
+    /// `\n` prints as a space at the value's edge. Windows are
     /// recorded in `self.blocks` coordinates; `generate_lib_typ` shifts them
     /// once more by the block section's start.
-    fn content_block(&mut self, path: &str, ec: Emission) -> String {
+    fn content_block(&mut self, path: &str, ec: Emission, inline: bool) -> String {
         let id = format!("_qm_c{}", self.counter);
         self.counter += 1;
         self.blocks.push_str("#let ");
         self.blocks.push_str(&id);
         self.blocks.push_str(" = ");
         let start = self.blocks.len();
-        self.blocks.push_str("[\n");
-        // The emitter's `generated` offsets are relative to the markup body,
-        // which opens after `[\n`.
+        let wrap = if inline { "" } else { "\n" };
+        self.blocks.push('[');
+        self.blocks.push_str(wrap);
+        // The emitter's `generated` offsets are relative to the markup body.
         let markup_at = self.blocks.len();
         self.blocks.push_str(&ec.markup);
-        self.blocks.push_str("\n]");
+        self.blocks.push_str(wrap);
+        self.blocks.push(']');
         let end = self.blocks.len();
         self.blocks.push('\n');
         let segments = ec
@@ -208,7 +212,7 @@ impl<'m> Codegen<'m> {
         match from_canonical_value(value) {
             Ok(rt) if !rt.is_blank() => match emit(&rt) {
                 Ok(ec) => {
-                    let id = self.content_block(path, ec);
+                    let id = self.content_block(path, ec, inline && rt.is_inline());
                     (id.clone(), Some(id))
                 }
                 Err(e) => {
@@ -764,7 +768,7 @@ mod tests {
         });
         let (lib, _) = generate_lib_typ(&data, &meta).unwrap();
         assert!(
-            lib.contains("[\nA #strong[bold] subject\n]"),
+            lib.contains("[A #strong[bold] subject]"),
             "inline block should carry no parbreak: {lib}"
         );
         assert!(
@@ -781,8 +785,8 @@ mod tests {
         }}));
         let data = serde_json::json!({ "cc": [content("First"), content("Second **bold**")] });
         let (lib, _) = generate_lib_typ(&data, &meta).unwrap();
-        assert!(lib.contains("[\nFirst\n]"), "{lib}");
-        assert!(lib.contains("[\nSecond #strong[bold]\n]"), "{lib}");
+        assert!(lib.contains("[First]"), "{lib}");
+        assert!(lib.contains("[Second #strong[bold]]"), "{lib}");
     }
 
     #[test]

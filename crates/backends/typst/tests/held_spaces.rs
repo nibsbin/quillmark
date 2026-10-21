@@ -49,3 +49,20 @@ fn collapsible_spaces_keep_their_width() {
     assert_eq!(x_of("<u>a. </u> Z", 'Z'), two, "either side of a mark close");
     assert_eq!(x_of("[a. ](https://x.y) Z", 'Z'), two, "either side of a link close");
 }
+
+#[test]
+fn a_text_value_inks_no_space_it_does_not_hold() {
+    TypstBackend
+        .open(
+            &quill(
+                &yaml("main:\n  fields:\n    name: { type: text }\n"),
+                r#"
+#import "@local/quillmark-helper:0.2.0" as qm
+#context assert.eq(measure[Dear #qm.ink(qm.data, "name"),], measure[Dear Mr. Babbage,])
+"#,
+            ),
+            &serde_json::json!({ "name": content("Mr. Babbage") }),
+            common::test_date(),
+        )
+        .expect("the ink sits flush against the text around it");
+}
