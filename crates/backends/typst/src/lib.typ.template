@@ -292,9 +292,9 @@
     else if c.has("child") { walk(c.child) }
     else { "" }
   }
-  // The generated block opens on a line break, which reads as a space, and
-  // closes on a paragraph break; a space the value holds at a line's start or
-  // beside another is `~`, a no-break space.
+  // A multiline value's generated block opens on a line break, which reads as
+  // a space, and closes on a paragraph break; a space the value holds at a
+  // line's start or beside another is `~`, a no-break space.
   walk(value).trim(" ", at: start).replace("\u{a0}", " ").trim(regex("[ \n]+"), at: end)
 }
 

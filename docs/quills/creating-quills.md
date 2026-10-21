@@ -83,12 +83,10 @@ main:
 
 #text(size: 16pt, weight: "bold", qm.ink(qm.data, "sender"))
 
-#if qm.data.recipient != "" [Dear #flush(qm.ink(qm.data, "recipient")),]
+#if qm.data.recipient != "" [Dear #qm.ink(qm.data, "recipient"),]
 
 #qm.data.at("$body", default: "")
 ```
-
-`flush` is a short function the starter plate defines. A `text` value prints with a space on each side, and `flush` trims them so the comma sits right after the name.
 
 The plate reads the document through the helper package, imported `as qm`:
 
