@@ -588,12 +588,19 @@ reads the document:
 |---|---|---|
 | `align` | the cell's horizontal alignment: `left`, `center` or `right` | its column's, from the delimiter row |
 | `valign` | the cell's vertical alignment: `top`, `middle` or `bottom` | the plate's |
+| `colspan` | the columns the cell spans, decimal digits from 2 with no leading zero | 1 |
+| `rowspan` | the rows the cell spans, decimal digits from 2 with no leading zero | 1 |
 
 ```markdown
 | Item | Notes | Qty |
 | --- | --- | ---: |
 | <qm-cell valign="bottom">Total</qm-cell> | one<br>two | <qm-cell align="center">**42**</qm-cell> |
+| <qm-cell colspan="2">Carried</qm-cell> |  | 7 |
 ```
+
+A span's cell is the top-left one; each cell it covers keeps its slot in the
+pipe row, empty. A span draws only as far as those cells hold no text
+(DOCUMENT_STORAGE.md § "Content vocabularies").
 
 - A pair folds when its open tag is the cell's first inline and its close tag
   the cell's last, and the cell holds no other `qm-cell` tag. What it wraps is
@@ -605,7 +612,7 @@ reads the document:
   `parse::dropped_construct` reports each open tag as `qm-cell`.
 - Each value stores as written, one equal to its column's included, and
   export writes the pair around every cell holding a value in its set.
-- An attribute other than these two, and one whose value is outside its set,
+- An attribute other than these four, and one whose value is outside its set,
   drops alone, reported as `qm-cell[<name>]`.
 - Outside a table cell `qm-cell` is no special name: a pair of tag lines is an
   element, and a pair inside a line drops as any element's does.

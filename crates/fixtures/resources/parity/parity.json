@@ -1101,6 +1101,195 @@
     }
   },
   {
+    "name": "island.table.cell.colspan",
+    "markdown": "| <qm-cell colspan=\"2\">Totals</qm-cell> |  |\n| --- | --- |\n| 1 | 2 |",
+    "content": {
+      "islands": [
+        {
+          "id": "isl-0",
+          "props": {
+            "aligns": [
+              "none",
+              "none"
+            ],
+            "header": [
+              {
+                "colspan": 2,
+                "marks": [],
+                "text": "Totals"
+              },
+              {
+                "marks": [],
+                "text": ""
+              }
+            ],
+            "rows": [
+              [
+                {
+                  "marks": [],
+                  "text": "1"
+                },
+                {
+                  "marks": [],
+                  "text": "2"
+                }
+              ]
+            ]
+          },
+          "type": "table"
+        }
+      ],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "para"
+        }
+      ],
+      "marks": [],
+      "text": "￼"
+    },
+    "typst": [
+      "table.header(table.cell(colspan: 2)[Totals], ),"
+    ],
+    "signals": {
+      "import": [],
+      "render": []
+    }
+  },
+  {
+    "name": "island.table.cell.rowspan",
+    "markdown": "| a | b |\n| --- | --- |\n| <qm-cell rowspan=\"2\" valign=\"middle\">1</qm-cell> | 2 |\n|  | 3 |",
+    "content": {
+      "islands": [
+        {
+          "id": "isl-0",
+          "props": {
+            "aligns": [
+              "none",
+              "none"
+            ],
+            "header": [
+              {
+                "marks": [],
+                "text": "a"
+              },
+              {
+                "marks": [],
+                "text": "b"
+              }
+            ],
+            "rows": [
+              [
+                {
+                  "marks": [],
+                  "rowspan": 2,
+                  "text": "1",
+                  "valign": "middle"
+                },
+                {
+                  "marks": [],
+                  "text": "2"
+                }
+              ],
+              [
+                {
+                  "marks": [],
+                  "text": ""
+                },
+                {
+                  "marks": [],
+                  "text": "3"
+                }
+              ]
+            ]
+          },
+          "type": "table"
+        }
+      ],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "para"
+        }
+      ],
+      "marks": [],
+      "text": "￼"
+    },
+    "typst": [
+      "table.cell(rowspan: 2, align: horizon)[1], [2], ",
+      "  [3], \n"
+    ],
+    "signals": {
+      "import": [],
+      "render": []
+    }
+  },
+  {
+    "name": "island.table.cell.span_text",
+    "markdown": "| a | b | c |\n| --- | --- | --- |\n| <qm-cell colspan=\"3\">1</qm-cell> |  | 3 |",
+    "content": {
+      "islands": [
+        {
+          "id": "isl-0",
+          "props": {
+            "aligns": [
+              "none",
+              "none",
+              "none"
+            ],
+            "header": [
+              {
+                "marks": [],
+                "text": "a"
+              },
+              {
+                "marks": [],
+                "text": "b"
+              },
+              {
+                "marks": [],
+                "text": "c"
+              }
+            ],
+            "rows": [
+              [
+                {
+                  "colspan": 3,
+                  "marks": [],
+                  "text": "1"
+                },
+                {
+                  "marks": [],
+                  "text": ""
+                },
+                {
+                  "marks": [],
+                  "text": "3"
+                }
+              ]
+            ]
+          },
+          "type": "table"
+        }
+      ],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "para"
+        }
+      ],
+      "marks": [],
+      "text": "￼"
+    },
+    "typst": [
+      "table.cell(colspan: 2)[1], [3], "
+    ],
+    "signals": {
+      "import": [],
+      "render": []
+    }
+  },
+  {
     "name": "island.table.props.unnamed",
     "markdown": null,
     "content": {
@@ -2971,6 +3160,66 @@
       "import": [
         {
           "construct": "qm-cell[valign]",
+          "count": 1
+        }
+      ],
+      "render": []
+    }
+  },
+  {
+    "name": "carrier.cell.span_value",
+    "markdown": "| a | b |\n| --- | --- |\n| <qm-cell colspan=\"1\">1</qm-cell> | 2 |",
+    "content": {
+      "islands": [
+        {
+          "id": "isl-0",
+          "props": {
+            "aligns": [
+              "none",
+              "none"
+            ],
+            "header": [
+              {
+                "marks": [],
+                "text": "a"
+              },
+              {
+                "marks": [],
+                "text": "b"
+              }
+            ],
+            "rows": [
+              [
+                {
+                  "marks": [],
+                  "text": "1"
+                },
+                {
+                  "marks": [],
+                  "text": "2"
+                }
+              ]
+            ]
+          },
+          "type": "table"
+        }
+      ],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "para"
+        }
+      ],
+      "marks": [],
+      "text": "￼"
+    },
+    "typst": [
+      "  [1], [2]"
+    ],
+    "signals": {
+      "import": [
+        {
+          "construct": "qm-cell[colspan]",
           "count": 1
         }
       ],

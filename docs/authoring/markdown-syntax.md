@@ -67,7 +67,7 @@ Text alignment within a column stays in the delimiter row (`:---:`). A `widths` 
 
 ### Cell alignment
 
-A `qm-cell` pair around a cell's whole content aligns that one cell, in the header row or the body:
+A `qm-cell` pair around a cell's whole content aligns or merges that one cell, in the header row or the body:
 
 ```markdown
 | Item | Notes | Qty |
@@ -79,6 +79,17 @@ A `qm-cell` pair around a cell's whole content aligns that one cell, in the head
 |---|---|---|
 | `align` | `left`, `center` or `right`. | The column's alignment from the delimiter row. |
 | `valign` | `top`, `middle` or `bottom`. | The quill's vertical alignment. |
+| `colspan` | The number of columns the cell spans, from 2. | One column. |
+| `rowspan` | The number of rows the cell spans, from 2. | One row. |
+
+A merged cell is the top-left cell of the block it covers, and each cell under it keeps its place in the pipe row, left empty. A span stops short of a cell holding text, so text in a covered cell still draws. A header cell spans columns only, unless the table is `headless`:
+
+```markdown
+| <qm-cell colspan="2">Unit</qm-cell> |  | Total |
+| --- | --- | ---: |
+| <qm-cell rowspan="2">Osan</qm-cell> | 51 FW | 12 |
+|  | 7 AF | 4 |
+```
 
 The open tag comes first in the cell and the close tag last. A pair with anything else in the cell beside it drops, keeping what it wraps, with a `parse::dropped_construct` warning.
 

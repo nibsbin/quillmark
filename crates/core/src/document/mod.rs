@@ -77,7 +77,7 @@ fn listed(words: &[&str], last: &str) -> String {
 /// the spelling that keeps it.
 fn dropped_message(construct: &Dropped, n: usize) -> (String, String) {
     use quillmark_content::carrier::{CELL, RESERVED_ATTRS, TABLE};
-    use quillmark_content::island::{CELL_KEYS, TABLE_ALIGNS, TABLE_KEYS};
+    use quillmark_content::island::{CELL_KEYS, CELL_SPANS, TABLE_ALIGNS, TABLE_KEYS};
     const TIGHT: &str = "Markdown on the lines under a tag line drops with it, up to the next blank line.";
     const BESIDE: &str =
         "A tag line beside a line of other tags drops with the markdown under it, up to the next blank line.";
@@ -127,7 +127,13 @@ fn dropped_message(construct: &Dropped, n: usize) -> (String, String) {
             attr,
             match CELL_KEYS.iter().find(|(key, _)| key == attr) {
                 Some((key, set)) => format!("`{key}` is {}.", listed(set, "or")),
-                None => format!("`<{cell}>` takes {}.", listed(&CELL_KEYS.map(|(key, _)| key), "and")),
+                None if CELL_SPANS.contains(&attr.as_str()) => {
+                    format!("`{attr}` is a whole number of 2 or more, such as `{attr}=\"2\"`.")
+                }
+                None => {
+                    let keys: Vec<&str> = CELL_KEYS.iter().map(|(key, _)| *key).chain(CELL_SPANS).collect();
+                    format!("`<{cell}>` takes {}.", listed(&keys, "and"))
+                }
             },
         ),
         Dropped::ElementAttr { element, attr } => attr_dropped(

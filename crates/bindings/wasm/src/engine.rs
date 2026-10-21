@@ -297,6 +297,12 @@ export interface TableCell {
     align?: "left" | "center" | "right";
     /** The cell's vertical alignment; absent is the quill's. */
     valign?: "top" | "middle" | "bottom";
+    /** The columns the cell spans, from 2; absent is 1. The cells it covers
+     * stay in their rows, and a span reaches only over cells holding no text. */
+    colspan?: number;
+    /** The rows the cell spans, from 2; absent is 1. Unless the table is
+     * `headless`, a header cell spans no rows. */
+    rowspan?: number;
 }
 
 /** `props` of a `type: "table"` island: a pipe table normalized to one column

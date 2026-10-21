@@ -14,7 +14,8 @@ pub enum IslandType {
     /// `{header, rows, aligns}` with inline `{text, marks}` cells, a `\n` in a
     /// cell's text being a line break, and the optional [layout](TableLayout)
     /// keys `widths`, `align` and `headless`. A cell's optional `align` and
-    /// `valign` are its [alignment](cell_alignment).
+    /// `valign` are its [alignment](cell_alignment), and its optional
+    /// `colspan` and `rowspan` its [span](cell_span).
     /// Mark-carrying, shape-normalized (one column count, `\n` the only
     /// line-break char a cell keeps, each knob key absent at its default and
     /// `widths` settled to the column count). A knob key holding a value
@@ -37,6 +38,10 @@ pub const TABLE_KEYS: [&str; 3] = ["widths", "align", "headless"];
 
 /// A table cell's keys, each with its values.
 pub const CELL_KEYS: [(&str, &[&str]); 2] = [("align", &TABLE_ALIGNS), ("valign", &CELL_VALIGNS)];
+
+/// A table cell's span keys, each a whole number of columns or rows from 2
+/// to [`MAX_WEIGHT`], absent at 1.
+pub const CELL_SPANS: [&str; 2] = ["colspan", "rowspan"];
 
 /// The largest column weight, JavaScript's `Number.MAX_SAFE_INTEGER`: the
 /// WASM binding hands no larger integer to JavaScript.
@@ -82,6 +87,72 @@ impl TableLayout {
 pub fn cell_alignment(cell: &Value) -> (Option<&'static str>, Option<&'static str>) {
     let [(align, aligns), (valign, valigns)] = CELL_KEYS;
     (one_of(cell.get(align), aligns), one_of(cell.get(valign), valigns))
+}
+
+/// A table cell's `colspan` and `rowspan`, each 1 where the cell holds no
+/// value in its set.
+pub fn cell_span(cell: &Value) -> (u64, u64) {
+    let read = |key: &str| cell.get(key).and_then(Value::as_u64).filter(|n| *n >= 2 && is_weight(*n)).unwrap_or(1);
+    let [colspan, rowspan] = CELL_SPANS;
+    (read(colspan), read(rowspan))
+}
+
+/// How one position of a table's grid draws.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Slot {
+    /// The cell draws over `colspan` columns and `rowspan` rows from here.
+    Drawn { colspan: usize, rowspan: usize },
+    /// An earlier cell's span draws over this one.
+    Covered,
+}
+
+/// Each cell's [`Slot`], header row first, in reading order. A cell's
+/// [span](cell_span) reaches as far as it can while every cell it would cover
+/// holds no text and no earlier span covers it, stopping at the grid's edge
+/// and, unless the table is `headless`, at the header row's foot. A span over
+/// text therefore draws short of it rather than hiding it.
+pub fn cell_slots(props: &Value) -> Vec<Vec<Slot>> {
+    let header = props.get("header").and_then(Value::as_array);
+    let body = props.get("rows").and_then(Value::as_array);
+    let rows: Vec<&[Value]> = std::iter::once(header.map_or(&[][..], Vec::as_slice))
+        .chain(body.into_iter().flatten().map(|row| row.as_array().map_or(&[][..], Vec::as_slice)))
+        .collect();
+    let cols = rows.iter().map(|row| row.len()).max().unwrap_or(0);
+    let headless = TableLayout::of(props).headless;
+    let mut covered = vec![vec![false; cols]; rows.len()];
+    let mut slots = Vec::with_capacity(rows.len());
+    for r in 0..rows.len() {
+        let mut row = Vec::with_capacity(rows[r].len());
+        for c in 0..rows[r].len() {
+            if covered[r][c] {
+                row.push(Slot::Covered);
+                continue;
+            }
+            let free = |covered: &[Vec<bool>], r: usize, c: usize| {
+                rows[r].get(c).is_some_and(|cell| !covered[r][c] && crate::serial::parse_cell(cell).0.is_empty())
+            };
+            let (want_cols, want_rows) = cell_span(&rows[r][c]);
+            let (want_cols, want_rows) = (want_cols.min(cols as u64) as usize, want_rows.min(rows.len() as u64) as usize);
+            let mut colspan = 1;
+            while colspan < want_cols && free(&covered, r, c + colspan) {
+                colspan += 1;
+            }
+            let last = if r == 0 && !headless { 0 } else { rows.len() - 1 };
+            let mut rowspan = 1;
+            while rowspan < want_rows
+                && r + rowspan <= last
+                && (c..c + colspan).all(|c2| free(&covered, r + rowspan, c2))
+            {
+                rowspan += 1;
+            }
+            for line in covered.iter_mut().skip(r).take(rowspan) {
+                line[c..c + colspan].fill(true);
+            }
+            row.push(Slot::Drawn { colspan, rowspan });
+        }
+        slots.push(row);
+    }
+    slots
 }
 
 fn one_of(value: Option<&Value>, set: &[&'static str]) -> Option<&'static str> {
@@ -245,6 +316,49 @@ mod tests {
         assert_eq!(read, layout);
         let outside = json!({"widths": [2, 0], "align": "middle", "headless": "true"});
         assert_eq!(TableLayout::of(&outside), TableLayout::default());
+    }
+
+    /// A span reaches only empty cells no earlier span holds, stops at the
+    /// grid's edge, and spans no rows from a header row; a span outside its
+    /// set reads as 1.
+    #[test]
+    fn a_span_draws_as_far_as_the_cells_it_covers_are_free() {
+        use serde_json::{json, Value};
+        use Slot::{Covered as X, Drawn};
+        let d = |colspan, rowspan| Drawn { colspan, rowspan };
+        let cell = |text: &str, keys: Value| {
+            let mut cell = json!({"text": text, "marks": []});
+            cell.as_object_mut().unwrap().extend(keys.as_object().unwrap().clone());
+            cell
+        };
+        let e = || cell("", json!({}));
+        let cases = [
+            (
+                json!({"header": [cell("h", json!({"colspan": 2, "rowspan": 2})), e(), e()], "rows": [[e(), e(), e()]]}),
+                vec![vec![d(2, 1), X, d(1, 1)], vec![d(1, 1), d(1, 1), d(1, 1)]],
+            ),
+            (
+                json!({"headless": true, "header": [cell("h", json!({"rowspan": 9})), e()], "rows": [[e(), e()]]}),
+                vec![vec![d(1, 2), d(1, 1)], vec![X, d(1, 1)]],
+            ),
+            (
+                json!({"header": [e(), e(), e()], "rows": [
+                    [cell("a", json!({"rowspan": 2})), cell("b", json!({"colspan": 3})), e()],
+                    [e(), e(), cell("c", json!({}))],
+                ]}),
+                vec![vec![d(1, 1), d(1, 1), d(1, 1)], vec![d(1, 2), d(2, 1), X], vec![X, d(1, 1), d(1, 1)]],
+            ),
+            (
+                json!({"header": [e(), e()], "rows": [
+                    [cell("a", json!({"colspan": 1, "rowspan": "2"})), e()],
+                    [cell("b", json!({"colspan": 2.0})), e()],
+                ]}),
+                vec![vec![d(1, 1), d(1, 1)], vec![d(1, 1), d(1, 1)], vec![d(1, 1), d(1, 1)]],
+            ),
+        ];
+        for (props, slots) in cases {
+            assert_eq!(cell_slots(&props), slots, "{props}");
+        }
     }
 
     /// Normalization leaves a cell's `align` and `valign` as stored, an

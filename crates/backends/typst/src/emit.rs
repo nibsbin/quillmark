@@ -1090,6 +1090,9 @@ fn cell_markup(text: &str, marks: &[Mark]) -> String {
 ///   alignment the plate's own `table.cell` show rule sets.
 /// - a cell's `align` and `valign`: `table.cell(align: right + bottom)[…]`,
 ///   which Typst folds with its column's alignment.
+/// - a cell's `colspan` and `rowspan`: `table.cell(colspan: 2, rowspan: 3)[…]`
+///   as far as its [slot](quillmark_content::island::cell_slots) reaches, each
+///   cell it covers emitting nothing.
 /// - `headless`: the header row as the first body row, outside `table.header`.
 fn table_markup(props: &serde_json::Value) -> String {
     use serde_json::Value;
@@ -1114,15 +1117,31 @@ fn table_markup(props: &serde_json::Value) -> String {
 
     let layout = quillmark_content::island::TableLayout::of(props);
 
-    let cell = |v: &Value| {
+    use quillmark_content::island::Slot;
+    let slots = quillmark_content::island::cell_slots(props);
+    let cell = |v: &Value, slot: Slot| {
+        let Slot::Drawn { colspan, rowspan } = slot else {
+            return String::new();
+        };
         let (text, marks) = quillmark_content::serial::parse_cell(v);
         let body = cell_markup(&text, &marks);
         let (align, valign) = quillmark_content::island::cell_alignment(v);
         let valign = valign.map(|v| if v == "middle" { "horizon" } else { v });
+        let mut args = Vec::new();
+        for (key, n) in [("colspan", colspan), ("rowspan", rowspan)] {
+            if n > 1 {
+                args.push(format!("{key}: {n}"));
+            }
+        }
         match (align, valign) {
-            (None, None) => format!("[{body}]"),
-            (Some(a), None) | (None, Some(a)) => format!("table.cell(align: {a})[{body}]"),
-            (Some(a), Some(v)) => format!("table.cell(align: {a} + {v})[{body}]"),
+            (None, None) => {}
+            (Some(a), None) | (None, Some(a)) => args.push(format!("align: {a}")),
+            (Some(a), Some(v)) => args.push(format!("align: {a} + {v}")),
+        }
+        if args.is_empty() {
+            format!("[{body}], ")
+        } else {
+            format!("table.cell({})[{body}], ", args.join(", "))
         }
     };
 
@@ -1155,19 +1174,17 @@ fn table_markup(props: &serde_json::Value) -> String {
     let headless = layout.headless;
     out.push_str(if headless { "  " } else { "  table.header(" });
     if let Some(h) = header {
-        for c in h {
-            out.push_str(&cell(c));
-            out.push_str(", ");
+        for (c, slot) in h.iter().zip(&slots[0]) {
+            out.push_str(&cell(c, *slot));
         }
     }
     out.push_str(if headless { "\n" } else { "),\n" });
     if let Some(rs) = rows {
-        for row in rs {
+        for (row, slots) in rs.iter().zip(&slots[1..]) {
             if let Some(r) = row.as_array() {
                 out.push_str("  ");
-                for c in r {
-                    out.push_str(&cell(c));
-                    out.push_str(", ");
+                for (c, slot) in r.iter().zip(slots) {
+                    out.push_str(&cell(c, *slot));
                 }
                 out.push('\n');
             }

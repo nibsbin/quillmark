@@ -82,21 +82,27 @@ impl Layout {
 struct CellKeys {
     align: Option<&'static str>,
     valign: Option<&'static str>,
+    colspan: Option<u64>,
+    rowspan: Option<u64>,
 }
 
 fn cell_keys() -> impl Strategy<Value = CellKeys> {
     (
         prop::option::of(prop_oneof![Just("left"), Just("center"), Just("right")]),
         prop::option::of(prop_oneof![Just("top"), Just("middle"), Just("bottom")]),
+        prop::option::of(prop_oneof![2..5u64, Just(crate::island::MAX_WEIGHT)]),
+        prop::option::of(2..5u64),
     )
-        .prop_map(|(align, valign)| CellKeys { align, valign })
+        .prop_map(|(align, valign, colspan, rowspan)| CellKeys { align, valign, colspan, rowspan })
 }
 
 impl CellKeys {
     fn attrs(&self) -> BTreeMap<String, String> {
+        let spans = [("colspan", self.colspan), ("rowspan", self.rowspan)];
         [("align", self.align), ("valign", self.valign)]
             .into_iter()
             .filter_map(|(k, v)| Some((k.to_string(), v?.to_string())))
+            .chain(spans.into_iter().filter_map(|(k, n)| Some((k.to_string(), n?.to_string()))))
             .collect()
     }
 }
@@ -302,7 +308,7 @@ proptest! {
     }
 
     #[test]
-    fn a_cell_pair_folds_its_alignment_and_round_trips(
+    fn a_cell_pair_folds_its_alignment_and_span_and_round_trips(
         aligns in prop::collection::vec(
             prop_oneof![Just("none"), Just("left"), Just("center"), Just("right")],
             1..4,
@@ -360,9 +366,12 @@ proptest! {
             let row_at = if r == 0 { "/header".to_string() } else { format!("/rows/{}", r - 1) };
             for (k, (keys, _)) in row[..cols].iter().enumerate() {
                 let cell = island.props.pointer(&format!("{row_at}/{k}")).unwrap();
-                let read = crate::island::cell_alignment(cell);
-                let written = keys.as_ref().map_or((None, None), |k| (k.align, k.valign));
-                any |= written != (None, None);
+                let read = (crate::island::cell_alignment(cell), crate::island::cell_span(cell));
+                let written = keys.as_ref().map_or(((None, None), (1, 1)), |k| {
+                    let n = |n: Option<u64>| n.unwrap_or(1);
+                    ((k.align, k.valign), (n(k.colspan), n(k.rowspan)))
+                });
+                any |= written != ((None, None), (1, 1));
                 prop_assert_eq!(read, written, "{}/{} in {}", row_at, k, md);
             }
         }

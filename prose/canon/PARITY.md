@@ -136,6 +136,9 @@ diff-rebase alone. The row's corpus entry pins the spelling under
 | `island.table.cell.align`: a cell's horizontal alignment | spells | spells | spells | honors | silent: honored | none |
 | `island.table.cell.valign`: a cell's vertical alignment | spells | spells | spells | honors | silent: honored | none |
 | `island.table.cell.align_valign`: both, over a cell holding marks | spells | spells | spells | honors | silent: honored | none |
+| `island.table.cell.colspan`: a header cell spanning columns | spells | spells | spells | honors | silent: honored | none |
+| `island.table.cell.rowspan`: a body cell spanning rows, with its alignment | spells | spells | spells | honors | silent: honored | none |
+| `island.table.cell.span_text`: a span reaching a cell holding text | spells | spells | spells | honors | silent: honored | none |
 | `island.table.props.unnamed`: a props key Quillmark does not name | drops silently | carries opaquely | carries opaquely | drops silently | drops silently | none |
 | `island.table.cell.unnamed`: a cell key Quillmark does not name | drops silently | carries opaquely | carries opaquely | drops silently | drops silently | none |
 | `island.table.cell.value`: a cell `valign` outside its set | drops silently | carries opaquely | carries opaquely | drops silently | drops silently | none |
@@ -153,8 +156,10 @@ mint it without a key Quillmark does not name.
 ([markdown-spec.md](../references/markdown-spec.md) §6.4). Each is absent at
 its default, so a default row stores no key.
 
-A cell's `align` and `valign` are spelled on a `qm-cell` pair around the cell's
-whole content (§6.4).
+A cell's `align`, `valign`, `colspan` and `rowspan` are spelled on a `qm-cell`
+pair around the cell's whole content (§6.4). The cells a span covers keep their
+slots in the pipe row, and a span draws only as far as the cells it reaches
+hold no text, so a merge never hides a cell's text.
 
 A table or cell key holding a value outside its set rests as written and rides
 as a key Quillmark does not name does.
@@ -190,6 +195,7 @@ above, or markup the content does not store.
 | `carrier.table.value`: a `qm-table` attribute value outside its spelling | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `qm-table[widths]` |
 | `carrier.cell.partial`: a `qm-cell` pair around part of a cell | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `qm-cell` |
 | `carrier.cell.value`: a `qm-cell` attribute value outside its spelling | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `qm-cell[valign]` |
+| `carrier.cell.span_value`: a `qm-cell` span of 1 | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `qm-cell[colspan]` |
 | `carrier.anchor`: an echoed `qm-anchor` | silent: honored | n/a | n/a | n/a | n/a | none |
 | `markdown.link_title`: a link's title | drops silently | n/a | n/a | n/a | n/a | none |
 | `markdown.cell_image`: an image in a table cell | drops silently | n/a | n/a | n/a | n/a | none |

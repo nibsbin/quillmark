@@ -378,9 +378,17 @@ A cell names two keys of its own, each absent by default:
 |---|---|---|
 | `align` | the cell's horizontal alignment: `left`, `center` or `right` | its column's `aligns` entry |
 | `valign` | the cell's vertical alignment: `top`, `middle` or `bottom` | the plate's |
+| `colspan` | the columns the cell draws over, a whole number from 2 to 2⁵³ − 1 | 1 |
+| `rowspan` | the rows the cell draws over, a whole number from 2 to 2⁵³ − 1 | 1 |
 
 A cell's value equal to its column's is an override that stays when the
-column changes. A table or cell key holding a value outside its set is read
+column changes. A span is a key on the cell at its top-left corner, and the
+cells it covers keep their places in `header` and `rows`, so the grid stays
+rectangular and a span is one cell's knob rather than a second shape. A span
+draws over a cell only while that cell holds no text and no earlier span, in
+reading order, draws over it, and stops at the grid's edge and, outside a
+`headless` table, at the header row's foot (`island::cell_slots`): stored
+content can hold any span, and none of them hides a cell's text. A table or cell key holding a value outside its set is read
 as absent and rides untouched, as an unnamed key does, so
 `from_markdown(to_markdown(c)) == c` holds where every value is in its set.
 

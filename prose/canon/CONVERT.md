@@ -148,6 +148,7 @@ The table's layout keys lower as:
 | `align` | `align(center, table(…))` under `context`, with `table.cell` set to the horizontal `align.alignment` the table stands in, so the placement moves the table and no text inside it, save a horizontal alignment the plate's own `table.cell` show rule sets |
 | `headless` | `header` lowers as the first body row, outside `table.header` |
 | a cell's `align` / `valign` | `table.cell(align: right + bottom)[…]`, `middle` as `horizon`, which Typst folds with the column's alignment; a value outside its set lowers as absent |
+| a cell's `colspan` / `rowspan` | `table.cell(colspan: 2, rowspan: 3)[…]` as far as the span draws ([DOCUMENT_STORAGE.md](DOCUMENT_STORAGE.md) § "Content vocabularies"), each cell it covers lowering to nothing; a value outside its set lowers as absent |
 
 A table cell is canonical `{text, marks}`, lowered through the same mark sweep
 as prose: a formatted cell reaches `#strong[…]` / `#emph[…]` / `#raw(…)` /
@@ -240,8 +241,8 @@ reads and the shape the WASM boundary pins:
   above); `aligns` is one `none | left | center | right` per column. Import
   normalizes to a single column count: header, every row, and `aligns` padded
   to the widest, so `columns:` and `align:` agree.
-  The optional layout keys `widths`, `align` and `headless`, and a cell's `align` and
-  `valign` ([DOCUMENT_STORAGE.md](DOCUMENT_STORAGE.md) § "Content vocabularies"),
+  The optional layout keys `widths`, `align` and `headless`, and a cell's `align`,
+  `valign`, `colspan` and `rowspan` ([DOCUMENT_STORAGE.md](DOCUMENT_STORAGE.md) § "Content vocabularies"),
   lower as [above](#element-mapping); an absent one draws at its default:
   auto-fit, at the plate's placement, in the column's alignment, under a header row.
 - **`image`** → `{ url, alt }`; `alt` is the empty string when the source omits
