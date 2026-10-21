@@ -153,3 +153,19 @@ The body.
     );
     assert_eq!(doc.main().body_markdown(), "The body.");
 }
+
+/// A fence inside a list item closes where the item does (CommonMark §5.2), so
+/// a column-zero card below the item registers, and nothing is left unclosed.
+#[test]
+fn a_fence_in_a_list_item_closes_with_the_item() {
+    let src = "~~~card-yaml\n$quill: t\n$kind: main\n~~~\n\n- item\n\n  ```\n  code\n\n~~~card-yaml\n$kind: x\n~~~\n\nafter\n";
+    let out = Document::parse(src).unwrap();
+    assert_eq!(out.document.cards().len(), 1);
+    assert_eq!(out.document.cards()[0].kind(), Some("x"));
+    assert!(!out.document.main().body_markdown().contains("$kind"));
+    assert!(out
+        .warnings
+        .iter()
+        .all(|w| w.code.as_deref() != Some("parse::unclosed_code_block")));
+    super::assert_round_trip("list-item fence", src);
+}
