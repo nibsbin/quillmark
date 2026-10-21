@@ -25,7 +25,7 @@ fn a_floor_above_this_release_is_the_one_error() {
         "  from_the_future: true\nnew_section: {}\ntypst:\n  from_the_future: true\n",
     )
         .expect_err("9999.0 is above this Quillmark release");
-    assert_eq!(codes(&refused), ["quill::quillmark_too_old"]);
+    assert_eq!(codes(&refused), ["quill::requires_unmet"]);
 }
 
 #[test]

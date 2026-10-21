@@ -390,10 +390,12 @@ export interface ChangeSet {
 
 /**
  * A backend registry entry. `load` is the lazy thunk returning the
- * dynamically-imported backend build module; `formats` is the required static
- * capability manifest, which is what makes `Engine.supportedFormats` free: it
- * answers from it without loading a backend binary or cloning a quill. A
- * malformed descriptor throws at `new Engine(...)`.
+ * dynamically-imported backend build module, which is this package's own render
+ * build: its exports are the package's, hence `unknown`. Overriding `load`
+ * changes where the build loads from, never what loads. `formats` is the
+ * required static capability manifest, which is what makes
+ * `Engine.supportedFormats` free: it answers from it without loading a backend
+ * binary or cloning a quill. A malformed descriptor throws at `new Engine(...)`.
  */
 export interface BackendDescriptor {
 	load: () => Promise<unknown>;

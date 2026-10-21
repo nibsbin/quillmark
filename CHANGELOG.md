@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.128.0 - 2026-10-21
+
+Upgrade path: [0.127 → 0.128](docs/migrations/0.127-to-0.128.md). A quill
+whose `requires` floor is above the running release fails to load as
+`quill::requires_unmet`, where it failed as `quill::engine_too_old`, and a
+host matching the old code stops matching. The Rust struct and the Python
+class `Quillmark` are `Engine`, with no alias, so `use quillmark::Quillmark`
+fails to compile and `from quillmark import Quillmark` fails to import. The
+JavaScript `Engine` is unchanged.
+
+### API
+
+- refactor(core)!: **a quill whose `requires` floor is above the running
+  release fails to load as `quill::requires_unmet`**, where it failed as
+  `quill::engine_too_old`. It is still the load's only error, and its message
+  still names the release the quill requires; a host matching the old code
+  stops matching, and matches both while a 0.126 or 0.127 host can load its
+  quills. (#2252, #2254)
+- refactor!: **the Rust struct and the Python class `Quillmark` are
+  `Engine`**, the name the JavaScript surface already carries, with no alias.
+  Rename at the import and the constructor: `Engine::new()` in Rust,
+  `Engine()` in Python. Every method keeps its name and signature. (#2252)
+
+### Docs
+
+- docs: **Quillmark is described as a schema-driven document framework**
+  across package descriptions, CLI help, crate docs, READMEs, user docs, and
+  canon, and copy says `Engine` or the render build where it said engine.
+  (#2250, #2252, #2253)
+
 ## v0.127.0 - 2026-10-20
 
 Upgrade path: [0.126 → 0.127](docs/migrations/0.126-to-0.127.md). An acroform

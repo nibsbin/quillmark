@@ -1,4 +1,4 @@
-# Fixture quills are engine input and golden output, compared byte-for-byte by
+# Fixture quills are Quillmark input and golden output, compared byte-for-byte by
 # the snapshot tests. A CRLF checkout (git-for-windows defaults autocrlf on)
 # rewrites both sides asymmetrically (the golden file gains \r\n, the
 # serialiser still emits \n), so the tree is pinned to LF everywhere instead.
