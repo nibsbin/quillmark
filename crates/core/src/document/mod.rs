@@ -409,8 +409,7 @@ pub mod wire;
 pub(crate) mod yaml_hints;
 
 pub use dto::{
-    peek_storage_version, StorageError, StoredDocument, STORAGE_V0_112_0, STORAGE_V0_115_0,
-    STORAGE_V0_116_0, STORAGE_V0_124_0, STORAGE_V0_129_0, STORAGE_V0_93_0,
+    peek_storage_version, StorageError, StoredDocument, STORAGE_V0_124_0, STORAGE_V0_129_0,
 };
 pub use edit::{revise_import, CardMut, EditError, Revised};
 pub use emit::{AnnotatedMarkdown, DocumentAnchor};

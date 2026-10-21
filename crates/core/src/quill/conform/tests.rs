@@ -406,10 +406,13 @@ Body.
 }
 
 #[test]
-fn a_0_92_0_row_migrates_then_converges() {
+fn a_0_124_0_row_migrates_then_converges() {
     let quill = quill();
+    let body = |md: &str| {
+        quillmark_content::serial::to_canonical_value(&crate::document::import_body(md).unwrap())
+    };
     let legacy = json!({
-        "schema": "quillmark/document@0.92.0",
+        "schema": "quillmark/document@0.124.0",
         "main": {
             "payload": { "items": [
                 { "type": "quill", "value": "conform_test@1.0.0" },
@@ -420,20 +423,20 @@ fn a_0_92_0_row_migrates_then_converges() {
                         &quillmark_content::import::from_plaintext("a *literal* line")) },
                 { "type": "field", "key": "qty", "value": 3 },
             ]},
-            "body": "Main **body**."
+            "body": body("Main **body**.")
         },
         "cards": [{
             "payload": { "items": [
                 { "type": "kind", "value": "entry" },
                 { "type": "field", "key": "prose", "value": "card **body**" },
             ]},
-            "body": "Entry body."
+            "body": body("Entry body.")
         }]
     })
     .to_string();
 
     let mut doc = Document::try_from(
-        serde_json::from_str::<StoredDocument>(&legacy).expect("a 0.92.0 blob still loads"),
+        serde_json::from_str::<StoredDocument>(&legacy).expect("a 0.124.0 blob still loads"),
     )
     .expect("and migrates forward");
     assert_eq!(doc.main().body_markdown(), "Main **body**.");
