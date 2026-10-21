@@ -96,7 +96,7 @@ This paragraph is the document body. *Markdown* works here.
     memory rather than reading the directory:
 
     ```javascript
-    import { init, Quillmark } from "@quillmark/wasm";
+    import { init, Engine } from "@quillmark/wasm";
 
     const { Quill } = await init();
     const enc = new TextEncoder();
@@ -132,8 +132,8 @@ This paragraph is the document body. *Markdown* works here.
     This paragraph is the document body. *Markdown* works here.
     `);
 
-    const quillmark = new Quillmark();
-    const result = await quillmark.render(quill, doc, { format: "pdf" });
+    const engine = new Engine();
+    const result = await engine.render(quill, doc, { format: "pdf" });
     const pdfBytes = result.artifacts[0].bytes;
     ```
 

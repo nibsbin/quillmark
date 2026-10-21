@@ -17,7 +17,7 @@ The package is typed: it ships `py.typed` and stubs for the whole surface.
 ```python
 from quillmark import Quillmark, Quill, Document, OutputFormat
 
-quillmark = Quillmark()                    # backend registry + render dispatcher
+engine = Quillmark()                       # backend registry + render dispatcher
 quill = Quill.from_path("path/to/quill")   # portable, declarative config data
 
 markdown = """~~~
@@ -30,7 +30,7 @@ title: Hello World
 """
 
 parsed = Document.from_markdown(markdown)
-result = quillmark.render(quill, parsed, OutputFormat.PDF)
+result = engine.render(quill, parsed, OutputFormat.PDF)
 result.artifacts[0].save("output.pdf")
 ```
 
@@ -45,11 +45,11 @@ parse, storage, structure, `$ext` / `$seed`, and `remove_field`. Names follow
 ### `Quillmark`
 
 ```python
-quillmark = Quillmark()
-quillmark.registered_backends()           # ['typst', 'acroform'] (order not guaranteed)
-quillmark.render(quill, parsed, OutputFormat.PDF)   # ppi=, pages=, regions= optional
+engine = Quillmark()
+engine.registered_backends()              # ['typst', 'acroform'] (order not guaranteed)
+engine.render(quill, parsed, OutputFormat.PDF)   # ppi=, pages=, regions= optional
                                           # today=datetime.date, default the local date
-quillmark.supported_formats(quill)        # [OutputFormat.PDF, ...] (raises if backend unregistered)
+engine.supported_formats(quill)           # [OutputFormat.PDF, ...] (raises if backend unregistered)
 ```
 
 ### `Quill`
@@ -188,11 +188,11 @@ uses it when the document omits the field. Without one, the blueprint leaves the
 cell empty and an absent field blank-fills.
 
 An unanswered field draws no diagnostic. Partial documents are accepted, and
-`quillmark.render(quill, doc)` raises only for malformed input.
+`engine.render(quill, doc)` raises only for malformed input.
 
 ## Error contract
 
-A refusal Quillmark mints raises `QuillmarkError`, carrying a non-empty `.diagnostics`
+An engine refusal raises `QuillmarkError`, carrying a non-empty `.diagnostics`
 list of `Diagnostic` objects, the first an error. A failed Typst render also
 carries the quill's load warnings after its errors, so read each entry's
 `severity`. An argument the binding cannot read at all — a

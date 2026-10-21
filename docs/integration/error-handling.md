@@ -24,9 +24,9 @@ One thing never reaches a diagnostic: an argument the binding cannot convert at 
     ```python
     from quillmark import OutputFormat, Quillmark, QuillmarkError
 
-    quillmark = Quillmark()
+    engine = Quillmark()
     try:
-        result = quillmark.render(quill, doc, OutputFormat.PDF)
+        result = engine.render(quill, doc, OutputFormat.PDF)
     except QuillmarkError as exc:
         for d in exc.diagnostics:            # always non-empty
             print(d.severity, d.code, d.message)
@@ -40,7 +40,7 @@ One thing never reaches a diagnostic: an argument the binding cannot convert at 
     import { isQuillmarkError } from "@quillmark/wasm";
 
     try {
-      const result = await quillmark.render(quill, doc, { format: "pdf" });
+      const result = await engine.render(quill, doc, { format: "pdf" });
     } catch (err) {
       if (!isQuillmarkError(err)) throw err;
       for (const d of err.diagnostics) {     // always non-empty

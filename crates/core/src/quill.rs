@@ -45,9 +45,9 @@ pub use types::{
 /// Portable, validated quill data: the file bundle and parsed config of an
 /// authored quill, tagged with its *declared* backend id.
 ///
-/// A `Quill` holds no backend and needs no `Quillmark` to construct or use:
-/// every method here is a pure read of its parsed config. Rendering is
-/// `Quillmark`'s job. Construct with [`Quill::from_tree`] (pure) or
+/// A `Quill` holds no backend and needs no engine to construct or use: every
+/// method here is a pure read of its parsed config. Rendering is the engine's
+/// job. Construct with [`Quill::from_tree`] (pure) or
 /// `quillmark::quill_from_path` (filesystem stays out of core).
 #[derive(Clone)]
 pub struct Quill {

@@ -769,7 +769,7 @@ sits beside the render: what an unanswered cell shows is the quill's
 
 The render path
 (`QuillConfig::compile_data` and the ladder it cuts, `ladder_sourced`, both in
-core's `quill::compose`; `Quillmark` calls it) uses **blank-filled render**:
+core's `quill::compose`; the engine calls it) uses **blank-filled render**:
 every absent schema **cell** is resolved by precedence: an authored value, else
 the `default:`, else the field's blank (`blank`, defined below): in the
 plate-JSON projection that feeds the backend **only, never in the persisted

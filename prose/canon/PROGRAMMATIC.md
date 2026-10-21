@@ -59,7 +59,7 @@ w = quill.writer(doc)                            # schema-bound: coerce + check 
 w.set_all({"customer": row.name, "total": row.total})
 for item in row.items:
     w.add_card("line_item", {"desc": item.desc, "qty": item.qty})
-result = quillmark.render(quill, doc, OutputFormat.PDF)
+result = engine.render(quill, doc, OutputFormat.PDF)
 ```
 
 Values convert in place at each boundary (Python objects, JS values, Rust

@@ -4,10 +4,10 @@ For editor-style previews, paint pages directly into a `<canvas>` instead of
 round-tripping through PNG/SVG. `paint` is WASM-only, both the Typst and
 `acroform` backends support it, and it shares the cached compile with the
 byte-output `render` path. The code below continues from the `quill`, `doc` and
-`quillmark` of the JavaScript [Quickstart](../getting-started/quickstart.md).
+`engine` of the JavaScript [Quickstart](../getting-started/quickstart.md).
 
 ```javascript
-const session = await quillmark.open(quill, doc);  // compile once (async)
+const session = await engine.open(quill, doc);     // compile once (async)
 
 // Surface session-level diagnostics from compile time.
 for (const w of session.warnings) console.warn(w.message);

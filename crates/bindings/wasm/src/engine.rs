@@ -529,9 +529,8 @@ export interface ChangeBundle {
 }
 "#;
 
-/// A backend registry and render dispatcher: the render build's `Quillmark`,
-/// which the runtime's public `Quillmark` wraps. Render build only: the core
-/// build constructs and validates quills without it.
+/// Render engine: a backend registry and render dispatcher. Render build only:
+/// the core build constructs and validates quills without it.
 #[cfg(feature = "render")]
 #[wasm_bindgen]
 pub struct Quillmark {
@@ -628,7 +627,7 @@ impl Quillmark {
     ) -> Result<Ts<RenderResult>, JsValue> {
         let rust_opts = render_options_or_throw(
             opts,
-            "the render date is the trailing argument: quillmark.render(quill, doc, options, today)",
+            "the render date is the trailing argument: engine.render(quill, doc, options, today)",
         )?;
         let today = render_date(today)?;
         let result = self
@@ -672,7 +671,7 @@ impl Quill {
     /// [`fromTree`](Self::from_tree). Keys are `"/"`-joined relative paths.
     ///
     /// This is how a quill crosses a WASM linear-memory boundary as data: a
-    /// `Quill` built in one build cannot be passed to a `Quillmark` in another, so
+    /// `Quill` built in one build cannot be passed to an engine in another, so
     /// the `@quillmark/wasm` runtime layer re-feeds this tree to the backend
     /// build's `Quill.fromTree` on demand.
     #[wasm_bindgen(js_name = toTree, unchecked_return_type = "Map<string, Uint8Array>")]
@@ -686,7 +685,7 @@ impl Quill {
     }
 
     /// The *declared* backend identifier (e.g. `"typst"`): intent, not a
-    /// resolved capability. Capability is read from `Quillmark`.
+    /// resolved capability. Capability is read from the engine.
     #[wasm_bindgen(getter, js_name = backendId)]
     pub fn backend_id(&self) -> String {
         self.inner.backend_id().to_string()
@@ -739,7 +738,7 @@ impl Quill {
     }
 
     /// Validate `doc` against this quill's schema, returning every diagnostic:
-    /// an error blocks a render, a warning does not. Forwards core's
+    /// an error blocks a render, a warning does not. Forwards the engine's
     /// `validation::*`, a markdown string's `parse::dropped_construct` and the
     /// backend's `backend::declined_construct`.
     #[wasm_bindgen(js_name = validate, unchecked_return_type = "Diagnostic[]")]
@@ -2172,7 +2171,7 @@ pub fn format_doc_path(
 
 /// Render a diagnostic as the CLI and Python's `str(diagnostic)` render it:
 /// the severity tag and the message, the code parenthesised after them, then
-/// location, path and hint each on an indented line of its own. Core
+/// location, path and hint each on an indented line of its own. The engine
 /// owns the one printer, so a consumer surfacing diagnostics reads it here
 /// rather than keeping a copy of the layout that drifts from the CLI's.
 ///
@@ -2785,7 +2784,7 @@ impl LiveSession {
     pub fn render(&self, opts: Option<Ts<RenderOptions>>) -> Result<Ts<RenderResult>, JsValue> {
         let rust_opts = render_options_or_throw(
             opts,
-            "a session renders on the date it opened with: quillmark.open(quill, doc, today)",
+            "a session renders on the date it opened with: engine.open(quill, doc, today)",
         )?;
 
         let result = self

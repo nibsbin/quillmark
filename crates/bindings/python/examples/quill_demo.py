@@ -24,7 +24,7 @@ def main():
 
     print("=== Quillmark Python API Demo ===\n")
 
-    quillmark = Quillmark()
+    engine = Quillmark()
     quill = Quill.from_path(str(taro_dir))
 
     markdown = """~~~
@@ -44,9 +44,9 @@ I love **Taro** ice cream!
 
     print(f"Loaded quill: {quill.metadata['name']}")
     print(f"Backend: {quill.backend_id}")
-    print(f"Supported formats: {quillmark.supported_formats(quill)}")
+    print(f"Supported formats: {engine.supported_formats(quill)}")
 
-    result = quillmark.render(quill, parsed, OutputFormat.PDF)
+    result = engine.render(quill, parsed, OutputFormat.PDF)
 
     print(f"Generated {len(result.artifacts)} artifact(s)")
     for i, artifact in enumerate(result.artifacts):

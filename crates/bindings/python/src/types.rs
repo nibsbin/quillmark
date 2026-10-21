@@ -32,11 +32,10 @@ impl PyQuillmark {
     }
 
     /// Render `doc` against `quill` in one shot, resolving `quill`'s backend on
-    /// this `Quillmark` instance. The default `output_format` falls back to the
-    /// backend's first supported format. `ppi` (raster formats only, default
-    /// 144) must be finite, above 0, and small enough to keep both sides of
-    /// every rendered page within
-    /// [`MAX_RASTER_SIDE`](quillmark_core::backend::MAX_RASTER_SIDE).
+    /// this engine. The default `output_format` falls back to the backend's
+    /// first supported format. `ppi` (raster formats only, default 144) must be
+    /// finite, above 0, and small enough to keep both sides of every rendered
+    /// page within [`MAX_RASTER_SIDE`](quillmark_core::backend::MAX_RASTER_SIDE).
     /// Raises `QuillmarkError` (`engine::backend_not_found`) when the backend
     /// is not registered, or `backend::invalid_raster_scale` for a `ppi`
     /// outside that range.
@@ -98,7 +97,7 @@ impl PyQuillmark {
     }
 
     /// The backend ids this build compiled in, in no guaranteed order: the
-    /// `Quillmark`'s roster, as opposed to the per-quill probe `supported_formats`.
+    /// engine's roster, as opposed to the per-quill probe `supported_formats`.
     fn registered_backends(&self) -> Vec<String> {
         self.inner
             .registered_backends()
@@ -139,7 +138,7 @@ pub struct PyQuill {
 #[pymethods]
 impl PyQuill {
     /// Load a quill from a filesystem directory: a pure config load, the
-    /// declared backend resolved at render time by a `Quillmark`.
+    /// declared backend resolved at render time by a `Quillmark` engine.
     #[staticmethod]
     fn from_path(path: PathBuf) -> PyResult<PyQuill> {
         let quill = quill_from_path(&path).map_err(convert_render_error)?;
@@ -179,7 +178,7 @@ impl PyQuill {
     }
 
     /// Identity snapshot mirroring the `quill:` section of `Quill.yaml`. A pure
-    /// config read: capability lives on `Quillmark`, as
+    /// config read: capability lives on the engine, as
     /// `Quillmark.supported_formats(quill)`.
     #[getter]
     fn metadata<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
@@ -215,7 +214,7 @@ impl PyQuill {
 
     /// Validate `doc` against this quill's schema, returning a list of diagnostic
     /// dicts: an error blocks a render, a warning does not. Forwards the
-    /// core's `validation::*`, a markdown string's `parse::dropped_construct`
+    /// engine's `validation::*`, a markdown string's `parse::dropped_construct`
     /// and the backend's `backend::declined_construct`.
     fn validate<'py>(
         &self,

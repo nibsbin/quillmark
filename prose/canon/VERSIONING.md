@@ -123,7 +123,7 @@ The one real hazard is a long-lived process holding a cached Quill across a
 deploy that rewrote the ref; a restart resolves it.
 
 Every cache between a document and its rendered output keys on this invariant,
-and none of them exposes an invalidation API, **by design**: the wasm `Quillmark`
+and none of them exposes an invalidation API, **by design**: the wasm `Engine`
 caches backend-memory clones in a `WeakMap` keyed on the canonical `Quill`
 instance, so a clone's lifetime follows the instance. A consumer holding one
 `Quill` per canonical ref inherits the same rule.
