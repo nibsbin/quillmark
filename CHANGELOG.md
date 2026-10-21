@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.128.0 - 2026-10-21
+
+- docs: name the Engine and the render build where copy said engine
+- docs: hold the copy to the settled vocabulary
+- docs: add the 0.127 to 0.128 migration guide
+- refactor(core)!: name the floor refusal quill::quillmark_too_old
+- refactor!: name the engine Engine
+- fix(wasm): keep the JS render dispatcher named Engine
+- docs: keep framework wording true on every surface
+- feat(wasm): name the JS render dispatcher Quillmark
+- docs: describe Quillmark as a document framework
+
 ## v0.127.0 - 2026-10-20
 
 Upgrade path: [0.126 → 0.127](docs/migrations/0.126-to-0.127.md). An acroform
