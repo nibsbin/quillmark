@@ -2,15 +2,31 @@
 
 ## v0.128.0 - 2026-10-21
 
-- docs: name the Engine and the render build where copy said engine
-- docs: hold the copy to the settled vocabulary
-- docs: add the 0.127 to 0.128 migration guide
-- refactor(core)!: name the floor refusal quill::quillmark_too_old
-- refactor!: name the engine Engine
-- fix(wasm): keep the JS render dispatcher named Engine
-- docs: keep framework wording true on every surface
-- feat(wasm): name the JS render dispatcher Quillmark
-- docs: describe Quillmark as a document framework
+Upgrade path: [0.127 → 0.128](docs/migrations/0.127-to-0.128.md). The Rust
+struct and the Python class `Quillmark` are `Engine`, with no alias, so
+`use quillmark::Quillmark` fails to compile and `from quillmark import
+Quillmark` fails to import. A quill whose `requires` floor is above the
+running release fails to load as `quill::quillmark_too_old`, where it failed
+as `quill::engine_too_old`. The JavaScript `Engine` is unchanged.
+
+### API
+
+- refactor!: **the Rust struct and the Python class `Quillmark` are
+  `Engine`**, the name the JavaScript surface already carries, with no alias.
+  Rename at the import and the constructor: `Engine::new()` in Rust,
+  `Engine()` in Python. Every method keeps its name and signature. (#2252)
+- refactor(core)!: **a quill whose `requires` floor is above the running
+  release fails to load as `quill::quillmark_too_old`**, where it failed as
+  `quill::engine_too_old`. It is still the load's only error, and its message
+  still names the release the quill requires; a host matching the old code
+  stops matching. (#2252)
+
+### Docs
+
+- docs: **Quillmark is described as a schema-driven document framework**
+  across package descriptions, CLI help, crate docs, READMEs, user docs, and
+  canon, and copy says `Engine` or the render build where it said engine.
+  (#2250, #2252, #2253)
 
 ## v0.127.0 - 2026-10-20
 
