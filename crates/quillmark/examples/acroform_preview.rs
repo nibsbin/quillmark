@@ -4,7 +4,7 @@
 //!
 //! `cargo run --example acroform_preview -p quillmark`
 
-use quillmark::{CalendarDate, Document, OutputFormat, Quillmark, RenderOptions};
+use quillmark::{CalendarDate, Document, Engine, OutputFormat, RenderOptions};
 use quillmark_fixtures::{example_output_dir, quills_path, write_example_output};
 
 const SAMPLE_FORM_MD: &str = "\
@@ -21,7 +21,7 @@ favorite_color: green
 ";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let engine = Quillmark::new();
+    let engine = Engine::new();
     let out_dir = example_output_dir();
     let today = CalendarDate::new(2026, 3, 14).expect("a calendar day");
 

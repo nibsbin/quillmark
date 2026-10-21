@@ -6,14 +6,14 @@
 [![CI](https://github.com/borb-sh/quillmark/workflows/CI/badge.svg)](https://github.com/borb-sh/quillmark/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-lightgray.svg)](LICENSE)
 
-Quillmark renders Markdown into typeset PDF, SVG, and PNG documents. A **quill** defines the format: a schema that validates each document's fields and fills their defaults, and a plate that lays out the page (a Typst template, or a field map over an existing PDF form). Authors write only the content.
+Quillmark is a schema-driven document framework. You define a document format once, as a **quill**: a schema for its fields and a layout for its pages, either a Typst plate or an existing PDF form. Authors then write plain Markdown, and Quillmark validates each document against its quill and renders it to PDF, SVG, or PNG.
 
 <p>
   <img src="https://raw.githubusercontent.com/borb-sh/quillmark/main/docs/assets/gallery/memo-1.png" width="49%" alt="Page 1 of a rendered memorandum: letterhead, addressees, subject, references, numbered paragraphs, and a signature block">
   <img src="https://raw.githubusercontent.com/borb-sh/quillmark/main/docs/assets/gallery/memo-2.png" width="49%" alt="Page 2 of the memorandum: an indorsement with an approve or disapprove line and its own signature block">
 </p>
 
-Both pages come from one Markdown file, rendered through the [`usaf_memo`](https://github.com/borb-sh/quillmark/tree/main/crates/fixtures/resources/quills/usaf_memo/0.2.0) quill. Its first card, abridged ([full file](https://github.com/borb-sh/quillmark/blob/main/docs/assets/gallery/memo.md)):
+Both pages come from one Markdown file, rendered through the [`usaf_memo`](https://github.com/borb-sh/quillmark/tree/main/crates/fixtures/resources/quills/usaf_memo/0.2.0) quill. Its main card, abridged ([full file](https://github.com/borb-sh/quillmark/blob/main/docs/assets/gallery/memo.md)):
 
 ```markdown
 ~~~
@@ -32,7 +32,7 @@ date: 2026-02-02
 The Records Portal replaces the shared drive for official records on 1 April 2026.
 ```
 
-- **One core, four surfaces**: a Rust crate, a Python package, an npm package (WebAssembly, with a live canvas preview), and a CLI.
+- **One implementation, four surfaces**: a Rust crate, a Python package, an npm package (WebAssembly, with a live canvas preview), and a CLI.
 - **Two backends**: Typst typesets new pages; `acroform` fills the fields of an existing PDF form.
 - **Written by people or by LLMs**: the schema emits a blueprint, an annotated Markdown form an LLM fills in, and validation reports diagnostics with machine-readable codes.
 
@@ -61,11 +61,11 @@ cargo add quillmark
 ## Quick Start (Rust)
 
 ```rust
-use quillmark::{quill_from_path, CalendarDate, OutputFormat, Quillmark, RenderOptions};
+use quillmark::{quill_from_path, CalendarDate, Engine, OutputFormat, RenderOptions};
 
 // A `Quill` is declarative data: no engine needed to load it.
 let quill = quill_from_path("path/to/quill")?;
-let engine = Quillmark::new();
+let engine = Engine::new();
 
 let markdown = r#"~~~
 $quill: my_quill
@@ -76,7 +76,7 @@ title: Example
 # Hello World
 "#;
 
-// The bound door: parse and conform against the quill that will render it.
+// Parse the Markdown and conform it to the quill's schema.
 let doc = quill.parse(markdown)?.document;
 // A render reads no clock: the host passes its local date.
 let today: CalendarDate = "2026-03-14".parse()?;

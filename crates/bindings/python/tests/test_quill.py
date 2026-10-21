@@ -1,7 +1,7 @@
 """Tests for the engine and quill surface: loading a quill, what it exposes
 engine-free, and what the engine answers about it."""
 import pytest
-from quillmark import Quillmark, Quill, Document, OutputFormat, QuillmarkError, Severity
+from quillmark import Engine, Quill, Document, OutputFormat, QuillmarkError, Severity
 
 
 def test_quill_properties(engine, taro_quill_dir):
@@ -72,7 +72,7 @@ def test_quill_from_path_bad_backend_loads_then_fails_at_render(tmp_path):
         "~~~card-yaml\n$quill: test\n$kind: main\n~~~\n\nBody.\n"
     )
     with pytest.raises(QuillmarkError):
-        Quillmark().render(quill, doc, OutputFormat.PDF)
+        Engine().render(quill, doc, OutputFormat.PDF)
 
 
 def test_warnings_carry_the_loads_advisories(taro_quill_dir, tmp_path):

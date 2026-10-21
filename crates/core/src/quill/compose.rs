@@ -108,7 +108,7 @@ impl QuillConfig {
 
     /// [`compile_data`](Self::compile_data) behind the `$quill` pairing check.
     /// Every door that turns a document into plate data for *this* schema goes
-    /// through here (`Quillmark::open` for a session's first compile,
+    /// through here (`Engine::open` for a session's first compile,
     /// [`LiveSession::update`](crate::session::LiveSession::update) for each
     /// edit), so the pairing cannot be checked at one and skipped at the other.
     /// [`compile_data`](Self::compile_data) stays available unchecked where no

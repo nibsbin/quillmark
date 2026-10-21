@@ -8,8 +8,8 @@ Quillmark is a schema-driven document framework: it turns Markdown with card-yam
 blocks into a fully typeset document (PDF, SVG, PNG). A `Quill` is declarative
 data: no backend, engine, or filesystem needed to construct or read it. Its
 schema drives validation and scaffolding (parse / validate / schema / seed /
-blueprint / compile). The `Quillmark` engine is the thin-but-mandatory core
-every render routes through: a backend registry + render dispatcher. Backends
+blueprint / compile). The `Engine` is the thin-but-mandatory layer every
+render routes through: a backend registry + render dispatcher. Backends
 do the heavy compilation.
 
 ## Data Flow
@@ -54,13 +54,13 @@ the render seam, and the binding seam all carry), the markdown⇄content
 import/export codecs, the `qm-*` carrier grammar (`carrier`), and edit
 deltas.
 The workspace's only markdown parser (`pulldown-cmark`) lives here, in
-`quillmark-content::import`, run once at ingest. **Invariant:** the markdown
-engine appears exactly once in the workspace; no render path parses markdown:
+`quillmark-content::import`, run once at ingest. **Invariant:** the Markdown
+parser appears exactly once in the workspace; no render path parses markdown:
 backends lower the content.
 
 ### `quillmark` (orchestration)
 
-The `Quillmark` engine plus the `quill_from_path` loader. It re-exports the
+The `Engine` plus the `quill_from_path` loader. It re-exports the
 core types its own verbs take and return, so `quillmark-cli` compiles against
 it alone; the python and wasm bindings sit lower, on core's wire and addressing
 seam, and depend on `quillmark-core` directly. Filesystem walking lives here,
@@ -112,7 +112,7 @@ Test resources under `resources/`, the parity corpus among them
 
 ## Core Interfaces
 
-- **`Quillmark`**, Engine: a backend registry + render dispatcher. Auto-registers one backend per enabled feature (`TypstBackend` under `typst`, `AcroformBackend` under `acroform`; both are default). Resolves a quill's declared backend at render time (erroring `engine::backend_not_found` on no match) and owns the backend-dependent surface: `render`, `open`, `supported_formats(&quill)`. It does not construct quills.
+- **`Engine`**: a backend registry + render dispatcher. Auto-registers one backend per enabled feature (`TypstBackend` under `typst`, `AcroformBackend` under `acroform`; both are default). Resolves a quill's declared backend at render time (erroring `engine::backend_not_found` on no match) and owns the backend-dependent surface: `render`, `open`, `supported_formats(&quill)`. It does not construct quills.
 - **`Quill`**, The single quill type in `quillmark-core`: declarative data (file bundle + config, tagged with a declared backend id), held by value and carrying the pure config-read operations (`validate`, `schema`, `blueprint`, `seed_*`, `compile_data`, `dry_run`). Construct with `Quill::from_tree` or `quillmark::quill_from_path`; see [QUILL.md](QUILL.md)
 - **`Backend`**, Trait for output formats (`Send + Sync`): `id()`, `supported_formats()`, `open(&Quill, json, today)`. There is no universal template input: a backend reads whatever static inputs it needs (a Typst plate, a `form.pdf`) from the quill's own files. No canvas-capability method: canvas is required of the session seam (`SessionHandle::page_size_pt` / `render_rgba`), not declared by the backend
 - **`LiveSession`**, Opaque live session returned by `Backend::open()`: a persistent compiler whose reads serve its current compile and whose `update(&Document)` recompiles in place, transactionally, returning a `ChangeSet` of dirty pages. Born bound to the `QuillConfig` it was opened against, so the edit verb checks the `$quill` pairing and compiles through the same door as the first compile (`QuillConfig::compile_checked`) rather than trusting a caller to have done both. The canvas seam lives on `SessionHandle` (`page_size_pt`/`render_rgba`), both required, so the WASM painter dispatches generically over any session; see [PREVIEW.md](PREVIEW.md)
@@ -131,7 +131,7 @@ See [PLATE_DATA.md](PLATE_DATA.md) for the Typst helper package.
 
 ## Backend Implementation
 
-Backends are an in-workspace seam, not an extension point. `Quillmark::new`
+Backends are an in-workspace seam, not an extension point. `Engine::new`
 registers one per enabled cargo feature and nothing else registers one:
 `register_backend` is private, and the `LiveSession` `Backend::open` returns is
 built only from a `#[doc(hidden)]` `SessionHandle`.

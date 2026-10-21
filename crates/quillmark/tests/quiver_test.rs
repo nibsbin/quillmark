@@ -16,13 +16,13 @@
 
 #![cfg(feature = "typst")]
 
-use quillmark::{Document, OutputFormat, Quill, Quillmark, RenderOptions};
+use quillmark::{Document, Engine, OutputFormat, Quill, RenderOptions};
 use quillmark_fixtures::{quill_names, quills_path};
 use std::sync::LazyLock;
 
 mod common;
 
-static ENGINE: LazyLock<Quillmark> = LazyLock::new(Quillmark::new);
+static ENGINE: LazyLock<Engine> = LazyLock::new(Engine::new);
 
 /// Every fixture quill, loaded once for the whole binary rather than re-read by
 /// each sweep.

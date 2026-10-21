@@ -137,7 +137,7 @@ export interface QuillSchema {
 /**
  * Identity snapshot mirroring the `quill:` section of `Quill.yaml`. The schema
  * lives on `Quill.schema`; output formats are a resolved-backend capability read
- * from `Quillmark.supportedFormats`, not part of this config snapshot.
+ * from `Engine.supportedFormats`, not part of this config snapshot.
  */
 export interface QuillMetadata {
     name: string;
@@ -533,8 +533,8 @@ export interface ChangeBundle {
 /// the core build constructs and validates quills without it.
 #[cfg(feature = "render")]
 #[wasm_bindgen]
-pub struct Quillmark {
-    inner: quillmark::Quillmark,
+pub struct Engine {
+    inner: quillmark::Engine,
 }
 
 #[wasm_bindgen]
@@ -575,7 +575,7 @@ pub struct Document {
 }
 
 #[cfg(feature = "render")]
-impl Default for Quillmark {
+impl Default for Engine {
     fn default() -> Self {
         Self::new()
     }
@@ -583,11 +583,11 @@ impl Default for Quillmark {
 
 #[cfg(feature = "render")]
 #[wasm_bindgen]
-impl Quillmark {
+impl Engine {
     #[wasm_bindgen(constructor)]
-    pub fn new() -> Quillmark {
-        Quillmark {
-            inner: quillmark::Quillmark::new(),
+    pub fn new() -> Engine {
+        Engine {
+            inner: quillmark::Engine::new(),
         }
     }
 
@@ -715,7 +715,7 @@ impl Quill {
 
     /// Identity snapshot of the `quill:` section of `Quill.yaml`. Pure config:
     /// output formats are a resolved-backend capability read from
-    /// `Quillmark.supportedFormats`, not part of this.
+    /// `Engine.supportedFormats`, not part of this.
     #[wasm_bindgen(getter, js_name = metadata, unchecked_return_type = "QuillMetadata")]
     pub fn metadata(&self) -> Result<JsValue, JsValue> {
         let config = self.inner.config();
@@ -738,7 +738,7 @@ impl Quill {
     }
 
     /// Validate `doc` against this quill's schema, returning every diagnostic:
-    /// an error blocks a render, a warning does not. Forwards the engine's
+    /// an error blocks a render, a warning does not. Returns the schema's
     /// `validation::*`, a markdown string's `parse::dropped_construct` and the
     /// backend's `backend::declined_construct`.
     #[wasm_bindgen(js_name = validate, unchecked_return_type = "Diagnostic[]")]
@@ -793,7 +793,7 @@ impl Quill {
     /// `FieldSource` rung it came from (`"authored" | "default" | "blank"`). The
     /// card body is a `body` sibling on its card, never a row in `fields`, and
     /// `null` when the kind enables no body. Value and provenance only;
-    /// diagnostics stay `validate`'s. `today` reads as on `Quillmark.open`.
+    /// diagnostics stay `validate`'s. `today` reads as on `Engine.open`.
     #[wasm_bindgen(js_name = _resolve, skip_typescript, unchecked_return_type = "Resolved")]
     pub fn resolve(&self, doc: &Document, today: Option<String>) -> Result<JsValue, JsValue> {
         let states = self.inner.resolve(&doc.inner, render_date(today)?);
@@ -2171,8 +2171,8 @@ pub fn format_doc_path(
 
 /// Render a diagnostic as the CLI and Python's `str(diagnostic)` render it:
 /// the severity tag and the message, the code parenthesised after them, then
-/// location, path and hint each on an indented line of its own. The engine
-/// owns the one printer, so a consumer surfacing diagnostics reads it here
+/// location, path and hint each on an indented line of its own. Core owns the
+/// one printer, `fmt_pretty`, so a consumer surfacing diagnostics reads it here
 /// rather than keeping a copy of the layout that drifts from the CLI's.
 ///
 /// Takes the `Diagnostic` shape every read hands back. Throws on a value that

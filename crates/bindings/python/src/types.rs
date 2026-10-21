@@ -6,7 +6,7 @@ use pyo3::types::{PyBytes, PyDate, PyDict, PyList, PyString};
 use pyo3::Bound;
 
 use quillmark::{
-    quill_from_path, Diagnostic, Document, Location, OutputFormat, Quill, Quillmark, RenderResult,
+    quill_from_path, Diagnostic, Document, Engine, Location, OutputFormat, Quill, RenderResult,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -17,17 +17,19 @@ use crate::errors::{
     page_indices, raise_summarized, raise_with_diagnostics,
 };
 
-#[pyclass(name = "Quillmark")]
-pub struct PyQuillmark {
-    inner: Quillmark,
+/// The engine: a backend registry and render dispatcher. Renders a `Document`
+/// against a `Quill`; holds no quills.
+#[pyclass(name = "Engine")]
+pub struct PyEngine {
+    inner: Engine,
 }
 
 #[pymethods]
-impl PyQuillmark {
+impl PyEngine {
     #[new]
     fn new() -> Self {
         Self {
-            inner: Quillmark::new(),
+            inner: Engine::new(),
         }
     }
 
@@ -138,7 +140,7 @@ pub struct PyQuill {
 #[pymethods]
 impl PyQuill {
     /// Load a quill from a filesystem directory: a pure config load, the
-    /// declared backend resolved at render time by a `Quillmark` engine.
+    /// declared backend resolved at render time by an `Engine`.
     #[staticmethod]
     fn from_path(path: PathBuf) -> PyResult<PyQuill> {
         let quill = quill_from_path(&path).map_err(convert_render_error)?;
@@ -179,7 +181,7 @@ impl PyQuill {
 
     /// Identity snapshot mirroring the `quill:` section of `Quill.yaml`. A pure
     /// config read: capability lives on the engine, as
-    /// `Quillmark.supported_formats(quill)`.
+    /// `Engine.supported_formats(quill)`.
     #[getter]
     fn metadata<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let config = self.inner.config();
@@ -213,8 +215,8 @@ impl PyQuill {
     }
 
     /// Validate `doc` against this quill's schema, returning a list of diagnostic
-    /// dicts: an error blocks a render, a warning does not. Forwards the
-    /// engine's `validation::*`, a markdown string's `parse::dropped_construct`
+    /// dicts: an error blocks a render, a warning does not. Returns the
+    /// schema's `validation::*`, a markdown string's `parse::dropped_construct`
     /// and the backend's `backend::declined_construct`.
     fn validate<'py>(
         &self,
@@ -252,8 +254,8 @@ impl PyQuill {
 
     /// Land `doc`'s declared content fields at their canonical rest **in
     /// place**, returning the `conform::*` diagnostic dicts for values that would
-    /// not commit. The read-repair verb for a document that arrived through the
-    /// transport door (`from_markdown`, `from_stored`, a stored row).
+    /// not commit. The read-repair verb for a document that arrived without
+    /// `parse` (`from_markdown`, `from_stored`, a stored row).
     ///
     /// Idempotent and a byte no-op on an already-canonical document, comments
     /// included. A value the strict write refuses stays as authored with a

@@ -48,10 +48,10 @@ pub const MAX_FIELD_COUNT: usize = 1000;
 
 /// A YAML parse or emit failure, owned by this crate.
 ///
-/// The YAML engine is an implementation detail: no public signature names it,
-/// so this crate's major version is not chained to the engine's.
+/// The YAML parser is an implementation detail: no public signature names it,
+/// so this crate's major version is not chained to the parser's.
 ///
-/// `line`/`column` are 1-indexed and present only when the engine located the
+/// `line`/`column` are 1-indexed and present only when the parser located the
 /// failure: always absent on the emit side, which has no input to point at.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct YamlError {
@@ -67,7 +67,7 @@ impl YamlError {
         &self.message
     }
 
-    /// A diagnostic under `code`, carrying the hint and (when the engine
+    /// A diagnostic under `code`, carrying the hint and (when the parser
     /// located the failure) a [`Location`] against `file`.
     pub fn to_diagnostic(&self, code: &str, file: &str) -> Diagnostic {
         let mut diag = Diagnostic::new(Severity::Error, self.message.clone())
@@ -84,7 +84,7 @@ impl YamlError {
     /// `yaml` is the text that failed to parse: the hint derivation inspects
     /// it to name the offending construct.
     pub(crate) fn from_de(err: serde_saphyr::Error, yaml: &str) -> Self {
-        // The enricher also strips the engine's own Rust API names, which it
+        // The enricher also strips the parser's own Rust API names, which it
         // appends to some messages.
         let enriched = crate::document::yaml_hints::enrich_yaml_error(&err.to_string(), yaml);
         let loc = err.location();
@@ -109,7 +109,7 @@ impl YamlError {
 
 impl std::fmt::Display for YamlError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // The message already opens with the position and the engine's caret
+        // The message already opens with the position and the parser's caret
         // diagram; line/column are the structured reading of the same fact.
         f.write_str(&self.message)
     }
@@ -479,7 +479,7 @@ impl ParseError {
                 None => diag_args! {},
             },
             // The coordinates ride on the diagnostic's `location`; `message` is
-            // the YAML engine's own prose and keeps no key.
+            // the YAML parser's own prose and keeps no key.
             ParseError::YamlErrorWithLocation {
                 message: _,
                 line: _,

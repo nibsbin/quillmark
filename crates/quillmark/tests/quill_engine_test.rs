@@ -1,7 +1,7 @@
 use std::fs;
 use tempfile::TempDir;
 
-use quillmark::Quillmark;
+use quillmark::Engine;
 
 fn make_quill_dir(temp_dir: &TempDir, name: &str, backend: &str) -> std::path::PathBuf {
     let quill_path = temp_dir.path().join(name);
@@ -20,7 +20,7 @@ fn make_quill_dir(temp_dir: &TempDir, name: &str, backend: &str) -> std::path::P
 
 #[test]
 fn the_default_engine_registers_one_backend_per_enabled_feature() {
-    let engine = Quillmark::new();
+    let engine = Engine::new();
     let mut backends = engine.registered_backends();
     backends.sort_unstable();
     let mut expected = Vec::new();
@@ -43,7 +43,7 @@ fn test_unsupported_backend_errors_at_render_time() {
         quillmark::quill_from_path(quill_path).expect("load succeeds; backend resolved later");
     assert_eq!(quill.backend_id(), "non_existent");
 
-    let engine = Quillmark::new();
+    let engine = Engine::new();
     let err = engine
         .supported_formats(&quill)
         .expect_err("unregistered backend must not resolve");

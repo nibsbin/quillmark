@@ -22,9 +22,9 @@ One thing never reaches a diagnostic: an argument the binding cannot convert at 
 === "Python"
 
     ```python
-    from quillmark import OutputFormat, Quillmark, QuillmarkError
+    from quillmark import Engine, OutputFormat, QuillmarkError
 
-    engine = Quillmark()
+    engine = Engine()
     try:
         result = engine.render(quill, doc, OutputFormat.PDF)
     except QuillmarkError as exc:

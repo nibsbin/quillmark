@@ -1,4 +1,4 @@
-# PDF Form Backend
+# PDF Form Backend (acroform)
 
 The `acroform` backend fills existing PDF forms: something the Typst backend fundamentally cannot do (Typst cannot embed a PDF page, so a Typst path would rasterize the form and lose fidelity). Instead of generating a page from a plate, `acroform` stamps a fresh AcroForm onto a pre-existing background and binds your document's values into the widgets.
 
@@ -6,7 +6,7 @@ It is Typst-free: an `acroform` quill never compiles Typst code and a form-only 
 
 ## The two-asset model
 
-A `acroform` quill ships **two assets at its root** instead of a plate:
+An `acroform` quill ships **two assets at its root** instead of a plate:
 
 ```
 my-form/
@@ -31,7 +31,7 @@ Nulling the key (PyMuPDF's `xref_set_key` sets a key to `null` rather than delet
 
 ## `Quill.yaml`
 
-A `acroform` quill declares `backend: acroform` and has **no plate file**. The document body is typically disabled: a form is filled from fields, not prose. Fields under `main.fields` define the document schema exactly as for any other backend:
+An `acroform` quill declares `backend: acroform` and has **no plate file**. The document body is typically disabled: a form is filled from fields, not prose. Fields under `main.fields` define the document schema exactly as for any other backend:
 
 ```yaml
 quill:
@@ -249,7 +249,7 @@ The widget is unsigned: Quillmark performs no cryptography. To produce a signed 
 
 ## Output formats
 
-The backend's formats are `[Pdf]`: the deliverable, always an interactive
+The backend's output formats are `[Pdf]`: the deliverable, always an interactive
 AcroForm. SVG and PNG error with `backend::format_not_supported`, the code both
 built-in backends share.
 

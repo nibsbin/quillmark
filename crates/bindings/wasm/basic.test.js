@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'vitest'
 import {
-  Quillmark,
+  Engine,
   Quill,
   Document,
   importMarkdown,
@@ -173,7 +173,7 @@ describe('Quill.fromTree + engine.render', () => {
   ]
 
   it('renders one Document repeatedly, once per format', () => {
-    const engine = new Quillmark()
+    const engine = new Engine()
     const quill = Quill.fromTree(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     for (const { opts, mimeType } of RENDER_FORMAT_CASES) {
@@ -207,7 +207,7 @@ main:
 
 #qm.data.at("$body")`
 
-    const engine = new Quillmark()
+    const engine = new Engine()
     const quill = Quill.fromTree(
       makeQuill({ name: 'notes', plate: NOTES_PLATE, quillYaml: NOTES_QUILL_YAML }),
     )
@@ -230,7 +230,7 @@ main:
   })
 
   it('should throw a quill::name_mismatch error when the document quill ref differs from the quill name', () => {
-    const engine = new Quillmark()
+    const engine = new Engine()
     const quill = Quill.fromTree(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
     const doc = Document.fromMarkdown(TEST_MARKDOWN.replace('test_quill', 'other_quill'))
     expectEditCode(() => engine.render(quill, doc, { format: 'pdf' }), 'quill::name_mismatch')
@@ -946,7 +946,7 @@ describe('Document editor surface: $ext', () => {
 
 describe('quill.open + session.render', () => {
   it('should support open + session.render with pageCount', () => {
-    const engine = new Quillmark()
+    const engine = new Engine()
     const quill = Quill.fromTree(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
 
@@ -968,7 +968,7 @@ describe('quill.open + session.render', () => {
   })
 
   it('refuses an out-of-bounds page and a page selection on PDF', () => {
-    const engine = new Quillmark()
+    const engine = new Engine()
     const quill = Quill.fromTree(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
     const session = engine.open(quill, Document.fromMarkdown(TEST_MARKDOWN))
     expect(() => session.render({ format: 'png', ppi: 80, pages: [0, session.pageCount + 10] })).toThrow()
@@ -1178,7 +1178,7 @@ main:
 #body`
 
   const buildQuill = () => {
-    const engine = new Quillmark()
+    const engine = new Engine()
     const quill = Quill.fromTree(
       makeQuill({
         name: 'schema_test',

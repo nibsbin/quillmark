@@ -210,14 +210,14 @@ mod tests {
         assert_eq!(diag.code.as_deref(), Some("quill::yaml_parse_error"));
     }
 
-    /// `YamlError` promises the engine is invisible, text included.
+    /// `YamlError` promises the parser is invisible, text included.
     #[test]
     fn yaml_error_strips_the_engine_api_names() {
         let err = QuillValue::from_yaml_str("a: 1\na: 2\n")
             .expect_err("a duplicate key must not parse");
         assert!(
             !err.message().contains("DuplicateKeyPolicy") && !err.message().contains("Options"),
-            "engine API names reached the message: {}",
+            "parser API names reached the message: {}",
             err.message()
         );
         assert!(err.message().contains("duplicate"), "{}", err.message());

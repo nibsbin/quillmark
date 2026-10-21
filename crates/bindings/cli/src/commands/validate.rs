@@ -1,7 +1,7 @@
 use crate::errors::{CliError, Result};
 use clap::Parser;
 use quillmark::{
-    CardSchema, Diagnostic, Document, FieldSchema, Quill, Quillmark, RenderOptions, Severity,
+    CardSchema, Diagnostic, Document, Engine, FieldSchema, Quill, RenderOptions, Severity,
     EXAMPLE_FILE,
 };
 use indexmap::IndexMap;
@@ -194,7 +194,7 @@ fn validate_renders(
     result: &mut ValidationResult,
     verbose: bool,
 ) {
-    let engine = Quillmark::new();
+    let engine = Engine::new();
 
     let format = match engine.supported_formats(quill) {
         Ok([format, ..]) => *format,

@@ -2142,7 +2142,7 @@ impl QuillConfig {
 
     /// `quill.requires` is `>=MAJOR.MINOR[.PATCH]`, a floor on this crate's
     /// version, which every Quillmark crate shares.
-    fn check_engine_floor(requires: &serde_json::Value) -> Result<(), Diagnostic> {
+    fn check_release_floor(requires: &serde_json::Value) -> Result<(), Diagnostic> {
         use std::str::FromStr;
         let invalid = |shown: String| {
             Diagnostic::new(
@@ -2160,9 +2160,9 @@ impl QuillConfig {
             .and_then(|v| crate::version::Version::from_str(v).ok())
             .ok_or_else(|| invalid(format!("'{raw}'")))?;
         let release = env!("CARGO_PKG_VERSION").split(['-', '+']).next().unwrap_or_default();
-        let engine =
+        let running =
             crate::version::Version::from_str(release).expect("the crate version is semver");
-        if floor > engine {
+        if floor > running {
             return Err(Diagnostic::new(
                 Severity::Error,
                 format!(
@@ -2170,7 +2170,7 @@ impl QuillConfig {
                     env!("CARGO_PKG_VERSION")
                 ),
             )
-            .with_code("quill::engine_too_old".to_string())
+            .with_code("quill::quillmark_too_old".to_string())
             .with_hint("Upgrade Quillmark, or load an older version of this quill.".to_string()));
         }
         Ok(())
@@ -2180,7 +2180,7 @@ impl QuillConfig {
     ///
     /// Returns `Ok((config, warnings))` on success, or `Err(errors)` containing all
     /// parse/validation errors when the config is invalid. Errors are collected
-    /// exhaustively, except that `quill::engine_too_old` is reported alone.
+    /// exhaustively, except that `quill::quillmark_too_old` is reported alone.
     pub fn from_yaml_with_warnings(
         yaml_content: &str,
     ) -> Result<(Self, Vec<Diagnostic>), Vec<Diagnostic>> {
@@ -2193,7 +2193,7 @@ impl QuillConfig {
             Ok(v) => v,
             Err(e) => {
                 // Through `YamlError` so this shares the one saphyr adapter:
-                // the engine's Rust API names stripped, the hint derived, and
+                // the parser's Rust API names stripped, the hint derived, and
                 // the position carried as a `Location`.
                 return Err(vec![crate::error::YamlError::from_de(e, yaml_content)
                     .to_diagnostic("quill::yaml_parse_error", "Quill.yaml")]);
@@ -2219,8 +2219,8 @@ impl QuillConfig {
         // Ahead of every other check: a quill written for a newer Quillmark may
         // carry keys this one would report as typos.
         if let Some(requires) = quill_section.get("requires") {
-            if let Err(diag) = Self::check_engine_floor(requires) {
-                if diag.code.as_deref() == Some("quill::engine_too_old") {
+            if let Err(diag) = Self::check_release_floor(requires) {
+                if diag.code.as_deref() == Some("quill::quillmark_too_old") {
                     return Err(vec![diag]);
                 }
                 errors.push(diag);

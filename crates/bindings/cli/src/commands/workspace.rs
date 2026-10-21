@@ -13,7 +13,7 @@ pub struct WorkspaceArgs {
     #[arg(value_name = "QUILL_PATH")]
     quill: PathBuf,
 
-    /// Path to markdown file with card-yaml blocks (default: the quill's seeded document)
+    /// Path to a Markdown document (default: the quill's seeded document)
     #[arg(value_name = "MARKDOWN_FILE")]
     markdown_file: Option<PathBuf>,
 

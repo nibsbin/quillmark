@@ -445,7 +445,7 @@ export declare class Engine {
 	 * `runtime::backend_trapped`, the `WebAssembly.RuntimeError` on `cause`, as
 	 * does a trap in {@link LiveSession}'s `update` / `render` / `paint`, and a
 	 * `RangeError` or Firefox's `InternalError` for stack or memory exhaustion,
-	 * which engines raise for a stack overflow inside wasm. The build's state is then undefined: discard the
+	 * which JavaScript engines raise for a stack overflow inside wasm. The build's state is then undefined: discard the
 	 * realm.
 	 */
 	render(quill: Quill, doc: Document, options?: RenderOptions, today?: string): Promise<RenderResult>;

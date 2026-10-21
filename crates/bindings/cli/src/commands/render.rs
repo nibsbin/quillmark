@@ -3,7 +3,7 @@ use crate::errors::{CliError, Result};
 use crate::output::{derive_output_path, page_output_path, write_file, write_stdout};
 use clap::Parser;
 use quillmark::{
-    CalendarDate, Diagnostic, Document, OutputFormat, Quill, Quillmark, RenderError,
+    CalendarDate, Diagnostic, Document, Engine, OutputFormat, Quill, RenderError,
     RenderOptions, RenderResult, Severity,
 };
 use std::path::{Path, PathBuf};
@@ -14,7 +14,7 @@ pub struct RenderArgs {
     #[arg(value_name = "QUILL_PATH")]
     quill: PathBuf,
 
-    /// Path to markdown file with card-yaml blocks
+    /// Path to a Markdown document (default: the quill's seeded document)
     #[arg(value_name = "MARKDOWN_FILE")]
     markdown_file: Option<PathBuf>,
 
@@ -38,7 +38,7 @@ pub struct RenderArgs {
     #[arg(long)]
     quiet: bool,
 
-    /// Output intermediate JSON data to file
+    /// Also write the JSON data the backend receives to a file
     #[arg(long, value_name = "DATA_FILE")]
     output_data: Option<PathBuf>,
 
@@ -169,7 +169,7 @@ fn render(
         })?;
     }
 
-    Ok(Quillmark::new().render(quill, parsed, today, options)?)
+    Ok(Engine::new().render(quill, parsed, today, options)?)
 }
 
 /// An `-o` extension that names a format is a second statement of it: it

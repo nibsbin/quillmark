@@ -5,9 +5,9 @@
 
 ## TL;DR
 
-A `Quill` is a loaded template bundle: file tree plus parsed `Quill.yaml`
-config: tagged with its declared backend id but holding no backend and
-needing no engine. It carries the pure config-read operations (`validate`,
+A `Quill` is a loaded quill, the document format as data: its file tree plus
+its parsed `Quill.yaml` config, tagged with its declared backend id but holding
+no backend and needing no engine. It carries the pure config-read operations (`validate`,
 `schema`, `blueprint`, `seed_*`, `example_document`, `compile_data`,
 `dry_run`); rendering is the engine's job.
 
@@ -110,11 +110,11 @@ Identity resolution:
   as `QuillConfig::backend_config`.
 - `quill.requires` (`">=MAJOR.MINOR[.PATCH]"`) is a floor on Quillmark's
   crate version. It is read before anything else in the file, and a floor above
-  the running Quillmark is the load's only error, `quill::engine_too_old`: strict
-  parsing would otherwise report a newer Quillmark's keys as typos. The floor is
-  checked and not stored on `QuillConfig`. Quillmark's version is its release
-  with any prerelease suffix dropped, so a release candidate meets its own
-  release's floor, and a build of `main` carries the last released version
+  the running Quillmark is the load's only error, `quill::quillmark_too_old`:
+  strict parsing would otherwise report a newer Quillmark's keys as typos. The
+  floor is checked and not stored on `QuillConfig`. Quillmark's version is its
+  release with any prerelease suffix dropped, so a release candidate meets its
+  own release's floor, and a build of `main` carries the last released version
   until the release bump.
 - `quill.ui` (a `UiCardSchema`, same shape as `card_kinds.<name>.ui`) is a fallback for `main.ui`: the `main` card uses `main.ui` when present, otherwise `quill.ui`.
 
@@ -145,7 +145,7 @@ example's `$quill`.
 
 ## Strict Parsing
 
-`Quill.yaml` is parsed strictly: every problem the parser can detect is collected and reported in one pass as a `Vec<Diagnostic>`, rather than failing on the first error or silently dropping unsupported shapes. The exception is `quill::engine_too_old`, which is reported alone. Specifically:
+`Quill.yaml` is parsed strictly: every problem the parser can detect is collected and reported in one pass as a `Vec<Diagnostic>`, rather than failing on the first error or silently dropping unsupported shapes. The exception is `quill::quillmark_too_old`, which is reported alone. Specifically:
 
 - Unknown keys in the `quill:` section error with `quill::unknown_key` (typos like `platefile` are not silently captured).
 - Unknown top-level sections error with `quill::unknown_section` (typos like `card_kind:` are not silently ignored). Root-level `fields:` gets a targeted hint pointing to `main.fields:`.
@@ -176,7 +176,7 @@ Construction:
 The two differ in error shape: the pure constructor hands back the raw
 `Vec<Diagnostic>` and bindings map it at the call site, while the loader wraps
 it in `RenderError`. Either way the `Quill` carries no backend: rendering goes
-through the `Quillmark` engine (`engine.render` / `engine.open`).
+through the `Engine` (`engine.render` / `engine.open`).
 
 Advisory diagnostics ride the loaded quill rather than the constructor's return
 value, so both doors keep them and a host reads them when it likes:

@@ -4,7 +4,7 @@
 
 #![cfg(feature = "typst")]
 
-use quillmark::{Document, OutputFormat, Quillmark, RenderOptions};
+use quillmark::{Document, Engine, OutputFormat, RenderOptions};
 use std::fs;
 use tempfile::TempDir;
 
@@ -47,7 +47,7 @@ fn render(plate: &str, fields: &str) -> Result<(), String> {
     let quill = quillmark::quill_from_path(&quill_path).expect("load quill");
     let md = format!("~~~card-yaml\n$quill: optional_quill\n$kind: main\n{fields}~~~\n");
     let parsed = Document::parse(&md).expect("parse").document;
-    Quillmark::new()
+    Engine::new()
         .open(&quill, &parsed, common::test_date())
         .and_then(|session| {
             session.render(&RenderOptions::default().with_output_format(OutputFormat::Svg))

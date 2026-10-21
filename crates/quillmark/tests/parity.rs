@@ -5,7 +5,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use quillmark::{Diagnostic, Document, Normalized, OutputFormat, Quill, Quillmark, RenderOptions};
+use quillmark::{Diagnostic, Document, Engine, Normalized, OutputFormat, Quill, RenderOptions};
 use quillmark_content::{
     export::{to_markdown, to_markdown_annotated},
     import::{from_markdown, ImportWarning},
@@ -41,7 +41,7 @@ fn every_entry_holds_on_every_surface() {
         assert!(names.insert(name), "two entries named {name}");
     }
 
-    let engine = Quillmark::new();
+    let engine = Engine::new();
     let quill = quillmark::quill_from_path(quills_path(QUILL)).unwrap_or_else(|e| panic!("{QUILL} loads: {e:?}"));
     let failures: Vec<String> = corpus
         .iter()
@@ -105,7 +105,7 @@ fn the_matrix_has_a_row_per_entry_naming_its_signals() {
     assert!(failures.is_empty(), "\n{}", failures.join("\n"));
 }
 
-fn check(entry: &Value, engine: &Quillmark, quill: &Quill) -> Vec<String> {
+fn check(entry: &Value, engine: &Engine, quill: &Quill) -> Vec<String> {
     let mut failures = Vec::new();
     let stored = &entry["content"];
     let content = match serial::from_canonical_value(stored) {
@@ -187,7 +187,7 @@ fn check(entry: &Value, engine: &Quillmark, quill: &Quill) -> Vec<String> {
 }
 
 /// The lowering, `validate` and a one-shot render of `doc` through `quill`.
-fn surfaces(entry: &Value, engine: &Quillmark, quill: &Quill, doc: &Document) -> Vec<String> {
+fn surfaces(entry: &Value, engine: &Engine, quill: &Quill, doc: &Document) -> Vec<String> {
     let mut failures = Vec::new();
     let signals = &entry["signals"];
     let lowering = match lowering(quill, doc) {

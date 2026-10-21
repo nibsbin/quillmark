@@ -63,7 +63,7 @@ beforeAll(() => {
 })
 
 const renderBuild = await import('@quillmark-wasm')
-const { Quillmark, Quill, Document } = renderBuild
+const { Engine, Quill, Document } = renderBuild
 const { makeQuill, makeSampleFormQuill, SAMPLE_FORM_MARKDOWN, initBuildSync, expectEditCode } = await import(
   './test-helpers.js'
 )
@@ -85,7 +85,7 @@ const TEST_PLATE = `#import "@local/quillmark-helper:0.2.0" as qm
 #qm.data.at("$body")`
 
 function openQuill() {
-  const engine = new Quillmark()
+  const engine = new Engine()
   const quill = Quill.fromTree(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
   return { engine, quill }
 }
@@ -130,7 +130,7 @@ references:
 `
 
 function arrayElementSession() {
-  const engine = new Quillmark()
+  const engine = new Engine()
   const quill = Quill.fromTree(
     makeQuill({ name: 'array_quill', plate: ARRAY_PLATE, quillYaml: ARRAY_QUILL_YAML }),
   )
@@ -298,7 +298,7 @@ describe('LiveSession canvas preview', () => {
 
 describe('LiveSession canvas preview (acroform backend)', () => {
   it('paint sizes the canvas at scale and bakes field-value ink into the raster', () => {
-    const session = new Quillmark().open(
+    const session = new Engine().open(
       Quill.fromTree(makeSampleFormQuill()),
       Document.fromMarkdown(SAMPLE_FORM_MARKDOWN),
     )

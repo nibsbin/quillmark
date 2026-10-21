@@ -16,7 +16,7 @@ static VERSION: LazyLock<String> = LazyLock::new(|| {
 
 #[derive(Parser)]
 #[command(name = "quillmark")]
-#[command(about = "Command-line interface for Quillmark: a schema-driven document framework", long_about = None)]
+#[command(about = "Render and check Quillmark documents; inspect and validate quills", long_about = None)]
 #[command(version = VERSION.as_str())]
 struct Cli {
     #[command(subcommand)]
@@ -25,10 +25,10 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Render markdown file to output format
+    /// Render a Markdown document to an output format
     Render(commands::render::RenderArgs),
 
-    /// Check markdown files against a quill's schema, printing every diagnostic
+    /// Check documents against a quill's schema, printing every diagnostic
     Check(commands::check::CheckArgs),
 
     /// Output the YAML schema for a quill
@@ -37,7 +37,7 @@ enum Commands {
     /// Output the annotated Markdown blueprint for a quill
     Blueprint(commands::blueprint::BlueprintArgs),
 
-    /// Validate a quill's configuration and compile its plate
+    /// Check a quill: read its Quill.yaml and render its canonical documents
     Validate(commands::validate::ValidateArgs),
 
     /// Display a quill's identity and schema counts

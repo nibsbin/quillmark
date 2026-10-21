@@ -1,8 +1,8 @@
 # Creating Quills
 
-A Quill is a format bundle that defines how your Markdown content is rendered. This tutorial walks from an empty directory to a rendered PDF.
+A quill is a document format: a schema for a document's fields, a layout for its pages, and the assets the layout uses. This tutorial writes one as a directory, from empty to a rendered PDF.
 
-It builds a `typst` quill, which draws a page from a plate you write. If you already hold a PDF form to fill, the `acroform` backend fills that form rather than redrawing it: start at the [PDF Form Backend](acroform-backend.md), where stripping the form into a background and a field spec is the author's own work.
+It builds a `typst` quill, which draws a page from a plate you write. If you already hold a PDF form to fill, the `acroform` backend fills that form rather than redrawing it: start at the [PDF Form Backend (acroform)](acroform-backend.md), where stripping the form into a background and a field spec is the author's own work.
 
 ## 1. Create the directory
 

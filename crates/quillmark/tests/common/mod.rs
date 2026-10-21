@@ -4,25 +4,25 @@
 // Each integration test binary compiles this module and uses part of it.
 #![allow(dead_code)]
 
-use quillmark::{CalendarDate, Document, Quill, Quillmark};
+use quillmark::{CalendarDate, Document, Engine, Quill};
 use quillmark_fixtures::quills_path;
 use std::sync::LazyLock;
 
-static ENGINE: LazyLock<Quillmark> = LazyLock::new(Quillmark::new);
+static ENGINE: LazyLock<Engine> = LazyLock::new(Engine::new);
 
 static MEMO: LazyLock<Quill> = LazyLock::new(|| {
     quillmark::quill_from_path(quills_path("usaf_memo")).expect("usaf_memo should load")
 });
 
 /// The engine and the flagship `usaf_memo` quill.
-pub fn memo() -> (&'static Quillmark, &'static Quill) {
+pub fn memo() -> (&'static Engine, &'static Quill) {
     (&ENGINE, &MEMO)
 }
 
 /// [`memo`] plus the quill's seeded document, one card per declared kind with
 /// every field blank, and an authored main body: a numbered paragraph and a
 /// lettered bullet.
-pub fn seeded_memo() -> (&'static Quillmark, &'static Quill, Document) {
+pub fn seeded_memo() -> (&'static Engine, &'static Quill, Document) {
     let mut doc = MEMO.seed_document();
     let _ = doc
         .main_mut()
