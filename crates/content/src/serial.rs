@@ -1012,11 +1012,24 @@ pub(crate) fn normalize_math_props(props: &mut Value) {
     }
 }
 
-/// TeX source as an equation stores it: each line break or other control
-/// char a space, which TeX reads it as, and the whitespace at either edge
-/// dropped.
+/// TeX source as an equation stores it: each `%` comment dropped to the end
+/// of its line, each line break or other control char a space, which TeX
+/// reads it as, and the whitespace at either edge dropped.
 pub fn settle_tex(tex: &str) -> String {
-    let spaced: String = tex
+    let mut uncommented = String::with_capacity(tex.len());
+    let (mut comment, mut escaped) = (false, false);
+    for c in tex.chars() {
+        let ends_line = c == '\n' || c == '\r' || crate::normalize::is_line_separator(c);
+        comment &= !ends_line;
+        if !comment && c == '%' && !escaped {
+            comment = true;
+        }
+        if !comment {
+            uncommented.push(c);
+        }
+        escaped = c == '\\' && !escaped;
+    }
+    let spaced: String = uncommented
         .chars()
         .map(|c| if c.is_control() || crate::normalize::is_line_separator(c) { ' ' } else { c })
         .filter(|&c| c != crate::model::ISLAND_SLOT)

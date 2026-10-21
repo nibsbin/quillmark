@@ -652,7 +652,8 @@ island at its slot holding the TeX between the dollars as written, a display
 one with `display: true`. The rules are pulldown-cmark's: an opening `$` is
 not followed by whitespace and a closing `$` not preceded by it, the braces
 inside balance, and `\$` is a dollar sign that opens nothing, so
-`$5 and $10` is text. Inside a `~~~` card-yaml payload `$` is reserved as the
+`$5 and $10` is text. A `%` opens a TeX comment, which storage drops to the
+end of its line. Inside a `~~~` card-yaml payload `$` is reserved as the
 prefix for system-metadata keys (§3.3).
 
 An equation in a table cell, an image's alt text or a footnote's note keeps its

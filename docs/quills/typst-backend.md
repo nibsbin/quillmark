@@ -191,7 +191,7 @@ As with `elements`, the renderer is read from the state's final value, so the up
 
 A footnote lowers to Typst's `footnote`, so `#set footnote(..)` and `#set footnote.entry(..)` style it. An equation lowers to Typst math, inline or on its own line, so `#set math.equation(..)` and `#show math.equation: ..` reach it. A definition list lowers to Typst's `terms.item`, one per term holding every description under it, so `#set terms(..)` and `#show terms.item: ..` reach it.
 
-Typst sets an equation in `New Computer Modern Math` and lays one out only in a font with a math table. A quill shipping no font of that family has the backend's embedded Noto Sans Math answer to the name, so equations draw whatever text fonts the quill ships. To set them in a math font of its own, a quill bundles it under `assets/fonts/` and names it:
+Typst sets an equation in `New Computer Modern Math` and lays one out only in a font with a math table. A quill shipping no font of that family has the backend's embedded Noto Sans Math answer to the name, as well as to its own, so equations draw whatever text fonts the quill ships; a plate naming `New Computer Modern Math` gets that sans face. To set them in a math font of its own, a quill bundles it under `assets/fonts/` and names it:
 
 ```typst
 #show math.equation: set text(font: "Libertinus Math")

@@ -235,7 +235,9 @@ families:
   Typst compile warns once per content field whose equations hold a command
   outside the vocabulary the lowering knows ([CONVERT.md](CONVERT.md#equations)),
   naming each, with the field's `DocPath` in `path`. Each draws as its own
-  name. It rides the session's compile warnings, and `validate` has no twin
+  name, save a `\not` and a `\left` delimiter, which draw nothing. A field
+  whose equations nest groups past the depth the lowering reads warns once
+  more under the code, naming the depth. It rides the session's compile warnings, and `validate` has no twin
   for it.
 - **`typst::missing_glyph`: text no font draws.** The Typst compile warns
   once, naming each character the laid-out pages draw as a `.notdef` box,

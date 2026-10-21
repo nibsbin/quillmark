@@ -1468,13 +1468,46 @@ impl Builder {
         self.mint_island(IslandType::Math, props);
     }
 
+    /// Put `text` where island `index`'s slot sits, the island gone.
+    fn unslot(&mut self, index: usize, text: &str) {
+        let Some((at, (byte, _))) = self
+            .inline
+            .text
+            .char_indices()
+            .enumerate()
+            .filter(|(_, (_, c))| *c == ISLAND_SLOT)
+            .nth(index)
+        else {
+            return;
+        };
+        self.inline.text.replace_range(byte..byte + ISLAND_SLOT.len_utf8(), text);
+        let grown = text.chars().count() - 1;
+        for m in &mut self.inline.marks {
+            if m.start > at {
+                m.start += grown;
+            }
+            if m.end > at {
+                m.end += grown;
+            }
+        }
+        self.islands.remove(index);
+    }
+
     fn finish(mut self) -> (Content, Drops) {
         self.close_note();
-        for (index, label) in std::mem::take(&mut self.note_refs) {
-            if let Some(note) = self.notes.get_mut(&label) {
-                self.islands[index].props = note.props.clone();
-                note.used = true;
+        // A reference whose definition dropped, nested in another, reads
+        // back as the text it is, as one naming no definition does.
+        for (index, label) in std::mem::take(&mut self.note_refs).into_iter().rev() {
+            match self.notes.get_mut(&label) {
+                Some(note) => {
+                    self.islands[index].props = note.props.clone();
+                    note.used = true;
+                }
+                None => self.unslot(index, &format!("[^{}]", label.into_inner())),
             }
+        }
+        for (n, island) in self.islands.iter_mut().enumerate() {
+            island.id = format!("isl-{n}");
         }
         for note in std::mem::take(&mut self.notes).into_values() {
             match note.used {
@@ -2465,6 +2498,16 @@ pub(crate) mod tests {
 
     /// `$…$` is an inline equation and `$$…$$` a display one, each an island
     /// holding its TeX; where no island can sit, the source stays as text.
+    #[test]
+    fn a_reference_to_a_definition_nested_in_another_reads_as_its_text() {
+        let imported = imp_fixed("a[^2] b[^1] c\n\n[^1]: x\n\n    > [^2]: y");
+        let rt = &imported.content;
+        assert_eq!(rt.text, "a[^2] b\u{FFFC} c");
+        assert_eq!(rt.islands.len(), 1);
+        assert_eq!(rt.islands[0].id, "isl-0");
+        assert_eq!(rt.islands[0].props["text"], "x\ny");
+    }
+
     #[test]
     fn a_definition_list_is_term_lines_and_the_descriptions_under_them() {
         let d = |instance| Container::Description { instance };

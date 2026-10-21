@@ -1701,6 +1701,38 @@
     }
   },
   {
+    "name": "island.math.unsupported",
+    "markdown": "$\\foo$",
+    "content": {
+      "islands": [
+        {
+          "id": "isl-0",
+          "props": {
+            "tex": "\\foo"
+          },
+          "type": "math"
+        }
+      ],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "para"
+        }
+      ],
+      "marks": [],
+      "text": "￼"
+    },
+    "typst": [
+      "$\"\\\\foo\"$"
+    ],
+    "signals": {
+      "import": [],
+      "render": [
+        "typst::unsupported_tex"
+      ]
+    }
+  },
+  {
     "name": "html.br",
     "markdown": "one<br>two",
     "content": {

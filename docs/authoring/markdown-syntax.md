@@ -51,7 +51,7 @@ The area is $\pi r^2$, and
 $$\sum_{i=1}^{n} i = \frac{n(n+1)}{2}$$
 ```
 
-The opening `$` takes no space after it and the closing `$` none before it, and braces inside balance, so `$5 and $10` stays text. Write `\$` for a dollar sign that should never open an equation. An equation in a table cell, an image's alt text or a footnote stays as its source text and warns under `parse::dropped_construct` (`math`).
+The opening `$` takes no space after it and the closing `$` none before it, and braces inside balance, so `$5 and $10` stays text. Write `\$` for a dollar sign that should never open an equation. A `%` comments out the rest of its line, as in TeX. An equation in a table cell, an image's alt text or a footnote stays as its source text and warns under `parse::dropped_construct` (`math`).
 
 The Typst backend draws:
 

@@ -17,6 +17,10 @@ use quillmark_core::Content;
 
 const CODE: &str = "typst::unsupported_tex";
 
+/// How deep groups and arguments nest before the lowering draws what lies
+/// further in flat.
+const MAX_DEPTH: usize = 32;
+
 /// The Typst equation for `tex`: `$…$`, or `$ … $` where `display`.
 pub(crate) fn equation(tex: &str, display: bool) -> String {
     let body = lower(tex).markup;
@@ -27,10 +31,12 @@ pub(crate) fn equation(tex: &str, display: bool) -> String {
     }
 }
 
-/// `tex` as Typst math, and the commands it drew as their names.
+/// `tex` as Typst math, the commands it does not lower, and whether it
+/// nests past [`MAX_DEPTH`].
 pub(crate) struct Lowered {
     pub(crate) markup: String,
     pub(crate) unknown: BTreeSet<String>,
+    pub(crate) deep: bool,
 }
 
 pub(crate) fn lower(tex: &str) -> Lowered {
@@ -40,6 +46,8 @@ pub(crate) fn lower(tex: &str) -> Lowered {
         spaced,
         at: 0,
         unknown: BTreeSet::new(),
+        depth: 0,
+        deep: false,
     };
     let mut nodes = Vec::new();
     while p.at < p.toks.len() {
@@ -50,6 +58,7 @@ pub(crate) fn lower(tex: &str) -> Lowered {
     Lowered {
         markup: render(&nodes),
         unknown: p.unknown,
+        deep: p.deep,
     }
 }
 
@@ -59,26 +68,35 @@ pub(crate) fn unsupported(config: &QuillConfig, data: &serde_json::Value) -> Vec
     let mut diags = Vec::new();
     config.each_plate_content(data, &mut |at: &DocPath, content: &Content| {
         let mut unknown = BTreeSet::new();
+        let mut deep = false;
         for isl in content.islands.iter().filter(|i| i.island_type == IslandType::Math) {
             let tex = isl.props.get("tex").and_then(|v| v.as_str()).unwrap_or("");
-            unknown.extend(lower(tex).unknown);
+            let lowered = lower(tex);
+            unknown.extend(lowered.unknown);
+            deep |= lowered.deep;
         }
-        if unknown.is_empty() {
-            return;
+        let warn = |message: String, hint: String| {
+            Diagnostic::new(Severity::Warning, message)
+                .with_code(CODE.to_string())
+                .with_path(at.to_string())
+                .with_hint(hint)
+        };
+        if !unknown.is_empty() {
+            let named: Vec<String> = unknown.iter().map(|c| format!("`\\{c}`")).collect();
+            let them = if named.len() == 1 { "it" } else { "them" };
+            diags.push(warn(
+                format!("an equation in this field uses {}, which the Typst backend does not lower", named.join(", ")),
+                format!(
+                    "the Typst backend lowers the TeX math commands docs/authoring/markdown-syntax.md lists; rewrite {them} with those"
+                ),
+            ));
         }
-        let named: Vec<String> = unknown.iter().map(|c| format!("`\\{c}`")).collect();
-        let (them, draw) = if named.len() == 1 { ("it", "draws as its name") } else { ("them", "draw as their names") };
-        diags.push(
-            Diagnostic::new(
-                Severity::Warning,
-                format!("an equation in this field uses {}, which {draw}", named.join(", ")),
-            )
-            .with_code(CODE.to_string())
-            .with_path(at.to_string())
-            .with_hint(format!(
-                "the Typst backend lowers the TeX math commands docs/authoring/markdown-syntax.md lists; rewrite {them} with those"
-            )),
-        );
+        if deep {
+            diags.push(warn(
+                format!("an equation in this field nests groups deeper than {MAX_DEPTH}, and draws what lies past that flat"),
+                "flatten the equation's braces and arguments".to_string(),
+            ));
+        }
     });
     diags
 }
@@ -127,6 +145,10 @@ fn tokenize(tex: &str) -> Vec<(Tok, bool)> {
             '&' => Tok::Amp,
             '~' => Tok::Tilde,
             '\'' => Tok::Prime,
+            '%' => {
+                while chars.next_if(|&c| c != '\n').is_some() {}
+                continue;
+            }
             c if c.is_whitespace() => {
                 spaced = true;
                 continue;
@@ -216,9 +238,39 @@ struct Parser {
     spaced: Vec<bool>,
     at: usize,
     unknown: BTreeSet<String>,
+    /// How many groups and arguments enclose the cursor.
+    depth: usize,
+    deep: bool,
 }
 
 impl Parser {
+    /// Whether the cursor sits [`MAX_DEPTH`] deep, which marks the
+    /// equation deep.
+    fn too_deep(&mut self) -> bool {
+        self.deep |= self.depth >= MAX_DEPTH;
+        self.depth >= MAX_DEPTH
+    }
+
+    /// What [`Self::seq`] reads, as one flat run of its characters and
+    /// symbols.
+    fn flat(&mut self) -> Vec<Node> {
+        let mut nodes = Vec::new();
+        let mut depth = 0usize;
+        while let Some(tok) = self.peek() {
+            match tok {
+                Tok::Close if depth == 0 => break,
+                Tok::Cmd(c) if depth == 0 && (c == "right" || c == "end") => break,
+                Tok::Open => depth += 1,
+                Tok::Close => depth -= 1,
+                Tok::Char(c) => nodes.push(atom(*c)),
+                Tok::Cmd(c) => nodes.extend(symbol(c).map(|s| Node::Atom(s.to_string()))),
+                _ => {}
+            }
+            self.at += 1;
+        }
+        nodes
+    }
+
     fn peek(&self) -> Option<&Tok> {
         self.toks.get(self.at)
     }
@@ -231,6 +283,16 @@ impl Parser {
 
     /// Atoms up to a `}`, `\right`, `\end` or the end, which it leaves unread.
     fn seq(&mut self) -> Vec<Node> {
+        if self.too_deep() {
+            return self.flat();
+        }
+        self.depth += 1;
+        let nodes = self.seq_items();
+        self.depth -= 1;
+        nodes
+    }
+
+    fn seq_items(&mut self) -> Vec<Node> {
         let mut nodes: Vec<Node> = Vec::new();
         loop {
             match self.peek() {
@@ -382,6 +444,20 @@ impl Parser {
 
     /// The atom at the cursor, with whatever arguments its command reads.
     fn atom_node(&mut self) -> Vec<Node> {
+        if self.too_deep() {
+            return match self.next() {
+                Some(Tok::Char(c)) => vec![atom(c)],
+                Some(Tok::Cmd(c)) => symbol(&c).map(|s| Node::Atom(s.to_string())).into_iter().collect(),
+                _ => Vec::new(),
+            };
+        }
+        self.depth += 1;
+        let nodes = self.atom_items();
+        self.depth -= 1;
+        nodes
+    }
+
+    fn atom_items(&mut self) -> Vec<Node> {
         let Some(tok) = self.next() else { return Vec::new() };
         match tok {
             Tok::Open => {
@@ -409,7 +485,10 @@ impl Parser {
                 "|" | "Vert" | "lVert" | "rVert" => "‖".into(),
                 "vert" | "lvert" | "rvert" | "mid" => "\\|".into(),
                 "backslash" => "\\\\".into(),
-                other => symbol(other).map(str::to_string).unwrap_or_default(),
+                other => symbol(other).map(str::to_string).unwrap_or_else(|| {
+                    self.unknown.insert(other.to_string());
+                    String::new()
+                }),
             },
             Some(_) => String::new(),
         }
@@ -483,7 +562,10 @@ impl Parser {
             "big" | "Big" | "bigg" | "Bigg" | "bigl" | "Bigl" | "biggl" | "Biggl" | "bigr" | "Bigr" | "biggr"
             | "Biggr" | "bigm" | "Bigm" | "biggm" | "Biggm" => vec![Node::Atom(self.delimiter())],
             "begin" => self.environment(),
-            "\\" | "newline" | "cr" => vec![Node::Break],
+            "\\" | "newline" | "cr" => {
+                self.bracket();
+                vec![Node::Break]
+            }
             "," | "thinspace" => vec![space("0.1667")],
             ":" | ">" | "medspace" => vec![space("0.2222")],
             ";" | "thickspace" => vec![space("0.2778")],
@@ -496,12 +578,14 @@ impl Parser {
             "|" => vec![Node::Atom("‖".into())],
             "not" => {
                 let mut next = self.atom_node();
-                if let Some(Node::Atom(s)) = next.last_mut() {
-                    match NEGATED.iter().find(|(from, _)| from == s) {
-                        Some((_, to)) => *s = to.to_string(),
-                        None => {
-                            self.unknown.insert("not".to_string());
-                        }
+                let negated = match next.last() {
+                    Some(Node::Atom(s)) => NEGATED.iter().find(|(from, _)| from == s).map(|&(_, to)| to),
+                    _ => None,
+                };
+                match negated {
+                    Some(to) => *next.last_mut().expect("a negated atom") = Node::Atom(to.to_string()),
+                    None => {
+                        self.unknown.insert("not".to_string());
                     }
                 }
                 next
@@ -564,6 +648,8 @@ impl Parser {
             spaced: self.spaced[start..end].to_vec(),
             at: 0,
             unknown: BTreeSet::new(),
+            depth: self.depth,
+            deep: false,
         };
         let mut nodes = Vec::new();
         while inner.at < inner.toks.len() {
@@ -571,14 +657,18 @@ impl Parser {
             inner.at += 1;
         }
         self.unknown.append(&mut inner.unknown);
+        self.deep |= inner.deep;
         self.at = end + 1;
         Some(nodes)
     }
 
     fn environment(&mut self) -> Vec<Node> {
         let env = self.text_arg();
-        if env == "array" || env == "subarray" {
+        if matches!(env.trim_end_matches('*'), "array" | "subarray" | "alignedat" | "alignat") {
             self.text_arg();
+        }
+        if env.ends_with("matrix*") {
+            self.bracket();
         }
         let body = self.seq();
         if self.peek() == Some(&Tok::Cmd("end".into())) {
@@ -604,10 +694,17 @@ impl Parser {
         }
         let lines: Vec<String> = rows
             .iter()
-            .map(|cells| cells.iter().map(|c| render(c)).collect::<Vec<_>>().join(" & ").trim().to_string())
+            .map(|cells| {
+                let line = cells.iter().map(|c| render(c)).collect::<Vec<_>>().join(" & ");
+                // A linebreak's `\` reads as one only before whitespace.
+                match line.trim() {
+                    l if l.ends_with('\\') => format!("{l} "),
+                    l => l.to_string(),
+                }
+            })
             .collect();
         if env == "cases" || env == "dcases" {
-            let lines: Vec<String> = lines.into_iter().map(|l| if l.is_empty() { "\"\"".into() } else { l }).collect();
+            let lines: Vec<String> = lines.into_iter().map(|l| if l.trim().is_empty() { "\"\"".into() } else { l }).collect();
             return vec![Node::Atom(format!("cases({})", lines.join(", ")))];
         }
         if !matches!(env.trim_end_matches('*'), "aligned" | "align" | "gathered" | "gather" | "split" | "alignedat" | "eqnarray" | "multline") {
@@ -822,10 +919,42 @@ mod tests {
     proptest::proptest! {
         /// Whatever the TeX, the equation parses as Typst markup.
         #[test]
-        fn any_tex_lowers_to_markup_that_parses(tex in r##"(\\[a-zA-Z]{1,6}|\\.|[{}^_&~'\[\]()|,;:"#$%\\a-z0-9 .=+<>!?*/𑵆éα\u{302}-]|\\begin\{[a-z]+\}|\\end\{[a-z]+\}|\\left.|\\right.){0,24}"##, display: bool) {
+        fn any_tex_lowers_to_markup_that_parses(tex in r##"(\\[a-zA-Z]{1,6}|\\.|[{}^_&~'\[\]()|,;:"#$%\\a-z0-9 .=+<>!?*/𑵆éα\u{302}-]|\\begin\{([a-z]+|aligned|cases|pmatrix)\}|\\end\{([a-z]+|aligned|cases|pmatrix)\}|\\left.|\\right.){0,24}"##, display: bool) {
             let markup = equation(&tex, display);
             let errors = typst::syntax::parse(&markup).errors_and_warnings().0;
             proptest::prop_assert!(errors.is_empty(), "{:?} lowered to {:?}: {:?}", tex, markup, errors);
+        }
+    }
+
+    #[test]
+    fn a_linebreak_in_a_group_ends_no_line_on_its_backslash() {
+        for tex in [r"\begin{aligned}{a\\}\end{aligned}", r"\begin{cases}{a\\}\end{cases}", r"a\\"] {
+            let markup = equation(tex, false);
+            assert!(markup.ends_with(" $") || !markup.trim_end_matches('$').ends_with('\\'), "{tex:?} lowered to {markup:?}");
+            let errors = typst::syntax::parse(&format!("{markup} after $b$")).errors_and_warnings().0;
+            assert!(errors.is_empty(), "{tex:?} lowered to {markup:?}: {errors:?}");
+        }
+    }
+
+    #[test]
+    fn nesting_past_the_depth_draws_flat_and_marks_the_equation_deep() {
+        for tex in ["{".repeat(5000), r"\sqrt{".repeat(2000), r"\left(".repeat(2000), r"\not".repeat(5000), r"\frac".repeat(5000)] {
+            let lowered = lower(&tex);
+            assert!(lowered.deep, "{}", &tex[..12]);
+            let errors = typst::syntax::parse(&equation(&tex, false)).errors_and_warnings().0;
+            assert!(errors.is_empty(), "{}: {errors:?}", &tex[..12]);
+        }
+        assert!(!lower(r"\frac{\sqrt{x^{2}}}{y}").deep);
+    }
+
+    #[test]
+    fn what_draws_nothing_is_named_and_what_takes_an_argument_reads_it() {
+        assert_eq!(lower(r"a \\[4pt] b").markup, "a \\  b");
+        assert_eq!(lower(r"\begin{alignedat}{2} x \end{alignedat}").markup, "x");
+        assert_eq!(lower(r"\begin{pmatrix*}[r] x \end{pmatrix*}").markup, "mat(delim: \"(\", x)");
+        assert_eq!(lower("a % b").markup, "a");
+        for tex in [r"\not{=}", r"\not", r"\left\lgroup x \right."] {
+            assert!(!lower(tex).unknown.is_empty(), "{tex:?}");
         }
     }
 

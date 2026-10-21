@@ -232,14 +232,20 @@ the Typst calls that draw them.
 
 A command outside that vocabulary draws as its own name, and the compile
 carries one [`typst::unsupported_tex`](ERROR.md#warning-flow) warning per
-content field naming each. Whatever the TeX, the lowering parses.
+content field naming each, as does a `\not` with no negated form or a
+`\left` delimiter outside the vocabulary, both of which draw nothing. A `%`
+comment runs to its line's end, and storage drops it before it spaces the
+lines. Groups and arguments nest 32 deep; past that the lowering draws their
+characters and symbols flat and warns once per field. Whatever the TeX, the
+lowering parses, and no line of it ends on the bare `\` of a linebreak, which
+would escape what follows.
 
 Typst sets an equation in the family `New Computer Modern Math` unless a plate
 names another with `show math.equation: set text(font: ..)`, and lays one out
 only in a face with an OpenType `MATH` table. A quill shipping no face of that
 family has the embedded Noto Sans Math, cut to the blocks an equation commonly
-draws from, answer to the name, so an equation draws whatever text fonts the
-quill ships.
+draws from, answer to the name and to its own, so an equation draws whatever
+text fonts the quill ships.
 
 ### Declined images
 

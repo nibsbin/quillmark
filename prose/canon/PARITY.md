@@ -151,6 +151,7 @@ diff-rebase alone. The row's corpus entry pins the spelling under
 | `island.footnote`: a footnote reference and its note | spells | spells | spells | honors | silent: honored | none |
 | `island.math`: an inline equation's TeX | spells | spells | spells | honors | silent: honored | none |
 | `island.math.display`: a display equation's TeX | spells | spells | spells | honors | silent: honored | none |
+| `island.math.unsupported`: a TeX command the lowering does not know | spells | spells | spells | declines with a signal | drops silently | `typst::unsupported_tex` |
 
 A table re-imports from its pipe syntax, so `to_markdown` and `revise` both
 mint it without a key Quillmark does not name.

@@ -163,10 +163,15 @@ impl QuillWorld {
             }
         }
 
-        // The embedded math face answers to the family an equation asks for.
+        // The embedded math face answers to its own family and to the one an
+        // equation asks for.
         if !book.contains_family(&MATH_FAMILY.to_lowercase()) {
             for font in faces(Bytes::new(MATH_FONT.1.to_vec())).into_iter().flatten() {
                 let mut info = font.info().clone();
+                if !book.contains_family(&info.family.to_lowercase()) {
+                    book.push(info.clone());
+                    fonts.push(font.clone());
+                }
                 info.family = MATH_FAMILY.to_string();
                 book.push(info);
                 fonts.push(font);
