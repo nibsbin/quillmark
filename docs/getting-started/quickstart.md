@@ -77,12 +77,12 @@ This paragraph is the document body. *Markdown* works here.
 
     ```python
     from pathlib import Path
-    from quillmark import Quill, Quillmark, OutputFormat
+    from quillmark import Engine, Quill, OutputFormat
 
     quill = Quill.from_path("my_quill")
     doc = quill.parse(Path("document.md").read_text())
 
-    result = Quillmark().render(quill, doc, OutputFormat.PDF)
+    result = Engine().render(quill, doc, OutputFormat.PDF)
     result.artifacts[0].save("document.pdf")
     ```
 
@@ -155,7 +155,7 @@ This paragraph is the document body. *Markdown* works here.
     ```
 
     ```rust
-    use quillmark::{quill_from_path, OutputFormat, Quillmark, RenderOptions};
+    use quillmark::{quill_from_path, Engine, OutputFormat, RenderOptions};
 
     fn main() -> Result<(), Box<dyn std::error::Error>> {
         let quill = quill_from_path("my_quill")?;
@@ -164,7 +164,7 @@ This paragraph is the document body. *Markdown* works here.
         // A render reads no clock: the caller passes the render date.
         let today = "2026-03-14".parse()?;
         let options = RenderOptions::default().with_output_format(OutputFormat::Pdf);
-        let result = Quillmark::new().render(&quill, &doc, today, &options)?;
+        let result = Engine::new().render(&quill, &doc, today, &options)?;
 
         std::fs::write("document.pdf", &result.artifacts[0].bytes)?;
         Ok(())

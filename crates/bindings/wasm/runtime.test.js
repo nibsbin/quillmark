@@ -716,7 +716,7 @@ describe('@quillmark/wasm: Engine (hidden core→backend crossing)', () => {
       const manifestFormats = await engine.supportedFormats(quill)
       const backendQuill = mod.Quill.fromTree(quill.toTree())
       try {
-        const realFormats = new mod.Quillmark().supportedFormats(backendQuill)
+        const realFormats = new mod.Engine().supportedFormats(backendQuill)
         expect([...manifestFormats].sort(), quill.backendId).toEqual([...realFormats].sort())
       } finally {
         backendQuill.free()
@@ -1129,7 +1129,7 @@ main:
                 return Reflect.get(target, prop, receiver)
               },
             })
-            class TrappingQuillmark {
+            class TrappingEngine {
               render() {
                 throw new WebAssembly.RuntimeError('unreachable')
               }
@@ -1137,7 +1137,7 @@ main:
             return new Proxy(real, {
               get(target, prop, receiver) {
                 if (prop === 'Document') return borrowedDocument
-                if (prop === 'Quillmark') return TrappingQuillmark
+                if (prop === 'Engine') return TrappingEngine
                 return Reflect.get(target, prop, receiver)
               },
             })
@@ -1160,14 +1160,14 @@ main:
           typst: {
             load: async () => {
               const real = await import('../../../pkg/render/wasm.js')
-              class ThrowingQuillmark {
+              class ThrowingEngine {
                 render() {
                   throw err
                 }
               }
               return new Proxy(real, {
                 get(target, prop, receiver) {
-                  if (prop === 'Quillmark') return ThrowingQuillmark
+                  if (prop === 'Engine') return ThrowingEngine
                   return Reflect.get(target, prop, receiver)
                 },
               })

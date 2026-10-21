@@ -8,7 +8,7 @@
 
 #![cfg(feature = "typst")]
 
-use quillmark::{Document, HitGranularity, LiveSession, Quillmark};
+use quillmark::{Document, Engine, HitGranularity, LiveSession};
 use std::fs;
 use tempfile::TempDir;
 
@@ -69,7 +69,7 @@ fn session(temp_dir: &TempDir) -> LiveSession {
          subject: \"{SUBJECT}\"\ntags:\n  - \"{STAR_TAG}\"\n  - \"second plain tag\"\n~~~\n"
     );
     let parsed = Document::parse(&md).expect("parse").document;
-    Quillmark::new().open(&quill, &parsed, common::test_date()).expect("open")
+    Engine::new().open(&quill, &parsed, common::test_date()).expect("open")
 }
 
 #[test]
@@ -199,7 +199,7 @@ main:
         block(MANY),
     );
     let doc = Document::parse(&md).expect("parse").document;
-    let session = Quillmark::new()
+    let session = Engine::new()
         .open(&quill, &doc, common::test_date())
         .expect("the plate's assertions hold");
     assert!(session.page_count() > 0);
@@ -243,7 +243,7 @@ main:
     let md = "~~~card-yaml\n$quill: trail_quill\n$kind: main\n\
               two: \"  trail  \"\nthree: \"trail \\t \"\nlines: \"one\\ntwo  \\n  \\n\"\n~~~\n";
     let doc = Document::parse(md).expect("parse").document;
-    let session = Quillmark::new()
+    let session = Engine::new()
         .open(&quill, &doc, common::test_date())
         .expect("the plate's assertions hold");
     assert!(session.page_count() > 0);
@@ -259,7 +259,7 @@ fn a_one_line_text_written_as_a_block_scalar_renders() {
     let mut doc = Document::parse(md).expect("parse").document;
     assert!(quill.validate(&doc).is_empty(), "{:?}", quill.validate(&doc));
     let options = quillmark::RenderOptions::default().with_output_format(quillmark::OutputFormat::Pdf);
-    Quillmark::new()
+    Engine::new()
         .render(&quill, &doc, common::test_date(), &options)
         .expect("renders");
     quill.conform(&mut doc).expect("conforms");

@@ -1,8 +1,8 @@
 //! WebAssembly bindings for Quillmark: the FFI under the hand-written canonical
 //! layer (`pkg/runtime/`), which re-exports the core build's `Quill` /
-//! `Document` and wraps [`Quillmark`] in an `Engine` that lazily loads the
-//! render build. No build this crate emits is a public npm export; which
-//! variants ship and what each carries: `prose/canon/BINDINGS.md`.
+//! `Document` and wraps the render build's [`Engine`] in a JS `Engine` that
+//! lazily loads that build. No build this crate emits is a public npm export;
+//! which variants ship and what each carries: `prose/canon/BINDINGS.md`.
 
 use wasm_bindgen::prelude::*;
 
@@ -12,7 +12,7 @@ mod types;
 
 pub use engine::{Document, Quill};
 #[cfg(feature = "render")]
-pub use engine::{LiveSession, Quillmark};
+pub use engine::{Engine, LiveSession};
 pub use error::WasmError;
 pub use types::*;
 

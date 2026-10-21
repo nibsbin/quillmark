@@ -4,13 +4,13 @@ Quillmark bounds what it ingests and not what it renders. That asymmetry is the 
 
 ## Render is not bounded
 
-**There is no render budget.** No deadline, no cancellation, no fuel, no progress callback. `Quillmark::render` returns when the backend is done.
+**There is no render budget.** No deadline, no cancellation, no fuel, no progress callback. `Engine::render` returns when the backend is done.
 
 The parse limits ([Markdown Specification §8](../reference/markdown-spec.md#8-limits)) bound the input, and the card ceiling bounds a stored document too: a row holding more cards fails to load, and an edit placing one more is refused. Nothing translates them into a bound on the work, so a document inside every ceiling can hold a core indefinitely. Cost is a property of the quill at least as much as of the document: a plate is a Typst program, and layout has superlinear shapes. Typst refuses an infinite loop and unbounded recursion, which bounds iteration rather than work — a loop that terminates after enough expensive iterations is refused by neither.
 
 So the bound comes from the host:
 
-- **Server.** For untrusted documents, render in a subprocess or worker pool under a wall-clock timeout and a memory cap (`RLIMIT_AS`, a cgroup, the container limit), and kill the worker that passes either. A thread is no bound: one abandoned past its timeout keeps its core and its memory until the compile finishes. Threads suit trusted input; `Quillmark` is `Sync`, so one engine backs the whole pool.
+- **Server.** For untrusted documents, render in a subprocess or worker pool under a wall-clock timeout and a memory cap (`RLIMIT_AS`, a cgroup, the container limit), and kill the worker that passes either. A thread is no bound: one abandoned past its timeout keeps its core and its memory until the compile finishes. Threads suit trusted input; `Engine` is `Sync`, so one engine backs the whole pool.
 - **Input size.** The parse ceilings are a safety limit, not a sizing recommendation. On one x86_64 core, a 10 MiB document takes on the order of 15–25 s and 2.5–3 GB natively through a plain quill, and about a minute and 3 GB under WASM; a quill whose plate measures or queries per paragraph grows faster than its input. Cap untrusted documents at the size your slowest quill renders within your timeout, then clock it.
 - **Browser.** `Engine.render` and `Engine.open` return promises, but the compile inside them is synchronous: awaiting does not yield while it runs, and `LiveSession.render` does not even return a promise. Either way the thread is blocked for the render's full duration, so a render on the main thread freezes the tab. Run the module in a Web Worker and `worker.terminate()` to abort — there is no in-band cancel, and terminate discards the module, so plan on re-instantiating it. Call `engine.load(quill)` early: the render build is about 10 MB gzipped, and the core build behind validation and editing is under 1 MB.
 
@@ -18,9 +18,9 @@ No surface times a render for you: clock the `render` call. That is how a host f
 
 ## Concurrency
 
-`Quillmark`, `Quill`, and `Document` are `Send + Sync` (`crates/quillmark/tests/facade_surface.rs` pins this). One engine serves many threads, and a loaded `Quill` is portable declarative data, shared rather than cloned per request. `LiveSession` is a per-document handle: open one per editing session.
+`Engine`, `Quill`, and `Document` are `Send + Sync` (`crates/quillmark/tests/facade_surface.rs` pins this). One engine serves many threads, and a loaded `Quill` is portable declarative data, shared rather than cloned per request. `LiveSession` is a per-document handle: open one per editing session.
 
-Python's `Quillmark.render` releases the GIL while it compiles, so renders on separate threads run in parallel and an asyncio loop calling it through `asyncio.to_thread` keeps serving.
+Python's `Engine.render` releases the GIL while it compiles, so renders on separate threads run in parallel and an asyncio loop calling it through `asyncio.to_thread` keeps serving.
 
 ## What a long-lived process accumulates
 
@@ -28,7 +28,7 @@ Python's `Quillmark.render` releases the GIL while it compiles, so renders on se
 
 **WASM memory only grows.** Linear memory never shrinks, so a module stays at the high-water mark of the largest render it has run. A long-lived tab or Node worker that renders one large document holds that memory until the realm is discarded.
 
-`Quillmark::render` caches no quills: it takes a `&Quill` the caller owns. The WASM `Engine` caches a backend-memory clone of each `Quill` it renders in a `WeakMap` keyed on that `Quill`, so a clone's lifetime follows its `Quill`.
+`Engine::render` caches no quills: it takes a `&Quill` the caller owns. The WASM `Engine` caches a backend-memory clone of each `Quill` it renders in a `WeakMap` keyed on that `Quill`, so a clone's lifetime follows its `Quill`.
 
 ## Isolation
 

@@ -1,13 +1,13 @@
-"""Quillmark - Python bindings for Quillmark."""
+"""Python bindings for Quillmark, a schema-driven document framework."""
 
 from ._quillmark import (
     Artifact,
     Diagnostic,
     Document,
+    Engine,
     Location,
     OutputFormat,
     Quill,
-    Quillmark,
     QuillmarkError,
     Reader,
     RenderResult,
@@ -19,10 +19,10 @@ __all__ = [
     "Artifact",
     "Diagnostic",
     "Document",
+    "Engine",
     "Location",
     "OutputFormat",
     "Quill",
-    "Quillmark",
     "QuillmarkError",
     "Reader",
     "RenderResult",

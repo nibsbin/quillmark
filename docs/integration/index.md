@@ -4,7 +4,7 @@ Quillmark embeds in an app through two published bindings (**Python** (`quillmar
 
 Three objects carry every integration:
 
-- **Engine**: a backend registry and render dispatcher. It holds no quills; every render routes through it, and it never constructs a quill. `Quillmark()` in Python, `new Engine()` in JavaScript.
+- **Engine**: a backend registry and render dispatcher. It holds no quills; every render routes through it, and it never constructs a quill. `Engine::new()` in Rust, `Engine()` in Python, `new Engine()` in JavaScript.
 - **Quill**: portable, declarative config data (schema, plate, assets). Loaded once, rendered by any engine that registers its backend; it never renders itself.
 - **Document**: the typed model of one Quillmark Markdown file (root block, body, cards). Built from Markdown, from a blank canvas, or from stored JSON.
 

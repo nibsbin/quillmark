@@ -15,9 +15,9 @@ The package is typed: it ships `py.typed` and stubs for the whole surface.
 ## Quick Start
 
 ```python
-from quillmark import Quillmark, Quill, Document, OutputFormat
+from quillmark import Engine, Quill, Document, OutputFormat
 
-engine = Quillmark()                       # backend registry + render dispatcher
+engine = Engine()                          # backend registry + render dispatcher
 quill = Quill.from_path("path/to/quill")   # portable, declarative config data
 
 markdown = """~~~
@@ -42,10 +42,10 @@ parse, storage, structure, `$ext` / `$seed`, and `remove_field`. Names follow
 `snake_case`, and the shared model (the `Document` / `Card` shapes,
 `Diagnostic`s, the storage DTO) is identical to [`@quillmark/wasm`](../wasm)'s.
 
-### `Quillmark`
+### `Engine`
 
 ```python
-engine = Quillmark()
+engine = Engine()
 engine.registered_backends()              # ['typst', 'acroform'] (order not guaranteed)
 engine.render(quill, parsed, OutputFormat.PDF)   # ppi=, pages=, regions= optional
                                           # today=datetime.date, default the local date
@@ -192,7 +192,7 @@ An unanswered field draws no diagnostic. Partial documents are accepted, and
 
 ## Error contract
 
-An engine refusal raises `QuillmarkError`, carrying a non-empty `.diagnostics`
+A Quillmark refusal raises `QuillmarkError`, carrying a non-empty `.diagnostics`
 list of `Diagnostic` objects, the first an error. A failed Typst render also
 carries the quill's load warnings after its errors, so read each entry's
 `severity`. An argument the binding cannot read at all — a

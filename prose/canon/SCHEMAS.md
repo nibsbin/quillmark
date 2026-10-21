@@ -855,7 +855,7 @@ It is not a `datetime` value.
 Core never reads a clock. The date is a required input to the compile,
 supplied by the host at every door that turns a document into plate data:
 `compile_data` / `compile_checked`, `Quill::resolve` / `reader.resolve`, and
-`Quillmark::open` / `Quillmark::render`. A `today` cell and a Typst plate's
+`Engine::open` / `Engine::render`. A `today` cell and a Typst plate's
 `datetime.today()` both render it. A session keeps the date it was opened with
 for every `update`.
 

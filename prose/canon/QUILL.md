@@ -176,7 +176,7 @@ Construction:
 The two differ in error shape: the pure constructor hands back the raw
 `Vec<Diagnostic>` and bindings map it at the call site, while the loader wraps
 it in `RenderError`. Either way the `Quill` carries no backend: rendering goes
-through the `Quillmark` engine (`engine.render` / `engine.open`).
+through the `Engine` (`engine.render` / `engine.open`).
 
 Advisory diagnostics ride the loaded quill rather than the constructor's return
 value, so both doors keep them and a host reads them when it likes:

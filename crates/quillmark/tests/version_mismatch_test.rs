@@ -9,7 +9,7 @@ use tempfile::TempDir;
 mod common;
 
 #[cfg(feature = "typst")]
-use quillmark::{OutputFormat, Quillmark, RenderOptions};
+use quillmark::{Engine, OutputFormat, RenderOptions};
 
 fn make_quill(temp_dir: &TempDir, version: &str) -> std::path::PathBuf {
     let quill_path = temp_dir.path().join("test_quill");
@@ -86,7 +86,7 @@ fn update_rechecks_the_reference_against_the_sessions_quill() {
     let temp_dir = TempDir::new().unwrap();
     let quill = quillmark::quill_from_path(make_quill(&temp_dir, "3.0.0")).expect("from_path failed");
 
-    let engine = Quillmark::new();
+    let engine = Engine::new();
     let err = engine
         .render(&quill, &doc("other_quill@3.0"), common::test_date(), &RenderOptions::default())
         .expect_err("render must refuse another quill's document");

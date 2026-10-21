@@ -4,7 +4,7 @@
 
 #![cfg(feature = "typst")]
 
-use quillmark::{CalendarDate, Document, OutputFormat, Quillmark, RenderOptions};
+use quillmark::{CalendarDate, Document, Engine, OutputFormat, RenderOptions};
 use std::fs;
 use tempfile::TempDir;
 
@@ -56,7 +56,7 @@ fn the_field_and_the_plate_read_the_supplied_date() {
 "#,
     );
     let today: CalendarDate = "2026-03-14".parse().unwrap();
-    let mut session = Quillmark::new()
+    let mut session = Engine::new()
         .open(&quill, &doc(""), today)
         .expect("the plate saw the supplied date");
     session.render(&svg()).expect("renders");

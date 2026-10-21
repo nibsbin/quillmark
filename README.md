@@ -61,11 +61,11 @@ cargo add quillmark
 ## Quick Start (Rust)
 
 ```rust
-use quillmark::{quill_from_path, CalendarDate, OutputFormat, Quillmark, RenderOptions};
+use quillmark::{quill_from_path, CalendarDate, Engine, OutputFormat, RenderOptions};
 
 // A `Quill` is declarative data: no engine needed to load it.
 let quill = quill_from_path("path/to/quill")?;
-let engine = Quillmark::new();
+let engine = Engine::new();
 
 let markdown = r#"~~~
 $quill: my_quill

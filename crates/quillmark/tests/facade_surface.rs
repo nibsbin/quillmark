@@ -106,10 +106,10 @@ fn a_render_date_refusal_spells_through_the_facade() {
 #[test]
 fn preview_regions_spell_through_the_facade() {
     use quillmark::{
-        ContentHit, FieldCoverage, HitGranularity, LiveSession, Quillmark, RenderedRegion,
+        ContentHit, Engine, FieldCoverage, HitGranularity, LiveSession, RenderedRegion,
     };
 
-    let engine = Quillmark::new();
+    let engine = Engine::new();
     let quill = quillmark::quill_from_path(quillmark_fixtures::quills_path("usaf_memo"))
         .expect("usaf_memo should load");
     let doc = quill.seed_document();
@@ -125,12 +125,12 @@ fn preview_regions_spell_through_the_facade() {
     let _: Vec<FieldCoverage> = session.coverage();
 }
 
-/// A server holds one `Quillmark` and renders on many threads.
+/// A server holds one `Engine` and renders on many threads.
 #[test]
 fn engine_and_inputs_are_send_and_sync() {
     fn assert_send_sync<T: Send + Sync>() {}
 
-    assert_send_sync::<quillmark::Quillmark>();
+    assert_send_sync::<quillmark::Engine>();
     assert_send_sync::<Quill>();
     assert_send_sync::<Document>();
 }

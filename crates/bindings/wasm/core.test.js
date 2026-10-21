@@ -36,7 +36,7 @@ main:
 describe('@quillmark/wasm/core surface', () => {
   it('loads a quill with no engine and carries no render API', () => {
     // The engine and session live only in the render build.
-    expect(core.Quillmark).toBeUndefined()
+    expect(core.Engine).toBeUndefined()
     expect(core.LiveSession).toBeUndefined()
     const quill = Quill.fromTree(makeCoreQuill())
     expect(quill.backendId).toBe('typst')

@@ -2,7 +2,7 @@
 """Example demonstrating the quillmark-python Quill render API."""
 
 from pathlib import Path
-from quillmark import Quillmark, Quill, Document, OutputFormat
+from quillmark import Engine, Quill, Document, OutputFormat
 
 
 def main():
@@ -24,7 +24,7 @@ def main():
 
     print("=== Quillmark Python API Demo ===\n")
 
-    engine = Quillmark()
+    engine = Engine()
     quill = Quill.from_path(str(taro_dir))
 
     markdown = """~~~

@@ -17,10 +17,10 @@ __all__ = [
     "Artifact",
     "Diagnostic",
     "Document",
+    "Engine",
     "Location",
     "OutputFormat",
     "Quill",
-    "Quillmark",
     "QuillmarkError",
     "Reader",
     "RenderResult",
@@ -216,7 +216,7 @@ class Reader:
     def body_markdown(self, card: int | None = None) -> str: ...
 
 @final
-class Quillmark:
+class Engine:
     def __init__(self) -> None: ...
     def render(
         self,

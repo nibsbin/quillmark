@@ -195,7 +195,7 @@ families:
   whatever their class because no render reads `$seed`. Beside them it
   returns the `backend::declined_construct` warnings a render raises.
   The render gate consults only the fatal set. A one-shot render
-  (`Quillmark::render`) carries every one of these warnings on
+  (`Engine::render`) carries every one of these warnings on
   `RenderResult.warnings`, the declines among the compile's and the rest
   ahead of them. A
   session carries none: its warnings are its current compile's, so its editor

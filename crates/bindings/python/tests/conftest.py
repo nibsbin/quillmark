@@ -2,7 +2,7 @@ from contextlib import contextmanager
 from pathlib import Path
 import pytest
 
-from quillmark import Quill, Quillmark, QuillmarkError
+from quillmark import Engine, Quill, QuillmarkError
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
 RESOURCES_PATH = WORKSPACE_ROOT / "crates" / "fixtures" / "resources"
@@ -91,7 +91,7 @@ def taro_quill_dir():
 
 @pytest.fixture
 def engine():
-    return Quillmark()
+    return Engine()
 
 
 TARO_MARKDOWN = '''~~~card-yaml

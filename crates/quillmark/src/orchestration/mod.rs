@@ -4,4 +4,4 @@
 
 mod engine;
 
-pub use engine::Quillmark;
+pub use engine::Engine;

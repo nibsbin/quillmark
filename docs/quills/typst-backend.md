@@ -440,8 +440,8 @@ PDF renders as a single artifact. SVG and PNG render one artifact per page.
 Python binding (rendering lives on the engine, not the quill):
 
 ```python
-from quillmark import OutputFormat, Quillmark
-engine = Quillmark()
+from quillmark import Engine, OutputFormat
+engine = Engine()
 result = engine.render(quill, doc, OutputFormat.PDF)   # or .SVG, .PNG
 ```
 

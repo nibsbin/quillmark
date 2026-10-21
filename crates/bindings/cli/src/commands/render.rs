@@ -3,7 +3,7 @@ use crate::errors::{CliError, Result};
 use crate::output::{derive_output_path, page_output_path, write_file, write_stdout};
 use clap::Parser;
 use quillmark::{
-    CalendarDate, Diagnostic, Document, OutputFormat, Quill, Quillmark, RenderError,
+    CalendarDate, Diagnostic, Document, Engine, OutputFormat, Quill, RenderError,
     RenderOptions, RenderResult, Severity,
 };
 use std::path::{Path, PathBuf};
@@ -169,7 +169,7 @@ fn render(
         })?;
     }
 
-    Ok(Quillmark::new().render(quill, parsed, today, options)?)
+    Ok(Engine::new().render(quill, parsed, today, options)?)
 }
 
 /// An `-o` extension that names a format is a second statement of it: it

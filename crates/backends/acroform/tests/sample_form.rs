@@ -3,7 +3,7 @@
 //! `/V`, which a synthesizing viewer renders from.
 
 use lopdf::Document as PdfDoc;
-use quillmark::{Document, OutputFormat, Quillmark, RenderOptions};
+use quillmark::{Document, Engine, OutputFormat, RenderOptions};
 
 // `headline` is inline richtext, `bio` block richtext.
 const FILLED: &str = "~~~\n\
@@ -26,7 +26,7 @@ fn quill() -> quillmark::Quill {
 
 fn open_session(markdown: &str) -> quillmark::LiveSession {
     let doc = Document::parse(markdown).expect("parse markdown").document;
-    Quillmark::new().open(&quill(), &doc, common::test_date()).expect("open ok")
+    Engine::new().open(&quill(), &doc, common::test_date()).expect("open ok")
 }
 
 /// The rendered PDF and its AcroForm dict.
@@ -39,7 +39,7 @@ fn acroform(result: &quillmark::RenderResult) -> (PdfDoc, lopdf::Dictionary) {
 
 fn render(markdown: &str) -> (PdfDoc, lopdf::Dictionary) {
     let doc = Document::parse(markdown).expect("parse markdown").document;
-    let result = Quillmark::new()
+    let result = Engine::new()
         .render(
             &quill(),
             &doc,

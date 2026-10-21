@@ -13,11 +13,11 @@ use std::sync::Arc;
 /// backend-dependent surface, resolving a [`Quill`]'s *declared* backend at
 /// render time. Quill loading needs no engine — see [`Quill::from_tree`] or
 /// [`quill_from_path`](crate::quill_from_path).
-pub struct Quillmark {
+pub struct Engine {
     backends: HashMap<String, Arc<dyn Backend>>,
 }
 
-impl Quillmark {
+impl Engine {
     /// An engine with a backend registered per enabled cargo feature.
     pub fn new() -> Self {
         // `mut` is unused when no backend features are enabled (e.g. a
@@ -121,7 +121,7 @@ impl Quillmark {
     }
 }
 
-impl Default for Quillmark {
+impl Default for Engine {
     fn default() -> Self {
         Self::new()
     }

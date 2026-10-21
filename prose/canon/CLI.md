@@ -17,7 +17,7 @@ them.
 ## Contract
 
 - **`render`, `validate` and `check --regions` need the engine.** Each
-  constructs `Quillmark` to resolve the quill's backend; `check` / `schema` /
+  constructs an `Engine` to resolve the quill's backend; `check` / `schema` /
   `blueprint` / `info` load the quill with `quillmark::quill_from_path` and read
   the pure config-read operations a `Quill` already carries
   ([QUILL.md](QUILL.md)). `validate --no-render` compiles nothing: it reads

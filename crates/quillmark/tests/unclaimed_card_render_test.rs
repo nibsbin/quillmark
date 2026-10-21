@@ -5,14 +5,14 @@
 
 #![cfg(feature = "typst")]
 
-use quillmark::{Diagnostic, Document, OutputFormat, Quillmark, RenderOptions, Severity};
+use quillmark::{Diagnostic, Document, Engine, OutputFormat, RenderOptions, Severity};
 use quillmark_fixtures::quills_path;
 
 mod common;
 
 #[test]
 fn unclaimed_cards_render_and_warn() {
-    let engine = Quillmark::new();
+    let engine = Engine::new();
     let quill = quillmark::quill_from_path(quills_path("taro")).expect("taro loads");
     let seeded = quill.seed_document().to_markdown();
     let markdown = format!(

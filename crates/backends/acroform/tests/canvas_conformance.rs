@@ -9,7 +9,7 @@
 //! top-left device pixels, so locating a field box needs the canonical
 //! `y_canvas = (pageHeightPt - y_pdf) × scale` flip.
 
-use quillmark::{Document, FileTreeNode, Quill, Quillmark};
+use quillmark::{Document, Engine, FileTreeNode, Quill};
 use quillmark_pdf::testkit::BasePdf;
 
 mod common;
@@ -32,7 +32,7 @@ fn open() -> quillmark_core::session::LiveSession {
 fn open_markdown(markdown: &str) -> quillmark_core::session::LiveSession {
     let quill = quillmark::quill_from_path(quillmark_fixtures::quills_path("sample_form"))
         .expect("load sample_form quill");
-    let engine = Quillmark::new();
+    let engine = Engine::new();
     let doc = Document::parse(markdown).expect("parse markdown").document;
     engine.open(&quill, &doc, common::test_date()).expect("open session")
 }
@@ -220,7 +220,7 @@ fields:
 
     let quill = Quill::from_tree(tree).expect("load patched quill");
     let doc = Document::parse(FILLED).expect("parse markdown").document;
-    let session = Quillmark::new().open(&quill, &doc, common::test_date()).expect("open session");
+    let session = Engine::new().open(&quill, &doc, common::test_date()).expect("open session");
 
     let scale: f32 = 2.0;
     let (width_pt, height_pt) = session.page_size_pt(0).expect("page 0 size");

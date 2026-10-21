@@ -556,7 +556,7 @@ export class Engine {
 
 		let engine = this.#engines.get(load);
 		if (!engine) {
-			engine = new mod.Quillmark();
+			engine = new mod.Engine();
 			this.#engines.set(load, engine);
 		}
 		return { mod, engine };

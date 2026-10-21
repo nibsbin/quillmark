@@ -1,7 +1,7 @@
 //! Which file an acroform quill's field spec is read from, and how a bad one
 //! is reported.
 
-use quillmark::{Document, OutputFormat, Quillmark, RenderError, RenderOptions};
+use quillmark::{Document, Engine, OutputFormat, RenderError, RenderOptions};
 use quillmark_core::quill::{FileTreeNode, Quill};
 
 mod common;
@@ -38,7 +38,7 @@ fn fixture_as_json() -> String {
 fn open(tree: FileTreeNode) -> Result<quillmark::LiveSession, RenderError> {
     let quill = Quill::from_tree(tree).expect("Quill.yaml loads");
     let doc = Document::parse(DOC).expect("parse markdown").document;
-    Quillmark::new().open(&quill, &doc, common::test_date())
+    Engine::new().open(&quill, &doc, common::test_date())
 }
 
 fn open_err(tree: FileTreeNode) -> quillmark::Diagnostic {
@@ -128,7 +128,7 @@ fn a_box_per_option_checks_the_one_the_document_chose() {
     let quill = Quill::from_tree(tree).expect("Quill.yaml loads");
     let markdown = DOC.replace("full_name: Ada Lovelace\n", "favorite_color: green\n");
     let doc = Document::parse(&markdown).expect("parse markdown").document;
-    let result = Quillmark::new()
+    let result = Engine::new()
         .render(
             &quill,
             &doc,

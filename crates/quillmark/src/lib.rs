@@ -7,10 +7,10 @@
 //! document against the quill that will render it.
 //!
 //! ```no_run
-//! use quillmark::{quill_from_path, CalendarDate, OutputFormat, Quillmark, RenderOptions};
+//! use quillmark::{quill_from_path, CalendarDate, Engine, OutputFormat, RenderOptions};
 //!
 //! let quill = quill_from_path("path/to/quill").unwrap();
-//! let engine = Quillmark::new();
+//! let engine = Engine::new();
 //! let today = CalendarDate::new(2026, 3, 14).unwrap(); // the host's local date
 //!
 //! let doc = quill.parse("~~~\n$quill: my_quill\n$kind: main\ntitle: Hello\n~~~\n\n# Hello World").unwrap().document;
@@ -64,7 +64,7 @@ mod load;
 mod orchestration;
 
 pub use load::{quill_from_path, tree_from_path};
-pub use orchestration::Quillmark;
+pub use orchestration::Engine;
 
 #[cfg(feature = "typst")]
 pub use quillmark_typst::{

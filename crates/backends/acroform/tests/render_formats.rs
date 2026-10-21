@@ -2,7 +2,7 @@
 //! emitted whole. Canvas paint (`render_rgba`) is a separate seam, covered by
 //! `canvas_conformance.rs`.
 
-use quillmark::{Document, OutputFormat, Quill, Quillmark, RenderOptions};
+use quillmark::{Document, Engine, OutputFormat, Quill, RenderOptions};
 use quillmark_core::error::RenderError;
 
 mod common;
@@ -24,7 +24,7 @@ fn sample_form() -> Quill {
 
 fn render(opts: &RenderOptions) -> Result<quillmark::RenderResult, RenderError> {
     let doc = Document::parse(FILLED).expect("parse markdown").document;
-    Quillmark::new().render(&sample_form(), &doc, common::test_date(), opts)
+    Engine::new().render(&sample_form(), &doc, common::test_date(), opts)
 }
 
 fn refusal_code(opts: &RenderOptions) -> String {
@@ -37,7 +37,7 @@ fn refusal_code(opts: &RenderOptions) -> String {
 
 #[test]
 fn pdf_is_the_only_output_format() {
-    let engine = Quillmark::new();
+    let engine = Engine::new();
     assert_eq!(
         engine
             .supported_formats(&sample_form())

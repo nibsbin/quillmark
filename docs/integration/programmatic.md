@@ -17,9 +17,9 @@ Markdown authoring, the [blueprint](../quills/blueprint.md) (for LLMs), and thes
 === "Python"
 
     ```python
-    from quillmark import Document, Quill, Quillmark, OutputFormat
+    from quillmark import Document, Engine, Quill, OutputFormat
 
-    engine = Quillmark()
+    engine = Engine()
     quill = Quill.from_path("invoice-quill")
 
     doc = Document("invoice")                       # blank canvas

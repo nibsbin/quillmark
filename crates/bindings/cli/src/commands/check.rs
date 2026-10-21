@@ -2,7 +2,7 @@ use crate::commands::load_quill;
 use crate::errors::{CliError, Result};
 use clap::Parser;
 use quillmark::{
-    Diagnostic, Document, FieldCoverage, Quill, Quillmark, RenderOptions, Severity, DOCUMENT_FILE,
+    Diagnostic, Document, Engine, FieldCoverage, Quill, RenderOptions, Severity, DOCUMENT_FILE,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -119,7 +119,7 @@ fn coverage(
 ) -> std::result::Result<(Vec<FieldCoverage>, Vec<Diagnostic>), Vec<Diagnostic>> {
     let today = super::render_date(None);
     let options = RenderOptions::default().with_regions(true);
-    let rendered = Quillmark::new()
+    let rendered = Engine::new()
         .render(quill, document, today, &options)
         .map_err(|e| e.into_diagnostics())?;
     let data = quill
