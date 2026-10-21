@@ -120,7 +120,7 @@ families:
 - **`quill::*` load warnings**: the second half of
   `QuillConfig::from_yaml_with_warnings`, carried on the loaded quill and read
   off `Quill::warnings()`, so every binding host reaches them. A warning here
-  never fails the load. Two codes:
+  never fails the load. Four codes:
   - `quill::bodiless_card_kind`: a card kind declaring `body.enabled: false`,
     which is the loader's one view of a row in card costume
     ([CARDS.md](CARDS.md#card-row-matrix)). It advises where a load error
@@ -128,6 +128,11 @@ families:
   - `quill::deprecated_groups`: a card placing fields with the legacy
     `ui.group`, which a top-level `object` replaces, nesting the fields under
     its id ([SCHEMAS.md](SCHEMAS.md#grouping)).
+  - `quill::deprecated_flat`: a field asking `ui.layout: flat`, which no
+    editor honors ([SCHEMAS.md](SCHEMAS.md#schema-emission)).
+  - `quill::field_after_object`: a card-level field outside every group
+    declared after one, which draws above the groups instead
+    ([SCHEMAS.md](SCHEMAS.md#grouping)).
 - **Parse warnings**: the `warnings` on the `Parsed` that `Document::parse`
   returns (e.g. a `~~~` opener missing its blank line), which both bindings
   keep on `doc.warnings` beside the `conform::*` set `Quill::parse` appends.

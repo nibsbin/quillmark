@@ -17,10 +17,8 @@ pub enum FieldLayout {
     /// (`quill::invalid_ui`), and a contract that every column is a
     /// [`FieldType::is_leaf`] type (`quill::table_column_not_leaf`).
     Table,
-    /// A typed dictionary drawn without a frame of its own: its properties stand
-    /// at the depth of the field list around it. Valid only on an `object` that is
-    /// not an array's element (`quill::invalid_ui`), whose row has no field list
-    /// around it.
+    /// Deprecated (`quill::deprecated_flat`): an editor honors it nowhere. Valid
+    /// only on an `object` that is not an array's element (`quill::invalid_ui`).
     Flat,
 }
 

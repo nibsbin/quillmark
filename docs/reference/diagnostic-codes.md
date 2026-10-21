@@ -58,6 +58,7 @@ Loading a quill: `Quill.yaml`, its files, its seeds.
 - `quill::default_over_length`
 - `quill::default_over_max`
 - `quill::default_type_mismatch`
+- `quill::deprecated_flat`
 - `quill::deprecated_groups`
 - `quill::deprecated_license`
 - `quill::description_multiline`
@@ -65,6 +66,7 @@ Loading a quill: `Quill.yaml`, its files, its seeds.
 - `quill::empty_description`
 - `quill::enum_blank_member`
 - `quill::example_reference`
+- `quill::field_after_object`
 - `quill::field_parse_error`
 - `quill::format_literal_reserved_char`
 - `quill::implicit_group`

@@ -770,7 +770,7 @@ addressing:
 ~~~
 ```
 
-So moving a field between groups is an address change, a MINOR bump like a rename. Fields beside the objects stay ungrouped. Nothing requires grouping: a flat questionnaire stays a flat `fields:` map. A card has no `sections:` key; one is `quill::invalid_card_schema`, its hint naming this form.
+So moving a field between groups is an address change, a MINOR bump like a rename. Fields beside the objects stay ungrouped, and an editor draws them above every group: one declared after a top-level `object` warns `quill::field_after_object`, since the order it was declared in is not the order it draws in. Nothing requires grouping: a flat questionnaire stays a flat `fields:` map. A card has no `sections:` key; one is `quill::invalid_card_schema`, its hint naming this form.
 
 #### Legacy `ui.group`
 
@@ -792,7 +792,9 @@ main:
       ui: { group: letterhead }
 ```
 
-A group here is a frame, not data: the document stores `memo_for:` and a plate reads `data.memo_for`. It warns `quill::deprecated_groups` and loads with ungrouped fields first, then each group's fields in registry order, whatever order they were declared in. An object alone in its group is drawn flat, the group being its frame (see [`layout`](#layout)). To rewrite it as [Grouping](#grouping), make each group an `object` keyed by its id, in registry order, carrying the registry `title:`; move each grouped field into its `properties`; and drop `ui.group` and `ui.groups`. Documents then nest each group's keys under its id, and plates gain the one path segment.
+A group here is a frame, not data: the document stores `memo_for:` and a plate reads `data.memo_for`. It warns `quill::deprecated_groups` and loads with ungrouped fields first, then each group's fields in registry order, whatever order they were declared in. To rewrite it as [Grouping](#grouping), make each group an `object` keyed by its id, in registry order, carrying the registry `title:`; move each grouped field into its `properties`; and drop `ui.group` and `ui.groups`.
+
+A group holding one `object` and nothing else needs no wrapper: that object carries the group's `title:` and stands at the top level itself, its value and addresses unchanged. Documents then nest each group's keys under its id, and plates gain the one path segment.
 
 The registry's own checks still apply to the legacy spelling: a reference the registry does not declare (`quill::unknown_group`), a reference with no registry (`quill::implicit_group`), a repeated id (`quill::duplicate_group`), an id that is not snake_case (`quill::invalid_group_id`), and a `ui.group` below card level (`quill::nested_group_not_supported`). The registry is also read from `quill.ui` when `main.ui` is absent.
 
@@ -901,49 +903,11 @@ all; the contract settled that at load. Nothing else reads the key: the plate,
 document validation and the blueprint are all deliberately inert on it, and `schema()`
 echoes it verbatim for the editor to find.
 
-`flat` is valid only on an `object`, and not on an array's element. It asks the
-editor to draw the object without a frame of its own: its properties stand at
-the depth of the fields around it rather than one step in.
-
-```yaml
-main:
-  fields:
-    contact:
-      type: object
-      ui:
-        layout: flat        # its properties join the fields around it
-      properties:
-        phone: { type: text }
-        email: { type: text }
-    notes:
-      type: text
-```
-
-Among other fields, a flat object keeps its label. An object alone in a legacy
-[`ui.group`](#legacy-uigroup) is drawn flat without asking: the group is already
-its frame, and one drawn inside the group would frame it twice. The loader writes
-`layout: flat` on it, and the editor lets the group header name it and carry its
-`description`:
-
-```yaml
-main:
-  ui:
-    groups:
-      qualifications: { title: "Qualifications & experience" }
-  fields:
-    qualifications:
-      type: object
-      description: Tick what you hold.
-      ui: { group: qualifications }
-      properties:
-        command:    { type: matrix, members: { flight_cc: Flight CC } }
-        operations: { type: matrix, members: { dco: DCO } }
-```
-
-The value, its addresses and the blueprint are unchanged:
-`qualifications.command.flight_cc` is still where the tick lives. An element of an array is a row of its own with
-nothing around it to join, so `flat` there, or on anything but an `object`, is
-`quill::invalid_ui`.
+`flat` is deprecated and warns `quill::deprecated_flat`, naming the field: an
+editor no longer honors it. A card's top-level `object` is already a panel whose
+properties stand flat inside it, and a nested one draws as a subform. It still
+loads where it loaded, an `object` other than an array's element, and is
+`quill::invalid_ui` anywhere else.
 
 ### A row's label
 
