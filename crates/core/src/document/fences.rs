@@ -3,6 +3,12 @@
 //! A column-zero `~~~` fence (three or more tildes) opens a card-yaml block
 //! whatever its info string. Openers inside an ordinary CommonMark fenced code
 //! block are literal content, so a backtick fence writes one in prose.
+//!
+//! Ordinary fences are read inside CommonMark containers, list items and block
+//! quotes: a fence in a container closes where the container does, so a
+//! column-zero line, which ends every container, is never shielded by one.
+
+use std::borrow::Cow;
 
 use crate::error::ParseError;
 use quillmark_content::normalize::fence_opener;
@@ -90,6 +96,137 @@ fn card_yaml_opener_run(line: &str) -> Option<usize> {
     }
 }
 
+/// `text` with each tab widened to the next multiple-of-four column, the tab
+/// stop CommonMark measures indentation by.
+fn expand_tabs(text: &str) -> Cow<'_, str> {
+    if !text.contains('\t') {
+        return Cow::Borrowed(text);
+    }
+    let mut out = String::with_capacity(text.len() + 8);
+    let mut col = 0;
+    for c in text.chars() {
+        if c == '\t' {
+            let width = 4 - col % 4;
+            out.extend(std::iter::repeat_n(' ', width));
+            col += width;
+        } else {
+            out.push(c);
+            col += 1;
+        }
+    }
+    Cow::Owned(out)
+}
+
+fn leading_spaces(text: &str) -> usize {
+    text.bytes().take_while(|&b| b == b' ').count()
+}
+
+/// A list item opening `rest`.
+struct ListMarker {
+    /// The offset of its content column.
+    width: usize,
+    /// Whether it may interrupt a paragraph its line continues (CommonMark
+    /// §5.2: not empty, and a bullet or an ordered item starting at 1).
+    interrupts: bool,
+}
+
+fn list_marker(rest: &str) -> Option<ListMarker> {
+    let bytes = rest.as_bytes();
+    let at = leading_spaces(rest);
+    if at > 3 {
+        return None;
+    }
+    let (end, starts_at_one) = match bytes.get(at)? {
+        b'-' | b'+' | b'*' => (at + 1, true),
+        b'0'..=b'9' => {
+            let digits = bytes[at..].iter().take_while(|b| b.is_ascii_digit()).count();
+            let end = at + digits;
+            if digits > 9 || !matches!(bytes.get(end), Some(b'.' | b')')) {
+                return None;
+            }
+            (end + 1, rest[at..end].trim_start_matches('0') == "1")
+        }
+        _ => return None,
+    };
+    let gap = bytes[end..].iter().take_while(|&&b| b == b' ').count();
+    if end + gap == bytes.len() {
+        return Some(ListMarker { width: end + 1, interrupts: false });
+    }
+    if gap == 0 {
+        return None;
+    }
+    let width = if gap > 4 { end + 1 } else { end + gap };
+    Some(ListMarker { width, interrupts: starts_at_one })
+}
+
+fn is_thematic_break(rest: &str) -> bool {
+    let t = rest.trim_start_matches(' ');
+    let Some(c) = t.bytes().next().filter(|c| matches!(c, b'-' | b'*' | b'_')) else {
+        return false;
+    };
+    leading_spaces(rest) <= 3
+        && t.bytes().all(|b| b == c || b == b' ' || b == b'\t')
+        && t.bytes().filter(|&b| b == c).count() >= 3
+}
+
+/// A `=` or `-` run, which closes the paragraph above it as a setext heading.
+fn is_setext_underline(rest: &str) -> bool {
+    let t = rest.trim_matches(' ');
+    leading_spaces(rest) <= 3
+        && t.bytes().next().is_some_and(|c| (c == b'=' || c == b'-') && t.bytes().all(|b| b == c))
+}
+
+fn is_atx_heading(rest: &str) -> bool {
+    let t = rest.trim_start_matches(' ');
+    let hashes = t.bytes().take_while(|&b| b == b'#').count();
+    leading_spaces(rest) <= 3
+        && (1..=6).contains(&hashes)
+        && matches!(t.as_bytes().get(hashes), None | Some(b' ' | b'\t'))
+}
+
+/// A CommonMark container block: a list item, by its content width, or a
+/// block quote.
+enum Container {
+    Item(usize),
+    Quote,
+}
+
+/// The content of a block-quote line `rest`, past its `>` and one space.
+fn quote_content(rest: &str) -> Option<&str> {
+    let at = leading_spaces(rest);
+    let after = rest.get(at..).filter(|_| at <= 3)?.strip_prefix('>')?;
+    Some(after.strip_prefix(' ').unwrap_or(after))
+}
+
+/// How many of the open `containers` `line` continues, outermost first, and
+/// the line past them. A blank line continues a list item and ends a quote.
+fn continued<'a>(containers: &[Container], line: &'a str) -> (usize, &'a str) {
+    let mut rest = line;
+    for (depth, container) in containers.iter().enumerate() {
+        rest = match container {
+            Container::Item(_) if rest.trim().is_empty() => "",
+            Container::Item(width) if leading_spaces(rest) >= *width => &rest[*width..],
+            Container::Quote => match quote_content(rest) {
+                Some(quoted) => quoted,
+                None => return (depth, rest),
+            },
+            Container::Item(_) => return (depth, rest),
+        };
+    }
+    (containers.len(), rest)
+}
+
+/// Whether `rest`, a line short of its containers, opens a block, so it ends
+/// them instead of continuing their paragraph lazily. Any list item does: the
+/// §5.2 restriction binds only a line that continues the paragraph's containers.
+fn opens_block(rest: &str) -> bool {
+    fence_opener(rest).is_some()
+        || is_thematic_break(rest)
+        || is_atx_heading(rest)
+        || quote_content(rest).is_some()
+        || list_marker(rest).is_some()
+}
+
 /// The first line below `opener_k` whose text `closes` accepts as the closer.
 fn closer_below(
     lines: &Lines<'_>,
@@ -174,18 +311,41 @@ pub(super) fn find_metadata_blocks(markdown: &str) -> Result<FenceScan, ParseErr
     let mut blocks: Vec<MetadataBlock> = Vec::new();
     let mut warnings: Vec<Diagnostic> = Vec::new();
     let mut unclosed_root: Option<UnclosedRoot> = None;
-    // (char, run_len, opener_line_index) of an open ordinary code fence.
-    let mut open_code_fence: Option<(u8, usize, usize)> = None;
+    // (char, run_len, container_depth, opener_line_index) of an open ordinary
+    // code fence.
+    let mut open_code_fence: Option<(u8, usize, usize, usize)> = None;
+    let mut containers: Vec<Container> = Vec::new();
+    let mut in_paragraph = false;
 
     let mut k: usize = 0;
     while k < lines.len() {
         let text = lines.line_text(k);
+        let columns = expand_tabs(text);
+        let (matched, rest) = continued(&containers, &columns);
 
         // Inside an ordinary code block: openers are literal content.
-        if let Some((ch, min, _opener)) = open_code_fence {
-            if let Some((_, _, true)) = code_fence_on_line(text, Some((ch, min))) {
-                open_code_fence = None;
+        if let Some((ch, min, depth, _opener)) = open_code_fence {
+            if matched == depth {
+                if let Some((_, _, true)) = code_fence_on_line(rest, Some((ch, min))) {
+                    open_code_fence = None;
+                }
+                k += 1;
+                continue;
             }
+            open_code_fence = None;
+        }
+
+        let blank = rest.trim().is_empty();
+        if matched < containers.len() {
+            if in_paragraph && !blank && !opens_block(rest) {
+                k += 1;
+                continue;
+            }
+            containers.truncate(matched);
+            in_paragraph = false;
+        }
+        if blank {
+            in_paragraph = false;
             k += 1;
             continue;
         }
@@ -205,7 +365,7 @@ pub(super) fn find_metadata_blocks(markdown: &str) -> Result<FenceScan, ParseErr
                     )
                     .with_code("parse::card_fence_missing_blank".to_string()),
                 );
-                open_code_fence = Some((b'~', open_run, k));
+                open_code_fence = Some((b'~', open_run, 0, k));
                 k += 1;
                 continue;
             }
@@ -233,7 +393,7 @@ pub(super) fn find_metadata_blocks(markdown: &str) -> Result<FenceScan, ParseErr
                         last_field: last_field_key(&lines, k),
                     });
                 }
-                open_code_fence = Some((b'~', open_run, k));
+                open_code_fence = Some((b'~', open_run, 0, k));
                 k += 1;
                 continue;
             };
@@ -247,14 +407,44 @@ pub(super) fn find_metadata_blocks(markdown: &str) -> Result<FenceScan, ParseErr
                 blocks.len(),
             )?;
             blocks.push(block);
+            containers.clear();
+            in_paragraph = false;
             k = cj + 1;
             continue;
         }
 
-        // Any other fence opener is an ordinary fenced code block.
-        if let Some((ch, run_len, _)) = code_fence_on_line(text, None) {
-            open_code_fence = Some((ch, run_len, k));
-        }
+        // Any other fence opener is an ordinary fenced code block, possibly
+        // behind container markers opened on the same line.
+        let mut rest = rest;
+        let mut interrupting = in_paragraph;
+        in_paragraph = loop {
+            if let Some((ch, run_len, _)) = code_fence_on_line(rest, None) {
+                open_code_fence = Some((ch, run_len, containers.len(), k));
+                break false;
+            }
+            if rest.trim().is_empty() || is_thematic_break(rest) || is_atx_heading(rest) {
+                break false;
+            }
+            if leading_spaces(rest) >= 4 {
+                break interrupting;
+            }
+            if interrupting && is_setext_underline(rest) {
+                break false;
+            }
+            if let Some(quoted) = quote_content(rest) {
+                containers.push(Container::Quote);
+                rest = quoted;
+            } else {
+                match list_marker(rest) {
+                    Some(marker) if marker.interrupts || !interrupting => {
+                        containers.push(Container::Item(marker.width));
+                        rest = rest.get(marker.width..).unwrap_or("");
+                    }
+                    _ => break true,
+                }
+            }
+            interrupting = false;
+        };
         k += 1;
     }
 
@@ -269,7 +459,7 @@ pub(super) fn find_metadata_blocks(markdown: &str) -> Result<FenceScan, ParseErr
 
     // Card-yaml blocks below an unclosed opener were silently shielded, which
     // is almost never intended.
-    if let Some((_, _, opener_line)) = open_code_fence {
+    if let Some((_, _, _, opener_line)) = open_code_fence {
         warnings.push(
             Diagnostic::new(
                 Severity::Warning,
