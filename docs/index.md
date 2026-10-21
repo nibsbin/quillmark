@@ -5,7 +5,7 @@
 [![npm](https://img.shields.io/npm/v/@quillmark/wasm.svg?color=CB3837)](https://www.npmjs.com/package/@quillmark/wasm)
 [![Documentation](https://docs.rs/quillmark/badge.svg)](https://docs.rs/quillmark)
 
-Quillmark renders Markdown into typeset PDF, SVG, and PNG documents. A **quill** defines the format: a schema that validates each document's fields and fills their defaults, and a plate that lays out the page (a Typst template, or a field map over an existing PDF form). Authors write only the content.
+Quillmark is a schema-driven document framework. You define a document format once, as a **quill**: a schema for its fields and a layout for its pages, either a Typst plate or an existing PDF form. Authors then write plain Markdown, and Quillmark validates each document against its quill and renders it to PDF, SVG, or PNG.
 
 <div class="grid" markdown>
 
@@ -30,10 +30,10 @@ Quillmark renders Markdown into typeset PDF, SVG, and PNG documents. A **quill**
 
 ## Choose your path
 
-- **Writing documents?** You write Markdown documents that target a Quill format.  
+- **Writing documents?** You write Markdown documents in the document format a quill defines.  
   → [Markdown Syntax](authoring/markdown-syntax.md)
 
-- **Building quills?** You create Quill formats that control rendering.  
+- **Building quills?** You create quills, the document formats that control rendering.  
   → [Creating Quills](quills/creating-quills.md)
 
 - **Integrating into an app?** You use Quillmark via Python or JavaScript.  

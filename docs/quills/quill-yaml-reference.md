@@ -7,7 +7,7 @@ Complete reference for authoring `Quill.yaml` configuration files. For a hands-o
 A `Quill.yaml` has these top-level sections:
 
 ```yaml
-quill:        # Required: format metadata
+quill:        # Required: quill metadata
   ...
 
 main:         # Optional, main entry-point card: field schemas and optional title/ui/body
@@ -32,17 +32,17 @@ Root-level `fields:` is not supported; define the main document's field schemas 
 
 ## `quill` Section
 
-Every Quill.yaml must have a `quill` section with format metadata.
+Every Quill.yaml must have a `quill` section with the quill's metadata.
 
 `quill.name` must be `snake_case` (`^[a-z][a-z0-9_]*$`), at most 64 characters.
 
 | Key              | Type   | Required | Description |
 |------------------|--------|----------|-------------|
-| `name`           | string | yes      | Unique identifier for the Quill |
+| `name`           | string | yes      | Unique identifier for the quill |
 | `backend`        | string | yes      | Rendering backend (e.g. `typst`) |
 | `description`    | string | yes      | Human-readable description of the quill package, for a gallery or a quill picker (non-empty). The blueprint never prints it: the root card's label is `main`'s own `title` and `description`. One line: a line break fails the load with `quill::description_multiline`. |
 | `version`        | string | yes      | `MAJOR.MINOR.PATCH`, bumped by what the change costs a stored document ([Quill Versioning](versioning.md)) |
-| `author`         | string | no       | Creator of the Quill (defaults to `"Unknown"`) |
+| `author`         | string | no       | Creator of the quill (defaults to `"Unknown"`) |
 | `license`        | string | no       | The quill's license, as an SPDX license expression |
 | `homepage`       | string | no       | Where the quill's source or docs live, as an absolute `http` or `https` URL |
 | `ui`             | object | no       | Document-level UI metadata |

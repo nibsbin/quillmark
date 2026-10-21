@@ -94,7 +94,7 @@ typst:
   ])
 }
 
-// The hand-authored `sample_form` fixture: a `acroform`-backend quill shipping a
+// The hand-authored `sample_form` fixture: an `acroform`-backend quill shipping a
 // stripped background (`form.pdf`) and a value-free field spec (`Form.yaml`).
 // Loaded as a tree so the canvas tests can drive the acroform backend
 // (which rasterizes its stamped PDF) exactly like a typst quill.

@@ -1,11 +1,11 @@
 # Integrating Quillmark
 
-Quillmark embeds in an app through two published bindings (**Python** (`quillmark` on PyPI) and **JavaScript/WASM** (`@quillmark/wasm` on npm)) over one core library. Rust consumers use the crates directly ([docs.rs](https://docs.rs/quillmark)).
+Quillmark embeds in an app through two published bindings (**Python** (`quillmark` on PyPI) and **JavaScript/WASM** (`@quillmark/wasm` on npm)) over one Rust library. Rust consumers use the crates directly ([docs.rs](https://docs.rs/quillmark)).
 
 Three objects carry every integration:
 
 - **Engine**: a backend registry and render dispatcher. It holds no quills; every render routes through it, and it never constructs a quill. `Engine::new()` in Rust, `Engine()` in Python, `new Engine()` in JavaScript.
-- **Quill**: portable, declarative config data (schema, plate, assets). Loaded once, rendered by any engine that registers its backend; it never renders itself.
+- **Quill**: a loaded quill. A quill is a document format: a schema for a document's fields, a layout for its pages, and the assets the layout uses. Loaded once as portable, declarative data, it renders through any engine that registers its backend, and never renders itself.
 - **Document**: the typed model of one Quillmark Markdown file (root block, body, cards). Built from Markdown, from a blank canvas, or from stored JSON.
 
 Field I/O is schema-bound: `quill.writer(doc)` writes each field by its declared type and `quill.reader(doc)` reads it back. `Document` itself is quill-free data: parse, persist, structure.

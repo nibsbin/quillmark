@@ -2,7 +2,7 @@
 //!
 //! Foundational types for the Quillmark document framework: the
 //! [`document::Document`] model and its `~~~` card-yaml blocks, the
-//! [`quill::Quill`] format bundle, the [`backend::Backend`] seam output
+//! [`quill::Quill`] document format, the [`backend::Backend`] seam output
 //! backends implement, and structured diagnostics carrying source locations.
 //!
 //! The markdown grammar is specified in

@@ -5,9 +5,9 @@
 
 ## TL;DR
 
-A `Quill` is a loaded template bundle: file tree plus parsed `Quill.yaml`
-config: tagged with its declared backend id but holding no backend and
-needing no engine. It carries the pure config-read operations (`validate`,
+A `Quill` is a loaded quill, the document format as data: its file tree plus
+its parsed `Quill.yaml` config, tagged with its declared backend id but holding
+no backend and needing no engine. It carries the pure config-read operations (`validate`,
 `schema`, `blueprint`, `seed_*`, `example_document`, `compile_data`,
 `dry_run`); rendering is the engine's job.
 

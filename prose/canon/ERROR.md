@@ -34,17 +34,17 @@ The diagnostic's `message` is the variant's `Display` rendering, so the
 `#[error]` attribute is the one place a variant's English is spelled and a Rust
 caller formatting `{err}` reads the same sentence a binding reads off `message`.
 
-**`YamlError`**: the one adapter every `serde-saphyr` error passes through. Sanitizes the message (the engine appends its own Rust API names (`from_multiple`, `DuplicateKeyPolicy`) which `yaml_hints::enrich_yaml_error` strips), derives the hint, and carries the 1-indexed line/column the engine located; `to_diagnostic(code, file)` renders all three. The emit side has no input to point at, so it carries neither position nor hint.
+**`YamlError`**: the one adapter every `serde-saphyr` error passes through. Sanitizes the message (the parser appends its own Rust API names (`from_multiple`, `DuplicateKeyPolicy`) which `yaml_hints::enrich_yaml_error` strips), derives the hint, and carries the 1-indexed line/column the parser located; `to_diagnostic(code, file)` renders all three. The emit side has no input to point at, so it carries neither position nor hint.
 
-It exists so no public signature names `serde-saphyr`. A third-party error type in a published signature chains this crate's major to that crate's, and to the choice of engine at all; the workspace pins `~1.0` and keeps the engine an implementation detail. That promise covers the message as much as the type, which is why the sanitizer is inside the adapter rather than beside it.
+It exists so no public signature names `serde-saphyr`. A third-party error type in a published signature chains this crate's major to that crate's, and to the choice of parser at all; the workspace pins `~1.0` and keeps the parser an implementation detail. That promise covers the message as much as the type, which is why the sanitizer is inside the adapter rather than beside it.
 
 Three surfaces return one directly (`value::from_yaml_str`, `QuillValue::from_yaml_str`, `QuillConfig::schema_yaml`). `value::from_yaml_str` deserializes into the caller's type, so a missing or mistyped key is located as a syntax error is. `QuillConfig::from_yaml_with_warnings` converts through it to `quill::yaml_parse_error`, and the acroform backend to `acroform::invalid_form_spec` against `Form.yaml`. The card-yaml path does not travel this way: it becomes `ParseError::YamlErrorWithLocation`, which additionally knows the enclosing block.
 
 Its `line`/`column` are document coordinates, not block-relative ones:
 
-- The engine reports a position inside the string it parsed: the fence content with its CRLF line ends read as LF, line-for-line, minus the whitespace `trim` takes off the front. The assembler translates that position onto the document.
+- The parser reports a position inside the string it parsed: the fence content with its CRLF line ends read as LF, line-for-line, minus the whitespace `trim` takes off the front. The assembler translates that position onto the document.
 - `to_diagnostic()` renders it as a `Location` against `DOCUMENT_FILE` (`input.md`). Markdown reaches core as a string, so the anchor names the input rather than a path on disk.
-- The message names the block instead of repeating a number (`YAML error in the root card-yaml block: …`, `… in card-yaml block 2: …`). The engine's own snippet inside it stays block-relative, as the engine rendered it.
+- The message names the block instead of repeating a number (`YAML error in the root card-yaml block: …`, `… in card-yaml block 2: …`). The parser's own snippet inside it stays block-relative, as the parser rendered it.
 
 **`RenderError`**: the main rendering error, a struct carrying a non-empty
 `Vec<Diagnostic>` (`RenderError::new` / `from_diag` / `coded(code, message)`
@@ -259,7 +259,7 @@ Python and WASM bindings delegate to core types:
 **WASM delivery follows the function kind, not the failure kind.** A synchronous verb throws; a promise-returning verb rejects; nothing does both.
 
 - The promise-returning surface is `init` plus the four `Engine` verbs (`render`, `open`, `load`, `supportedFormats`). A programming error reached through one of them (a handle that is not this copy's, `runtime::not_a_quill` / `runtime::not_a_document`; an unregistered backend, `engine::backend_not_found`) arrives as a rejection like any other failure.
-- A `WebAssembly.RuntimeError` from a backend build's `render`, `open`, or `LiveSession` `update` / `render` / `paint` becomes `runtime::backend_trapped`, the trap on `cause`, and so does a `RangeError` or `InternalError` for stack or memory exhaustion, the engines' report of a native stack overflow inside wasm. The trap leaves the module-scoped instance undefined; the host discards the realm.
+- A `WebAssembly.RuntimeError` from a backend build's `render`, `open`, or `LiveSession` `update` / `render` / `paint` becomes `runtime::backend_trapped`, the trap on `cause`, and so does a `RangeError` or `InternalError` for stack or memory exhaustion, the JavaScript engines' report of a native stack overflow inside wasm. The trap leaves the module-scoped instance undefined; the host discards the realm.
 - `init` is the one promise-returning export not declared `async`: its memo is returned by identity rather than re-wrapped per call. Its conflict guard therefore returns `Promise.reject(runtime::init_conflict)` where an `async` body would have converted a throw.
 - A synchronous throw from `init` would lose the rule at exactly one export, and silently: `Promise<void>` cannot declare it, so the declaration invites `init(BYTES).catch(…)` and the throw escapes.
 

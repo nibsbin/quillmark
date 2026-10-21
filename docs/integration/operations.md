@@ -46,6 +46,6 @@ SVG output keeps links as live `href`s. A Markdown link in a body or rich-text f
 
 Nothing in the workspace catches unwind, so a panic is terminal on every surface: it aborts the CLI and the Python extension, and leaves the WASM module poisoned. Panics are bugs — report one.
 
-Under WASM, running out of linear memory (at most 4 GiB, less on some engines) traps the same way. A trap rejects as `runtime::backend_trapped`, carrying the `WebAssembly.RuntimeError` as `cause`; so does exhausting the native stack, which V8 and JavaScriptCore report as a `RangeError` and Firefox as an `InternalError`, carried the same way. It leaves the instance's state undefined, and the instance is module-scoped, so a new `Engine` inherits it: discard the realm before rendering again.
+Under WASM, running out of linear memory (at most 4 GiB, less in some browsers) traps the same way. A trap rejects as `runtime::backend_trapped`, carrying the `WebAssembly.RuntimeError` as `cause`; so does exhausting the native stack, which V8 and JavaScriptCore report as a `RangeError` and Firefox as an `InternalError`, carried the same way. It leaves the instance's state undefined, and the instance is module-scoped, so a new `Engine` inherits it: discard the realm before rendering again.
 
 Ordinary failures are not panics. Every documented error path returns a `RenderError` or a parse diagnostic carrying a stable `code`; route on the code, not the message ([Error Handling](error-handling.md)).

@@ -1,4 +1,4 @@
-//! A Typst-free Quillmark backend that fills existing PDF forms. A `acroform`
+//! A Typst-free Quillmark backend that fills existing PDF forms. An `acroform`
 //! quill ships two assets: `form.pdf`, the stripped background (the normalized
 //! form with its `/AcroForm`, widget annotations, and page `/Annots` removed),
 //! and `Form.yaml`, the value-free field spec. The backend binds document
@@ -46,7 +46,7 @@ const LEGACY_SPECS: [(&str, &str); 2] = [
 
 const SUPPORTED_FORMATS: &[OutputFormat] = &[OutputFormat::Pdf];
 
-/// The PDF-form backend.
+/// The acroform backend, which fills an existing PDF form.
 #[derive(Debug, Default)]
 pub struct AcroformBackend;
 

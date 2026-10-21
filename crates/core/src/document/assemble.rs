@@ -169,7 +169,7 @@ pub(super) struct MetadataBlock {
 
 /// The document-absolute, 1-indexed position of a YAML parse failure.
 ///
-/// `parser` is the position the engine reports inside the string it parsed:
+/// `parser` is the position the YAML parser reports inside the string it parsed:
 /// `yaml`, the fence content line-for-line, less the leading whitespace `trim`
 /// removes. With no reported position the block's first content line is the
 /// anchor.

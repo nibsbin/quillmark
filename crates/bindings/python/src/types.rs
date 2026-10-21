@@ -215,8 +215,8 @@ impl PyQuill {
     }
 
     /// Validate `doc` against this quill's schema, returning a list of diagnostic
-    /// dicts: an error blocks a render, a warning does not. Forwards the
-    /// engine's `validation::*`, a markdown string's `parse::dropped_construct`
+    /// dicts: an error blocks a render, a warning does not. Returns the
+    /// schema's `validation::*`, a markdown string's `parse::dropped_construct`
     /// and the backend's `backend::declined_construct`.
     fn validate<'py>(
         &self,
@@ -254,8 +254,8 @@ impl PyQuill {
 
     /// Land `doc`'s declared content fields at their canonical rest **in
     /// place**, returning the `conform::*` diagnostic dicts for values that would
-    /// not commit. The read-repair verb for a document that arrived through the
-    /// transport door (`from_markdown`, `from_stored`, a stored row).
+    /// not commit. The read-repair verb for a document that arrived without
+    /// `parse` (`from_markdown`, `from_stored`, a stored row).
     ///
     /// Idempotent and a byte no-op on an already-canonical document, comments
     /// included. A value the strict write refuses stays as authored with a

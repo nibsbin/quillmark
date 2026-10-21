@@ -14,7 +14,7 @@ pub struct RenderArgs {
     #[arg(value_name = "QUILL_PATH")]
     quill: PathBuf,
 
-    /// Path to markdown file with card-yaml blocks
+    /// Path to a Markdown document (default: the quill's seeded document)
     #[arg(value_name = "MARKDOWN_FILE")]
     markdown_file: Option<PathBuf>,
 
@@ -38,7 +38,7 @@ pub struct RenderArgs {
     #[arg(long)]
     quiet: bool,
 
-    /// Output intermediate JSON data to file
+    /// Also write the JSON data the backend receives to a file
     #[arg(long, value_name = "DATA_FILE")]
     output_data: Option<PathBuf>,
 

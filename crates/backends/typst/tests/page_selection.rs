@@ -1,5 +1,5 @@
 //! `RenderOptions::pages` is backend-neutral: this backend answers it under the
-//! same `backend::*` codes the PDF-form backend does. Which indices
+//! same `backend::*` codes the acroform backend does. Which indices
 //! `selected_pages` refuses is pinned at `quillmark_core::backend`; what a
 //! selection reaching this backend *does* is here.
 

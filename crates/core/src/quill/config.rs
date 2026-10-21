@@ -2193,7 +2193,7 @@ impl QuillConfig {
             Ok(v) => v,
             Err(e) => {
                 // Through `YamlError` so this shares the one saphyr adapter:
-                // the engine's Rust API names stripped, the hint derived, and
+                // the parser's Rust API names stripped, the hint derived, and
                 // the position carried as a `Location`.
                 return Err(vec![crate::error::YamlError::from_de(e, yaml_content)
                     .to_diagnostic("quill::yaml_parse_error", "Quill.yaml")]);

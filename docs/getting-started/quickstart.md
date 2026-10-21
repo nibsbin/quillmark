@@ -1,13 +1,15 @@
 # Quickstart
 
 From nothing to a PDF. Every path below renders the same two-file quill: a
-format that declares one field, `title`, and prints it above the document body.
-To try Quillmark without installing anything, open the
+document format that declares one field, `title`, and prints it above the
+document body. To try Quillmark without installing anything, open the
 [playground](https://borb-sh.github.io/quillmark-js/playground).
 
 ## 1. Write a quill
 
-A quill is a directory. Create `my_quill/Quill.yaml`:
+A quill is a document format: a schema for a document's fields, a layout for
+its pages, and the assets the layout uses. On disk it is a directory. Create
+`my_quill/Quill.yaml`:
 
 ```yaml
 quill:
@@ -142,7 +144,7 @@ This paragraph is the document body. *Markdown* works here.
     `async` function, or set the build target to `es2022`.
 
     The first `render` loads the Typst backend, a separate multi-MB binary;
-    `init` alone loads only the small core, enough to parse and validate.
+    `init` alone loads only the small core build, enough to parse and validate.
     `init` is idempotent and concurrency-safe, so await it at each entry point
     (route loader, hydration path, worker) rather than threading one result
     around. A type annotation needs no await: `Quill` and `Document` are also

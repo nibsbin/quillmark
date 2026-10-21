@@ -678,9 +678,8 @@ export class Engine {
 }
 
 /**
- * Thin wrapper over a backend's live render session. The quill/document clones
- * it was opened from have already been freed: the session retains what `update`
- * needs.
+ * Thin wrapper over a backend's live render session. The document clone it was
+ * opened from has already been freed: the session retains what `update` needs.
  */
 export class LiveSession {
 	/**

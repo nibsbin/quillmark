@@ -2,7 +2,7 @@
 
 ## Version Field in `Quill.yaml`
 
-Each Quill declares its version as `MAJOR.MINOR.PATCH`:
+Each quill declares its version as `MAJOR.MINOR.PATCH`:
 
 ```yaml
 quill:
@@ -66,18 +66,18 @@ version.
 
 ## Compatibility Checks
 
-A selector is a **pin, not a resolver**: Quillmark renders with the Quill it was
+A selector is a **pin, not a resolver**: Quillmark renders with the quill it was
 handed and never picks among versions. At render time (and in `dry_run`) it
-checks that Quill against the reference and rejects a mismatch —
+checks that quill against the reference and rejects a mismatch —
 `quill::name_mismatch` where the names differ, `quill::version_mismatch` where
 the names agree and the version falls outside the selector.
 
-Fix either by rendering with the Quill the document targets, or by amending the
+Fix either by rendering with the quill the document targets, or by amending the
 `$quill` line: correct the name, or correct the selector, or drop it to match
 any version. A bare name matches any version, so a document that targets its
-Quill correctly never trips these checks.
+quill correctly never trips these checks.
 
-The host picks which matching Quill to hand Quillmark; in Rust,
+The host picks which matching quill to hand Quillmark; in Rust,
 `quillmark_core::version::VersionSelector::matches` tests a candidate's version
 against the selector.
 

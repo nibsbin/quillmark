@@ -2,8 +2,8 @@
 
 Quillmark documents carry structured metadata in **card-yaml blocks**:
 explicitly delimited blocks that isolate YAML data from the surrounding
-Markdown prose. The first such block (the *root block*) names the format used
-to render the document; later blocks are composable [cards](#card-blocks).
+Markdown prose. The first such block (the *root block*) names the quill that
+renders the document; later blocks are composable [cards](#card-blocks).
 
 ```
 ~~~
@@ -67,7 +67,7 @@ The block's YAML payload may contain up to four reserved `$`-prefixed keys.
 After parsing, these keys are extracted from the user field set and exposed
 on the block's typed metadata.
 
-- **`$quill: <name>@<version>`** names the format used to render the
+- **`$quill: <name>@<version>`** names the quill that renders the
   document. The root block (the first block, identified by position) **must
   declare `$quill`**: it is the only required `$` entry. If the root block
   is missing `$quill`, parsing fails.
@@ -281,6 +281,6 @@ inline trailing, including those adjacent to `$` lines) survive the
 round-trip.
 
 The payload is coerced and validated against the schema declared in the
-Quill's `Quill.yaml` (`main.fields`). See the
+quill's `Quill.yaml` (`main.fields`). See the
 [Quill.yaml Reference](../quills/quill-yaml-reference.md) for field
 types and constraints.

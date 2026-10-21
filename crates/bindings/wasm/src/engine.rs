@@ -738,7 +738,7 @@ impl Quill {
     }
 
     /// Validate `doc` against this quill's schema, returning every diagnostic:
-    /// an error blocks a render, a warning does not. Forwards the engine's
+    /// an error blocks a render, a warning does not. Returns the schema's
     /// `validation::*`, a markdown string's `parse::dropped_construct` and the
     /// backend's `backend::declined_construct`.
     #[wasm_bindgen(js_name = validate, unchecked_return_type = "Diagnostic[]")]
@@ -2171,8 +2171,8 @@ pub fn format_doc_path(
 
 /// Render a diagnostic as the CLI and Python's `str(diagnostic)` render it:
 /// the severity tag and the message, the code parenthesised after them, then
-/// location, path and hint each on an indented line of its own. The engine
-/// owns the one printer, so a consumer surfacing diagnostics reads it here
+/// location, path and hint each on an indented line of its own. Core owns the
+/// one printer, `fmt_pretty`, so a consumer surfacing diagnostics reads it here
 /// rather than keeping a copy of the layout that drifts from the CLI's.
 ///
 /// Takes the `Diagnostic` shape every read hands back. Throws on a value that

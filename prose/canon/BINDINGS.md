@@ -170,7 +170,7 @@ Ships **multiple artifacts from one crate** behind a single public root export. 
 
 The **render** build, carrying both backends (Typst and acroform), is a **private** build with its own linear memory, lazily loaded on the first render or `engine.load(quill)`: there is no public `/core` or `/render` subpath. Core is small and eager; the render build is megabytes (Typst dominates) and loads only when something asks for it. `load` exists so a host can start that fetch without a document: `open` snapshots the document before it awaits the load, so a session opened mid-load compiles a stale one. `scripts/build-wasm.sh` enforces core's gzip ceiling, failing the build when Typst leaks back into the no-features build.
 
-Backend handles never escape the `Engine`: it clones the quill tree + `doc.toStored()` into the backend's memory as serialized data and frees the clones.
+Backend handles never escape the `Engine`: it clones the quill tree + `doc.toStored()` into the backend's memory as serialized data. The document clone is freed after each call; the quill clone is cached in a per-`Engine` `WeakMap` keyed on the canonical `Quill`, so it is dropped with that `Quill`.
 
 The storage DTO carries no warnings, so the clone the backend renders knows nothing of the load's, and `Engine.render` returns the backend render's own: `quill.validate`'s warnings but `backend::declined_construct`, then the compile's, which carry that decline ([ERROR.md](ERROR.md) § "Warning flow"). The load's stay on `doc.warnings`. `LiveSession.render` carries the compile's alone.
 

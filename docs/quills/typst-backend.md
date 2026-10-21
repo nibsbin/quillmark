@@ -202,8 +202,8 @@ A `qm-table` wrapper's `headless` lowers the first row as a body row, with no `t
 
 ## Modules
 
-A plate imports the Quill's other `.typ` files by the paths Typst resolves: a
-bare path from the importing file, a `/`-rooted one from the Quill root.
+A plate imports the quill's other `.typ` files by the paths Typst resolves: a
+bare path from the importing file, a `/`-rooted one from the quill root.
 `packages/` is the exception; its files load under their package spec.
 
 ```
@@ -269,9 +269,9 @@ and the failed render carries the warning after that error.
 
 ## Fonts
 
-A Quill carries its own fonts. The backend loads every `.ttf`, `.otf`, `.ttc` and `.otc` under `assets/fonts/` and inside vendored `packages/`. A `.ttc` or `.otc` collection loads every face it holds, up to 256; one declaring more loads none and warns `typst::font_collection_skipped`. An asset font wins a family a package also ships. A Quill bundling none renders in the embedded Roboto, upright and italic, at any weight from 100 to 900. The host's installed fonts are not among them, so `#set text(font: "Arial")` names a family the compile cannot find. A character no loaded font covers draws as an empty box, and the render warns `typst::missing_glyph` naming it.
+A quill carries its own fonts. The backend loads every `.ttf`, `.otf`, `.ttc` and `.otc` under `assets/fonts/` and inside vendored `packages/`. A `.ttc` or `.otc` collection loads every face it holds, up to 256; one declaring more loads none and warns `typst::font_collection_skipped`. An asset font wins a family a package also ships. A quill bundling none renders in the embedded Roboto, upright and italic, at any weight from 100 to 900. The host's installed fonts are not among them, so `#set text(font: "Arial")` names a family the compile cannot find. A character no loaded font covers draws as an empty box, and the render warns `typst::missing_glyph` naming it.
 
-To bundle fonts with the Quill, drop them in `assets/fonts/`:
+To bundle fonts with the quill, drop them in `assets/fonts/`:
 
 ```
 my-quill/
@@ -286,7 +286,7 @@ Then reference them by family name (`#set text(font: "CustomFont")`).
 ## Images
 
 A plate draws a file under `assets/` by its path, which resolves like an
-import's: `"assets/logo.svg"` from a plate at the Quill root, `"/assets/logo.svg"`
+import's: `"assets/logo.svg"` from a plate at the quill root, `"/assets/logo.svg"`
 from any file.
 
 ```typst
@@ -295,7 +295,7 @@ from any file.
 
 **A markdown image in a `richtext` field draws nothing.** `![logo](assets/logo.svg)` in document content reaches no page, and the render warns under `backend::declined_construct`, naming the field and how many images it holds; `quill.validate(doc)` warns the same.
 
-The backend resolves such a url under no reading: not as a file in this Quill, a path beside the document, or a remote address. A document is portable across every version a `$quill` selector admits, so a path into one Quill's file tree is not a binding it can take. The construct still stores and round-trips; only the page declines it.
+The backend resolves such a url under no reading: not as a file in this quill, a path beside the document, or a remote address. A document is portable across every version a `$quill` selector admits, so a path into one quill's file tree is not a binding it can take. The construct still stores and round-trips; only the page declines it.
 
 ## Typesetting
 
@@ -493,6 +493,6 @@ command also runs the installed `typst`, whose release can differ from the one
 
 ## Next Steps
 
-- [Create your own Typst Quill](creating-quills.md)
+- [Create your own Typst quill](creating-quills.md)
 - [Editor Regions](editor-regions.md): keeping plate ink clickable in a live preview
 - [Learn about Markdown syntax](../authoring/markdown-syntax.md)

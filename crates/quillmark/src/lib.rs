@@ -3,8 +3,7 @@
 //! Quillmark is a schema-driven document framework that turns Markdown
 //! with card-yaml metadata blocks into a fully typeset document (PDF, SVG, PNG).
 //!
-//! Markdown enters through the bound door: `Quill::parse` conforms the
-//! document against the quill that will render it.
+//! `Quill::parse` reads Markdown and conforms it to the quill's schema.
 //!
 //! ```no_run
 //! use quillmark::{quill_from_path, CalendarDate, Engine, OutputFormat, RenderOptions};

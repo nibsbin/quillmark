@@ -54,8 +54,8 @@ the render seam, and the binding seam all carry), the markdown⇄content
 import/export codecs, the `qm-*` carrier grammar (`carrier`), and edit
 deltas.
 The workspace's only markdown parser (`pulldown-cmark`) lives here, in
-`quillmark-content::import`, run once at ingest. **Invariant:** the markdown
-engine appears exactly once in the workspace; no render path parses markdown:
+`quillmark-content::import`, run once at ingest. **Invariant:** the Markdown
+parser appears exactly once in the workspace; no render path parses markdown:
 backends lower the content.
 
 ### `quillmark` (orchestration)

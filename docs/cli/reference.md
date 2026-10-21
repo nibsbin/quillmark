@@ -24,9 +24,11 @@ cargo install quillmark-cli --locked
 
 ## Commands
 
+Run `validate` when a quill changes and `check` when a document does: `validate` checks the quill itself, and `check` checks documents against it.
+
 ### render
 
-Render a markdown document to the specified output format.
+Render a Markdown document to the specified output format.
 
 ```bash
 quillmark render [OPTIONS] <QUILL_PATH> [MARKDOWN_FILE]
@@ -35,13 +37,13 @@ quillmark render [OPTIONS] <QUILL_PATH> [MARKDOWN_FILE]
 **Arguments:**
 
 - `<QUILL_PATH>`: Path to quill directory
-- `[MARKDOWN_FILE]`: Path to markdown file with a root card-yaml block (optional, when omitted, the quill's seeded document is rendered: one card per kind with empty bodies, every field at its `default:` or blank)
+- `[MARKDOWN_FILE]`: Path to Markdown file with a root card-yaml block (optional, when omitted, the quill's seeded document is rendered: one card per kind with empty bodies, every field at its `default:` or blank)
 
 The file must open with a `~~~` block containing a `$quill:` key identifying the quill; the opener's info string is ignored.
 
 **Options:**
 
-- `-o <PATH>` / `--output <PATH>`: Output file path (default: input filename with format extension, e.g. `input.pdf`; `example.<format>` when no markdown file is given)
+- `-o <PATH>` / `--output <PATH>`: Output file path (default: input filename with format extension, e.g. `input.pdf`; `example.<format>` when no Markdown file is given)
 - `-f <FORMAT>` / `--format <FORMAT>`: Output format: `pdf`, `svg`, `png` (default: the `-o` extension when it names one of these, else `pdf`). A `-f` that disagrees with such an extension is refused (`-f png -o out.pdf`); an `-o` extension naming no format is written as given.
 - `--ppi <PPI>`: Pixels per inch for `png` output (default: `144`); `pdf` and `svg` ignore it
 - `--output-data <DATA_FILE>`: Write the compiled, blank-filled JSON data to a file. This is the data before the backend lowers it: a `richtext` value appears as a content object (`{text, lines, marks, islands}`) and a date as its string, where a Typst plate receives content and a `datetime`.
@@ -81,7 +83,7 @@ quillmark render ./my-quill
 
 ### check
 
-Check markdown documents against a quill's schema, printing every diagnostic each one draws: parse warnings, then every `validation::*` diagnostic. Without `--regions` it does not compile the plate, so a plate failure is `render`'s to report; a construct the quill's backend declines draws `backend::declined_construct`, the warning `render` reports for it.
+Check Markdown documents against a quill's schema, printing every diagnostic each one draws: parse warnings, then every `validation::*` diagnostic. Without `--regions` it does not compile the plate, so a plate failure is `render`'s to report; a construct the quill's backend declines draws `backend::declined_construct`, the warning `render` reports for it.
 
 ```bash
 quillmark check [OPTIONS] <QUILL_PATH> <MARKDOWN_FILE>...
@@ -243,7 +245,7 @@ quillmark workspace [OPTIONS] <QUILL_PATH> [MARKDOWN_FILE]
 **Arguments:**
 
 - `<QUILL_PATH>`: Path to a quill whose `backend` is `typst`; any other backend refuses with `typst::wrong_backend`
-- `[MARKDOWN_FILE]`: Path to markdown file with a root card-yaml block (optional, when omitted, the quill's seeded document)
+- `[MARKDOWN_FILE]`: Path to Markdown file with a root card-yaml block (optional, when omitted, the quill's seeded document)
 
 **Options:**
 

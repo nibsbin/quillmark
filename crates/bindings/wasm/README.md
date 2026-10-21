@@ -18,8 +18,10 @@ handed out verbatim by `init`, so editor/validation code (`Quill.fromTree`,
 loaded until you render. The `Engine` hides everything else: the render build,
 carrying both backends (`typst`, `acroform`), is a private WASM binary with its
 own linear memory, lazily loaded on the first render. The Engine clones a
-`Quill` / `Document` into that memory as data and frees the clones: you never
-hold a backend object or cross a memory boundary yourself.
+`Quill` / `Document` into that memory as data. It frees the `Document` clone
+after each call and caches the `Quill` clone in a `WeakMap` keyed on that
+`Quill`, so the clone lives as long as the `Quill` does. You never hold a backend
+object or cross a memory boundary yourself.
 
 ## Installation
 
@@ -32,7 +34,7 @@ npm install @quillmark/wasm
 ```ts
 import { init, Engine } from "@quillmark/wasm";
 
-const { Quill, Document } = await init(); // see Initialization
+const { Quill } = await init(); // see Initialization
 
 const quill = Quill.fromTree(tree);   // no engine needed: build + validate
 const engine = new Engine();          // loads a backend lazily on first render
@@ -45,8 +47,8 @@ title: My Document
 
 # Hello`;
 
-const parsed = Document.fromMarkdown(markdown);
-const result = await engine.render(quill, parsed, { format: "pdf" });
+const doc = quill.parse(markdown);
+const result = await engine.render(quill, doc, { format: "pdf" });
 ```
 
 ## Initialization
@@ -102,8 +104,9 @@ A load failure surfaces as `runtime::init_failed`, whose hint names that line.
 
 ### `new Engine(options?)`
 Create the render dispatcher. Routes each quill to its backend by
-`quill.backendId`, lazily loads that backend binary, and renders: cloning the
-quill/document into the backend's memory and freeing the clones internally.
+`quill.backendId`, lazily loads that backend binary, and renders against
+clones in the backend's memory, freeing the document clone after each call and
+caching the quill clone for as long as that `Quill` lives.
 `render`, `open`, `load`, and `supportedFormats` are **async** (the first call
 may load a backend). Pass `{ backends }` to register or override backend descriptors.
 Each entry is a descriptor (`{ [backendId]: { load, formats } }`) where `load`

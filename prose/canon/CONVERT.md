@@ -290,7 +290,7 @@ loud.
 
 ## Where markdown is parsed
 
-The markdown engine (`pulldown-cmark`) appears exactly once in the workspace, in
+The Markdown parser (`pulldown-cmark`) appears exactly once in the workspace, in
 `quillmark-content::import`, run at ingest. `import` normalizes, parses, and
 lowers markdown into the content (markdown-spec §6 is its normative acceptance
 surface); every downstream render walks the content. No render path parses

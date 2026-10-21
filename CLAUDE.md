@@ -1,6 +1,6 @@
 # Quillmark
 
-Schema-driven document framework: Markdown + YAML card metadata → rendered PDF/SVG/PNG via a Typst or PDF-form backend.
+Schema-driven document framework: Markdown + YAML card metadata → rendered PDF/SVG/PNG via a Typst or acroform backend.
 
 Crate layout and what each crate carries: [`ARCHITECTURE.md`](prose/canon/ARCHITECTURE.md) §"Crate Structure".
 
