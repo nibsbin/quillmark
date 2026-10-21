@@ -1,114 +1,235 @@
 # Creating Quills
 
-A quill is a document format: a schema for a document's fields, a layout for its pages, and the assets the layout uses. This tutorial writes one as a directory, from empty to a rendered PDF.
+A quill is a document format: the fields a document fills in, the layout that prints them, and the assets the layout uses. Quills live in a **quiver**, a collection of quills kept as an npm project. This tutorial starts a quiver with one quill in it, opens it in **studio** (a form beside a live page), and then changes the quill one step at a time.
 
-It builds a `typst` quill, which draws a page from a plate you write. If you already hold a PDF form to fill, the `acroform` backend fills that form rather than redrawing it: start at the [PDF Form Backend (acroform)](acroform-backend.md), where stripping the form into a background and a field spec is the author's own work.
+You need [Node.js](https://nodejs.org) 22 or later. Nothing else is installed by hand.
 
-## 1. Create the directory
+The quill here uses the `typst` backend, which draws each page from a Typst file you write. If you already have a PDF form to fill, the `acroform` backend fills that form instead: start at the [PDF Form Backend (acroform)](acroform-backend.md).
 
-Start with this layout:
+## 1. Start a quiver
+
+```sh
+npx quillkit@latest init my-quiver
+cd my-quiver
+npm install
+npx quillkit studio
+```
+
+`init` writes a quiver holding one working quill, a letter. `studio` serves it and prints a local address. Open that address: the letter's form is on one side and its rendered page on the other. Edit a field and the page repaints. Click text on the page and the form jumps to the field that printed it.
+
+Keep studio running. When you save a file in the quiver, studio repacks it; reload the page to see the change.
+
+[quillkit & studio](quillkit.md) covers the tool itself. This page is about the quill.
+
+## 2. What `init` wrote
 
 ```
-my-quill/
-├── Quill.yaml
-├── plate.typ
-└── example.md    # optional: the quill filled in with made-up values
+my-quiver/
+├── Quiver.yaml
+├── package.json
+├── .gitignore
+├── .prettierignore
+└── quills/
+    └── letter/
+        └── 0.1.0/
+            ├── Quill.yaml
+            ├── plate.typ
+            └── example.md
 ```
 
-## 2. Write `Quill.yaml`
+- **`Quiver.yaml`** names the collection and describes it in one line.
+- **`package.json`** pins `quillkit`, `@quillmark/quiver` and `@quillmark/wasm`. `npm test` runs `quillkit test`, which renders every quill in the quiver and fails on any error or warning.
+- **`.prettierignore`** keeps prettier out of `quills/`. Prettier rewrites a card's `~~~` fence as a backtick fence, and a backtick fence opens no card, so a formatted document no longer parses. Keep this file if your project runs prettier.
+- **`quills/letter/0.1.0/`** is the quill. A quill lives at `quills/<name>/<version>/`, and both must match what its `Quill.yaml` declares.
 
-Create a minimal but complete config:
+The quill itself is three files:
+
+- **`Quill.yaml`**: the quill's name and version, and the fields a document fills in.
+- **`plate.typ`**: the [Typst](https://typst.app/docs/tutorial/) file that lays out the page. Each quill with the `typst` backend has a plate.
+- **`example.md`**: a sample document. Studio opens it, and `quillkit test` renders it.
+
+The next four steps read these files one idea at a time.
+
+## 3. Fields
+
+`Quill.yaml` opens with the quill's identity:
 
 ```yaml
 quill:
-  name: my_quill
+  name: letter
+  version: 0.1.0
   backend: typst
-  version: "1.0.0"
-  description: A simple letter format
+  description: A one-page letter with a date, a subject line and optional P.S. notes
+```
 
+`name`, `version`, `backend` and `description` are all required, and `name` is `snake_case`. Under `main.fields` are the fields of the document itself. The first two are plain text:
+
+```yaml
 main:
+  description: A letter from one person to another.
   fields:
     sender:
       type: text
-      description: Name of the sender
+      description: Your name, as it appears in the letterhead and the signature.
     recipient:
       type: text
-      description: Name of the recipient
-    date:
-      type: date       # a bare calendar date (YYYY-MM-DD); use `datetime` for wall-clock time-of-day
-      description: Letter date
+      description: Who the letter is addressed to.
 ```
 
-`name`, `backend`, `version`, and `description` are all required. `name` must be `snake_case`. Define your document's expected root-block fields under `main.fields`. Each field has a `type`, optional `default`, `description`, and validation constraints. Use `integer` for whole numbers only and `number` for values that may include decimals. For the full list of field types, UI hints, typed arrays, and enum constraints, see the [Quill.yaml Reference](quill-yaml-reference.md).
+`plate.typ` prints them:
 
-Use `default` for the value most authors will accept as-is (filled in when the field is omitted); the type's blank (`""`, `[]`, `0`, `false`) is how you declare "nothing" as that value. `default` is the only value a field declares; a format hint goes in its `description`. A field with no `default` renders as an empty cell in the blueprint (`title: # text<plain>`), and left unanswered it renders its blank. See the [Quill.yaml Reference](quill-yaml-reference.md#default) for details.
+```typst
+#import "@local/quillmark-helper:0.2.0" as qm
 
-### Picking a text type
+#text(size: 16pt, weight: "bold", qm.ink(qm.data, "sender"))
+
+#if qm.data.recipient != "" [Dear #flush(qm.ink(qm.data, "recipient")),]
+
+#qm.data.at("$body", default: "")
+```
+
+`flush` is a short function the starter plate defines. A `text` value prints with a space on each side, and `flush` trims them so the comma sits right after the name.
+
+The plate reads the document through the helper package, imported `as qm`:
+
+- **`qm.data`** holds the document's values. Use it to compute: `qm.data.recipient != ""` tests whether a recipient was given.
+- **`qm.ink(qm.data, "sender")`** prints a field. Text printed this way stays linked to its field, which is what lets a click on the page in studio find the field.
+- **`$body`** is the Markdown under the document's fields.
+
+A field nobody filled in arrives as its **blank**: `""` for text. The plate checks for it, so an empty letter prints no stray "Dear ,". Every plate has to render a document with every field blank, because that is the document an author starts from.
+
+To pick between `text`, `richtext` and `enum`, see [Picking a text type](#picking-a-text-type) below.
+
+## 4. A date
+
+```yaml
+    date:
+      type: date
+      default: today
+      description: YYYY-MM-DD, or today to date the letter when it is rendered.
+```
+
+`type: date` holds a calendar date, written `2026-01-15`. `default` is the value a document gets when it leaves the field out, and `today` is the date of the render. The plate prints it with a pattern:
+
+```typst
+#align(right, qm.ink(qm.data, "date", "[month repr:long] [day padding:none], [year]"))
+```
+
+`qm.data.date` is a Typst `datetime`, for comparing or taking apart. See [Dates](typst-backend.md#dates).
+
+## 5. A choice from a list
+
+```yaml
+    closing:
+      type: enum
+      values: [sincerely, regards, thanks]
+      default: sincerely
+      description: The word before your signature.
+```
+
+An `enum` stores one of its `values`, which are ids rather than the words printed. The plate maps each id to its words:
+
+```typst
+#let closing-text = (sincerely: "Sincerely", regards: "Kind regards", thanks: "With thanks")
+#if qm.data.closing != "" {
+  qm.region("closing")[#closing-text.at(qm.data.closing),]
+}
+```
+
+An enum can also be blank, `""`, so the plate checks for it. The words here are drawn by the plate rather than printed with `qm.ink`, so `qm.region("closing")` is what links them back to the field. See [Tying Composed Content to a Field](editor-regions.md#tying-composed-content-to-a-field).
+
+List only real choices in `values`. Quillmark supplies the blank itself, and declaring `""` is a load error. See [the blank](quill-yaml-reference.md#the-blank-values-is-for-choices-not-for-the-absence-of-one).
+
+## 6. A card
+
+A **card** is a repeatable part of a document, such as a P.S. note. `Quill.yaml` declares each kind of card under `card_kinds`:
+
+```yaml
+card_kinds:
+  postscript:
+    title: P.S.
+    description: A short note after the signature.
+```
+
+In a document, each card is its own `~~~` block naming its kind, followed by its own Markdown body. From `example.md`:
+
+```markdown
+~~~
+$kind: postscript
+~~~
+
+The diagrams follow by the evening post.
+```
+
+The plate loops over the document's cards:
+
+```typst
+#for card in qm.data.at("$cards", default: ()) {
+  let body = card.at("$body", default: "")
+  if card.at("$kind", default: none) == "postscript" and body != "" [P.S. #body]
+}
+```
+
+A card kind can declare fields of its own. See [Body, arrays, and cards](typst-backend.md#body-arrays-and-cards) and [`card_kinds`](quill-yaml-reference.md#card_kinds-section).
+
+## 7. Add a field
+
+Now change the quill. Add a title to print under the signature. In `Quill.yaml`, under `main.fields`:
+
+```yaml
+    signer_title:
+      type: text
+      default: ""
+      description: Your title, printed under your name. Leave blank for none.
+```
+
+At the end of the signature in `plate.typ`, after `#qm.ink(qm.data, "sender")`:
+
+```typst
+#if qm.data.signer_title != "" [ \ #qm.ink(qm.data, "signer_title")]
+```
+
+Save both files and reload studio. The form has a new field, and what you type in it prints under the signature. Add a value to `example.md`, between its `~~~` lines, so the sample shows it too:
+
+```yaml
+signer_title: Translator
+```
+
+Then run the gate:
+
+```sh
+npm test
+```
+
+`quillkit test` renders the quill's starter document and its `example.md`, and fails on any error or warning, such as a value `example.md` gives a field the quill does not declare.
+
+## 8. The CLI
+
+The `quillmark` CLI renders a quill straight to a file and inspects it, which suits scripts and CI. [Install it](../cli/reference.md#installation), then from the quiver's root:
+
+```sh
+quillmark render quills/letter/0.1.0 quills/letter/0.1.0/example.md -o letter.pdf
+quillmark check --strict --regions quills/letter/0.1.0 quills/letter/0.1.0/example.md
+```
+
+`check --regions` lists each field the example fills that no click on the page can reach: a field the plate never prints, or prints without `qm.ink` or `qm.region`. See the [CLI Reference](../cli/reference.md).
+
+## Picking a text type
 
 Three types hold text, and two questions pick one:
 
 1. **Is the set of allowed values closed?** Then it is an `enum`.
 2. Otherwise: **should `*text*` render as emphasis, or stay literal?** (`richtext` over `text`.)
 
-`text` is one line and `richtext` one paragraph; `multiline: true` admits more, and a `richtext` declares `multiline:` either way. A name, a URL or a reference key is a one-line `text`, and an abstract or a summary is a `richtext`. The letter above needs no `richtext` field: its prose is the document body, which is already rich text. Both text types are click-to-edit in an editor preview with a caret inside the value; a plate that computes with a `text` value (`upper`, a comparison, `set document(author: ..)`) reads it through [`qm.str`](typst-backend.md#text-as-a-str).
+`text` is one line and `richtext` one paragraph; `multiline: true` admits more, and a `richtext` declares `multiline:` either way. A name, a URL or a reference key is a one-line `text`, and an abstract or a summary is a `richtext`. The letter needs no `richtext` field: its prose is the document body, which is already rich text. A plate that computes with a `text` value (`upper`, a comparison, `set document(author: ..)`) reads it through [`qm.str`](typst-backend.md#text-as-a-str).
 
-Pick before a corpus exists. Changing a declared type reinterprets every value already stored in that field, and `text` → `richtext` is lossy: see [Choosing among `enum`, `text`, and `richtext`](quill-yaml-reference.md#choosing-among-enum-text-and-richtext).
+Pick before documents exist. Changing a declared type reinterprets every value already stored in that field, and `text` → `richtext` is lossy: see [Choosing among `enum`, `text`, and `richtext`](quill-yaml-reference.md#choosing-among-enum-text-and-richtext).
 
-When you declare an `enum`, list only the real choices. Every enum also accepts a **blank** (`""`) that Quillmark supplies — what a document says when nobody has answered — so you never declare it, and declaring `""` in `values:` is a load error. If the empty state is itself a decision worth recording, make it a member (`undecided`, `waived`), because the blank means nobody chose and a member means someone chose "none". See [the blank](quill-yaml-reference.md#the-blank-values-is-for-choices-not-for-the-absence-of-one).
+Use `default` for the value most authors will accept as-is. A field with no `default` is one the author is expected to answer; left unanswered, it renders its blank. See [`default`](quill-yaml-reference.md#default). For every field type, UI hint and constraint, see the [Quill.yaml Reference](quill-yaml-reference.md).
 
-## 3. Write `plate.typ`
+## A larger plate
 
-The backend finds the plate by its name, `plate.typ` beside `Quill.yaml`. Your first plate template:
-
-```typst
-#import "@local/quillmark-helper:0.2.0" as qm
-
-#set page(margin: 1in)
-
-Dear #qm.ink(qm.data, "recipient"),
-
-#qm.data.at("$body", default: "")
-
-Sincerely,
-
-#qm.ink(qm.data, "sender")
-```
-
-The helper is imported as a module, `as qm`, and every member is read through it: compute with `qm.data.x`, print with `qm.ink(qm.data, "x")`, which keeps the printed text the click-to-edit target for its field.
-
-For the Typst release a plate compiles against, data access patterns, helper package details, optional fields, and `$cards` iteration, see the [Typst Backend](typst-backend.md) guide.
-
-## 4. Write a document
-
-Create a `document.md` that matches the fields you defined:
-
-```markdown
-~~~
-$quill: my_quill
-$kind: main
-sender: Jane Doe
-recipient: John Smith
-date: 2026-01-15
-~~~
-
-Thank you for your time.
-```
-
-## 5. Render it
-
-From the same directory, render the document:
-
-```bash
-quillmark render ./my-quill document.md
-```
-
-For command options and output controls, see the [CLI Reference](../cli/reference.md).
-
-## 6. A second plate
-
-The plate in §3 reads two fields. The next one has a date in it, a field the author may leave unanswered, a repeating part, and layout of its own; the [Typst Backend](typst-backend.md) guide documents each of those on its own. `status_report` is them together, short enough to copy whole.
-
-Its `Quill.yaml`:
+`status_report` puts the same ideas in a longer plate: card kinds with fields of their own, a date on each card, and an enum mapped to a banner. Its `Quill.yaml`:
 
 ```yaml
 --8<-- "crates/fixtures/resources/quills/status_report/0.2.0/Quill.yaml"
@@ -120,22 +241,18 @@ Its `plate.typ`:
 --8<-- "crates/fixtures/resources/quills/status_report/0.2.0/plate.typ"
 ```
 
-Seven constructs to lift from it:
+Three things it adds to the letter:
 
-- **A date that prints.** `qm.ink(qm.data, "issued", ..)` takes the field's *address* and returns content, so the printed date stays the click-to-edit target for that field. `qm.data.issued` is the `datetime` behind it: reach for that to compare, to take components, or to hand a package a date it formats itself. See [Dates](typst-backend.md#dates).
-- **An enum left unanswered.** The blank is a value no `values:` list holds, so `qm.data.state != ""` guards it and an `else` on a branch over the declared values would render a state nobody picked. See [the blank](quill-yaml-reference.md#the-blank-values-is-for-choices-not-for-the-absence-of-one).
-- **An enum's printed text.** `state` stores an id such as `at_risk`, and `state-text` maps it to the words the banner prints. Renaming the printed text never touches a stored document. See [Enum Constraints](quill-yaml-reference.md#enum-constraints).
-- **A card loop.** `$kind` is document-defined, so `card.at("$kind", default: none)` reads it and every other kind falls through. A field declared on the kind arrives filled, which is why `card.title` is a plain read. See [Body, arrays, and cards](typst-backend.md#body-arrays-and-cards).
-- **Printing through `qm.ink`.** Every iteration of the card loop reads through one loop variable, so `card.title` printed there names no card. `qm.ink(card, "title")` is the same text born in generated code, keyed on that card's own field, and `qm.ink(card, "due", ..)` formats the date the same way. Compute with `card`, print with `qm.ink(card, ..)`. See [Print with `qm.ink`](editor-regions.md#print-with-ink).
-- **A claim on composed ink.** The banner's glyphs are drawn by the plate rather than by the field, so `qm.region("state", ..)` is what makes a click on them resolve to `state`. See [Tying Composed Content to a Field](editor-regions.md#tying-composed-content-to-a-field).
-- **`#set`.** Page and text defaults are ordinary Typst. See [Typesetting](typst-backend.md#typesetting).
+- **Printing a card's fields.** Every card in the loop arrives through one variable, so `qm.ink(card, "title")` prints the field of that card, and `qm.ink(card, "due", ..)` formats its date. Compute with `card`, print with `qm.ink(card, ..)`. See [Print with `qm.ink`](editor-regions.md#print-with-ink).
+- **A guard on a blank enum.** An `else` on a branch over the declared values would also catch the blank and print a state nobody picked, so the plate tests `qm.data.state != ""` first.
+- **`#set` rules.** Page and text defaults are ordinary Typst. See [Typesetting](typst-backend.md#typesetting).
 
-Both listings are included from `crates/fixtures/resources/quills/status_report/0.2.0/`, which the repository's quiver sweep renders.
+## Next steps
 
-## 7. Next steps
+- [quillkit & studio](quillkit.md): the authoring loop, the gate, and publishing a quiver as a site
+- [Quill.yaml Reference](quill-yaml-reference.md): every field type, UI hint, `card_kinds`, and the `typst` section
+- [Typst Backend](typst-backend.md): reading data, card loops, and the helper package
+- [Quill Versioning](versioning.md): when a change needs a new version directory
+- [Typst's tutorial](https://typst.app/docs/tutorial/): the language a plate is written in
 
-- [Quill.yaml Reference](quill-yaml-reference.md): full field types, UI hints, `card_kinds`, `typst` section
-- [Typst Backend](typst-backend.md): data access patterns, `$cards` iteration, helper package
-- [Quill Versioning](versioning.md)
-
-**Tip:** A disk load walks the whole bundle. It skips a root `.git/`, `target/` or `node_modules/` and any `.gitignore`; anything else in the directory ships with the quill, so keep scratch files out of it.
+**Tip:** A quill ships everything in its directory except `.git/`, `target/`, `node_modules/` and what `.gitignore` names, so keep scratch files out of it.
