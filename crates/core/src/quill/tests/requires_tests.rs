@@ -7,7 +7,7 @@ fn load(requires: &str, extra: &str) -> Result<(QuillConfig, Vec<Diagnostic>), V
 }
 
 #[test]
-fn a_floor_this_engine_meets_loads() {
+fn a_floor_this_release_meets_loads() {
     load("\">=0.1\"", "").expect("0.1 is below any Quillmark release");
     let release = format!(
         "\">={}.{}.{}\"",
@@ -19,13 +19,13 @@ fn a_floor_this_engine_meets_loads() {
 }
 
 #[test]
-fn a_floor_above_this_engine_is_the_one_error() {
+fn a_floor_above_this_release_is_the_one_error() {
     let refused = load(
         "\">=9999.0\"",
         "  from_the_future: true\nnew_section: {}\ntypst:\n  from_the_future: true\n",
     )
         .expect_err("9999.0 is above this Quillmark release");
-    assert_eq!(codes(&refused), ["quill::engine_too_old"]);
+    assert_eq!(codes(&refused), ["quill::quillmark_too_old"]);
 }
 
 #[test]

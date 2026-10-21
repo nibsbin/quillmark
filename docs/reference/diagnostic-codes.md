@@ -63,7 +63,6 @@ Loading a quill: `Quill.yaml`, its files, its seeds.
 - `quill::description_multiline`
 - `quill::duplicate_group`
 - `quill::empty_description`
-- `quill::engine_too_old`
 - `quill::enum_blank_member`
 - `quill::example_reference`
 - `quill::field_parse_error`
@@ -100,6 +99,7 @@ Loading a quill: `Quill.yaml`, its files, its seeds.
 - `quill::open_matrix_unsupported`
 - `quill::optional_default`
 - `quill::optional_namespace`
+- `quill::quillmark_too_old`
 - `quill::reserved_field_name`
 - `quill::richtext_default_import`
 - `quill::seed_cardinality`
