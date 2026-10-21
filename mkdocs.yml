@@ -35,11 +35,13 @@ nav:
   - Getting Started:
       - Quickstart: getting-started/quickstart.md
       - Concepts: getting-started/concepts.md
+      - Glossary: getting-started/glossary.md
   - Authoring:
       - Markdown Syntax: authoring/markdown-syntax.md
       - card-yaml Blocks: authoring/card-yaml.md
   - Quills:
       - Creating Quills: quills/creating-quills.md
+      - quillkit & studio: quills/quillkit.md
       - Quill.yaml Reference: quills/quill-yaml-reference.md
       - Blueprint & Seeding: quills/blueprint.md
       - Typst Backend: quills/typst-backend.md

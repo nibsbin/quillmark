@@ -33,8 +33,8 @@ Quillmark is a schema-driven document framework. You define a document format on
 - **Writing documents?** You write Markdown documents in the document format a quill defines.  
   → [Markdown Syntax](authoring/markdown-syntax.md)
 
-- **Building quills?** You create quills, the document formats that control rendering.  
-  → [Creating Quills](quills/creating-quills.md)
+- **Building quills?** You create quills, the document formats that control rendering. `npx quillkit@latest init` starts one, and studio shows its form beside the live page.  
+  → [Creating Quills](quills/creating-quills.md) · [quillkit & studio](quills/quillkit.md)
 
 - **Integrating into an app?** You use Quillmark via Python or JavaScript.  
   → [Quickstart](getting-started/quickstart.md) · [Integrating Quillmark](integration/index.md)
@@ -43,3 +43,5 @@ Quillmark is a schema-driven document framework. You define a document format on
   → [CLI Reference](cli/reference.md)
 
 - **Using Rust?** API documentation is on [docs.rs](https://docs.rs/quillmark).
+
+New to the words? The [Glossary](getting-started/glossary.md) defines each one in a line or two.
