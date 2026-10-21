@@ -12,6 +12,7 @@ mod elements;
 mod emit;
 mod error_mapping;
 mod glyphs;
+mod tex;
 
 mod helper;
 mod overlay;
@@ -105,6 +106,7 @@ fn recompile(
         compile_warnings,
         &unclosed,
         elements::unregistered(&document, config, data),
+        tex::unsupported(config, data),
         glyphs::missing(&document),
     );
     Ok(Compiled {
@@ -126,6 +128,7 @@ fn session_warnings(
     compile: Vec<Diagnostic>,
     unclosed: &[(usize, String)],
     unregistered: Vec<Diagnostic>,
+    unsupported_tex: Vec<Diagnostic>,
     missing_glyphs: Option<Diagnostic>,
 ) -> Vec<Diagnostic> {
     let mut all = world.load_warnings().to_vec();
@@ -143,6 +146,7 @@ fn session_warnings(
         )
     }));
     all.extend(unregistered);
+    all.extend(unsupported_tex);
     all.extend(missing_glyphs);
     all
 }

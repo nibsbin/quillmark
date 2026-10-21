@@ -166,6 +166,8 @@ fn plural(construct: BlockConstruct, count: usize) -> String {
         BlockConstruct::Quote => ("a", "block quote"),
         BlockConstruct::Table => ("a", "table"),
         BlockConstruct::Image => ("an", "image"),
+        BlockConstruct::Footnote => ("a", "footnote"),
+        BlockConstruct::Math => ("an", "equation"),
     };
     if count == 1 {
         format!("{one} {name}")

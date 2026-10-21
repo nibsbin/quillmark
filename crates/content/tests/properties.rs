@@ -83,8 +83,10 @@ fn inline_token() -> impl Strategy<Value = String> {
         // A link over an image: a mark over an island slot.
         (special_alt(), special_url(), clean_word())
             .prop_map(|(a, u, l)| format!("[![{a}](<{u}>)](https://ex.com/{l})")),
-        // A footnote reference, text once `document()`'s definitions drop.
+        // A footnote reference, read off one of `document()`'s definitions.
         prop::sample::select(vec!["[^a]", "[^B]"]).prop_map(String::from),
+        // An equation, inline or display, and a `$` that is text.
+        prop::sample::select(vec!["$x^2$", "$\\{a\\}$", "$$\\frac{a}{b}$$", "\\$5", "$5"]).prop_map(String::from),
     ]
 }
 

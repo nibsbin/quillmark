@@ -103,10 +103,28 @@ fn dropped_message(construct: &Dropped, n: usize) -> (String, String) {
         Dropped::Footnote => (
             format!(
                 "markdown import dropped {} in this field",
-                some("footnote definition", "footnote definitions")
+                some("footnote", "footnotes")
             ),
-            "Footnotes are not supported: a `[^label]: note` definition drops with its note, and a \
-             `[^label]` reference stays as written. Put the note in the prose instead."
+            "A footnote is a reference `[^label]` in prose, outside a table cell or another note, and one \
+             definition `[^label]: note` naming the same label."
+                .to_string(),
+        ),
+        Dropped::NoteBlock(block) => (
+            format!(
+                "markdown import kept the text of {} inside a footnote and dropped its structure",
+                some(&format!("{block} block"), &format!("{block} blocks"))
+            ),
+            "A footnote's note is inline text: each paragraph, list item or other block in it becomes a line \
+             of that text."
+                .to_string(),
+        ),
+        Dropped::Math => (
+            format!(
+                "markdown import kept {} as written text in this field",
+                some("equation", "equations")
+            ),
+            "An equation `$…$` or `$$…$$` reads as one in prose, outside a table cell, an image's alt text \
+             and a footnote's note; write `\\$` for a dollar sign that opens none."
                 .to_string(),
         ),
         Dropped::ElementAttr { element, attr } if element == TABLE => attr_dropped(
@@ -392,7 +410,7 @@ pub(crate) mod yaml_hints;
 
 pub use dto::{
     peek_storage_version, StorageError, StoredDocument, STORAGE_V0_112_0, STORAGE_V0_115_0,
-    STORAGE_V0_116_0, STORAGE_V0_124_0, STORAGE_V0_93_0,
+    STORAGE_V0_116_0, STORAGE_V0_124_0, STORAGE_V0_129_0, STORAGE_V0_93_0,
 };
 pub use edit::{revise_import, CardMut, EditError, Revised};
 pub use emit::{AnnotatedMarkdown, DocumentAnchor};

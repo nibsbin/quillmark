@@ -136,6 +136,8 @@ is a lowering bug, never a document's.
 | `Container::Element{element}` | `#_qm-element("name", (…))[…]` (see [Elements](#elements)) |
 | `image` island | nothing, plus one `backend::declined_construct` warning per field (see [Declined images](#declined-images)) |
 | `table` island | `#table(columns: N, align: (…), table.header(…), …)` |
+| `footnote` island | `#footnote[…]`, the note lowered as a table cell is |
+| `math` island | `$…$`, or `$ … $` where `display` (see [Equations](#equations)) |
 
 Table alignment maps `none→auto`, `left`, `center`, `right`; the `align:`
 argument is emitted only when at least one column is non-default.
@@ -165,8 +167,8 @@ leaves and containers alike: what the content nests, the markup nests.
 Anchor marks emit nothing; an `image` island emits nothing (see
 [Declined images](#declined-images)).
 Raw HTML other than an inline `<u>`, `<br>` (a hard break) and the `qm-*`
-carrier (markdown-spec §6.4) never enters the content, so it is absent here; math and definition lists
-enter it as literal text (markdown-spec §6.2, §6.3).
+carrier (markdown-spec §6.4) never enters the content, so it is absent here; definition lists
+enter it as literal text (markdown-spec §6.3).
 
 ### Elements
 
@@ -214,6 +216,30 @@ read:
 The call opens on the marker's line and closes after the item's last block, so
 an item's later blocks and nested lists stay in it.
 
+### Equations
+
+A `math` island's `tex` lowers to Typst math through a translator of its own
+(`crates/backends/typst/src/tex.rs`), never a package. Each atom it writes is
+one character, a number, a string or a call, space-separated, so no run of
+letters reads as a Typst identifier and no run of punctuation as a shorthand.
+A symbol command lowers to its Unicode character rather than a Typst symbol
+name, ASCII punctuation is escaped, and a non-ASCII character is a `\u{…}`
+escape, one token whatever grapheme rules would join it to. Fractions, roots,
+scripts, accents, font commands, `\left…\right`, spacing, operator names,
+`\text`, and the `matrix` family, `cases` and `aligned` environments lower to
+the Typst calls that draw them.
+
+A command outside that vocabulary draws as its own name, and the compile
+carries one [`typst::unsupported_tex`](ERROR.md#warning-flow) warning per
+content field naming each. Whatever the TeX, the lowering parses.
+
+Typst sets an equation in the family `New Computer Modern Math` unless a plate
+names another with `show math.equation: set text(font: ..)`, and lays one out
+only in a face with an OpenType `MATH` table. A quill shipping no face of that
+family has the embedded Noto Sans Math, cut to the blocks an equation commonly
+draws from, answer to the name, so an equation draws whatever text fonts the
+quill ships.
+
 ### Declined images
 
 An `image` island lowers to nothing, and the compile that dropped it carries one
@@ -246,10 +272,14 @@ reads and the shape the WASM boundary pins:
   auto-fit, at the plate's placement, in the column's alignment, under a header row.
 - **`image`** → `{ url, alt }`; `alt` is the empty string when the source omits
   it. No backend resolves `url` (see [Declined images](#declined-images)).
+- **`footnote`** → `Cell`, the note, with no `\n` at either edge. Its `\n` is
+  a line break, as a cell's is.
+- **`math`** → `{ tex, display? }`: the TeX as written between the dollars,
+  and `display: true` on a `$$…$$` equation (see [Equations](#equations)).
 
 The `IslandType` dispatch (`crates/content/src/island.rs`) owns these shapes
 Rust-side; the WASM surface pins them as `TableProps` / `ImageProps` /
-`TableCell` and types `ContentIsland.props` per the closed `type`
+`FootnoteProps` / `MathProps` / `TableCell` and types `ContentIsland.props` per the closed `type`
 (`crates/bindings/wasm/src/engine.rs`).
 
 ## Mark sweep

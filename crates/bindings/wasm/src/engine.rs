@@ -326,6 +326,19 @@ export interface ImageProps {
     alt: string;
 }
 
+/** `props` of a `type: "footnote"` island: the note, shaped as one `TableCell`
+ * with no `\n` at either edge. The island's slot is the reference, inline in
+ * its paragraph. */
+export type FootnoteProps = TableCell;
+
+/** `props` of a `type: "math"` island: the equation's TeX, as written between
+ * its dollars, on one line with no edge whitespace. `display` is present and
+ * `true` on a `$$…$$` equation. */
+export interface MathProps {
+    tex: string;
+    display?: true;
+}
+
 /** A structured object occupying one island slot in `Content.text`. `type` is a
  * closed set, so `type === "table"` narrows `props` to `TableProps`. */
 export type ContentIsland = {
@@ -333,6 +346,8 @@ export type ContentIsland = {
 } & (
     | { type: "table"; props: TableProps }
     | { type: "image"; props: ImageProps }
+    | { type: "footnote"; props: FootnoteProps }
+    | { type: "math"; props: MathProps }
 );
 
 /**
@@ -940,7 +955,7 @@ impl Document {
     /// tag advances only when the wire format changes, not on every release.
     #[wasm_bindgen(js_name = currentStorageVersion)]
     pub fn current_storage_version() -> String {
-        quillmark_core::document::STORAGE_V0_124_0.to_string()
+        quillmark_core::document::STORAGE_V0_129_0.to_string()
     }
 
     /// The Quillmark Markdown rules, re-exposed from core. Constant across

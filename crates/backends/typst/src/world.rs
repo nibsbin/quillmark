@@ -44,6 +44,18 @@ pub(crate) static FALLBACK_FONTS: [(&str, &[u8]); 2] = [
     ("Roboto-Italic.ttf", include_bytes!("fonts/Roboto-Italic.ttf")),
 ];
 
+/// The face an equation sets in when the quill ships none of
+/// [`MATH_FAMILY`], as `scripts/fallback-fonts.py` writes it.
+pub(crate) static MATH_FONT: (&str, &[u8]) = (
+    "NotoSansMath-Regular.otf",
+    include_bytes!("fonts/NotoSansMath-Regular.otf"),
+);
+
+/// The family Typst sets an equation in unless a plate's
+/// `show math.equation: set text(font: ..)` names another. Typst lays an
+/// equation out only in a face with a `MATH` table, which no text face has.
+const MATH_FAMILY: &str = "New Computer Modern Math";
+
 /// Every font file the quill ships, asset fonts first: `QuillWorld` gives them
 /// priority over package fonts of the same family, and `Vec` order is that
 /// priority.
@@ -148,6 +160,16 @@ impl QuillWorld {
                     book.push(font.info().clone());
                     fonts.push(font);
                 }
+            }
+        }
+
+        // The embedded math face answers to the family an equation asks for.
+        if !book.contains_family(&MATH_FAMILY.to_lowercase()) {
+            for font in faces(Bytes::new(MATH_FONT.1.to_vec())).into_iter().flatten() {
+                let mut info = font.info().clone();
+                info.family = MATH_FAMILY.to_string();
+                book.push(info);
+                fonts.push(font);
             }
         }
 

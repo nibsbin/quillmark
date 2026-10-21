@@ -6,7 +6,7 @@
 //! line of carrier tags in an HTML block apart) so the content invariants hold
 //! by construction, then
 //! parsed with `pulldown_cmark` (CommonMark + strikethrough + pipe tables +
-//! task lists, and footnotes recognized only to drop them) and
+//! task lists + footnotes + math) and
 //! walked into a [`Content`]. This is the one place the `<u>`/`<br>` allowlist
 //! runs, and the one place a dropped raw tag is counted into the
 //! [`ImportWarning`]s an import returns beside its content.
@@ -34,8 +34,16 @@
 //!   break is a `Rule` line carrying no text.
 //! - A task list item's marker is its [`Container::ListItem::checked`]; `[X]`
 //!   reads as `[x]`.
-//! - A footnote definition drops whole, reported, and a reference to one is
-//!   the text it is.
+//! - A footnote reference is an inline island holding its note, read off the
+//!   definition its label names. A note is flat, as a table cell is: each
+//!   block after its first starts a line, and a block's structure drops,
+//!   reported, while its text stays. Two references to one definition are
+//!   two notes, and where the definition sits, before or after them, is not
+//!   kept.
+//! - `$…$` and `$$…$$` are an inline `math` island holding the TeX between the
+//!   delimiters, `display` for `$$`. Where no island can sit, in a table
+//!   cell, a note or an image's alt text, the markup stays as its text,
+//!   reported.
 //! - Raw HTML produces no content beyond the allowlist and the carrier. An HTML
 //!   block drops whole, as CommonMark runs it; one of tag lines alone passes
 //!   its carrier tags on. A `qm-table` wrapper pairs as an element does,
@@ -58,6 +66,7 @@ use pulldown_cmark::{Event, Options, Tag, TagEnd};
 use serde_json::json;
 use std::collections::{HashMap, VecDeque};
 use std::ops::Range;
+use unicase::UniCase;
 
 /// Import errors: just the nesting guard.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -104,9 +113,17 @@ pub enum Dropped {
     /// read, and a `qm-table` or `qm-cell` attribute its table or cell does
     /// not fold: `qm-<name>[<attr>]`.
     ElementAttr { element: String, attr: String },
-    /// A footnote definition, which the content has no construct for:
-    /// `footnote`.
+    /// A footnote definition no reference reads, one repeating a label
+    /// already defined or nested in another, or a reference where no note
+    /// can sit (a table cell, an image's alt text, another note): `footnote`.
     Footnote,
+    /// The structure of a block inside a footnote, whose text the note keeps:
+    /// `footnote[<block>]`, the block `list`, `heading`, `code`, `quote`,
+    /// `table` or `rule`.
+    NoteBlock(&'static str),
+    /// An equation where no island can sit, which stays as its markup's
+    /// text: `math`.
+    Math,
 }
 
 impl std::fmt::Display for Dropped {
@@ -117,6 +134,8 @@ impl std::fmt::Display for Dropped {
             Dropped::Element(name) => write!(f, "{PREFIX}{name}"),
             Dropped::ElementAttr { element, attr } => write!(f, "{PREFIX}{element}[{attr}]"),
             Dropped::Footnote => f.write_str("footnote"),
+            Dropped::NoteBlock(block) => write!(f, "footnote[{block}]"),
+            Dropped::Math => f.write_str("math"),
         }
     }
 }
@@ -137,6 +156,7 @@ pub(crate) fn options() -> Options {
     options.insert(Options::ENABLE_TABLES);
     options.insert(Options::ENABLE_TASKLISTS);
     options.insert(Options::ENABLE_FOOTNOTES);
+    options.insert(Options::ENABLE_MATH);
     options
 }
 
@@ -144,9 +164,10 @@ pub(crate) fn options() -> Options {
 /// [`ImportWarning`] per construct it dropped: each dropped opening tag, a
 /// `<pre>`, `<script>`, `<style>` or `<textarea>` block's included, a block
 /// holding no other opening tag under its first where it drops markdown with
-/// it, and each footnote definition. A comment, the content of a type 1–5 HTML
-/// block or a footnote definition, and any other closing tag or `qm-anchor`
-/// tag drop silently.
+/// it, each footnote no reference reads and each equation where no island
+/// can sit. A comment, the content of a type 1–5 HTML block, and any other
+/// closing tag or `qm-anchor` tag drop silently. What a footnote nothing
+/// reads holds reports nothing of its own.
 pub fn from_markdown(markdown: &str) -> Result<Imported, ImportError> {
     let mut b = Builder::default();
     parse_markdown(markdown, options(), |text, events| b.run(MarkdownFixer::new(text, events.into_iter())))?;
@@ -300,6 +321,24 @@ impl Inline {
         }
     }
 
+    /// One inline event of a flat run, a note's: text and the marks over it,
+    /// a hard break a `\n`.
+    fn flat_event(&mut self, event: &Event) {
+        match event {
+            Event::Text(t) => self.push_text(t),
+            Event::Code(t) => self.push_code(t),
+            Event::SoftBreak => self.push_text(" "),
+            Event::HardBreak => self.push_raw('\n'),
+            Event::Start(tag) => {
+                if let Some(kind) = mark_kind(tag) {
+                    self.open_mark(kind);
+                }
+            }
+            Event::End(end) if ends_mark(end) => self.close_mark(),
+            _ => {}
+        }
+    }
+
     /// Append inline code text and record its [`MarkKind::Code`] mark over it.
     fn push_code(&mut self, s: &str) {
         let start = self.pos;
@@ -401,6 +440,57 @@ struct Builder {
     unclosed: Vec<u64>,
     /// What this walk drops: a raw tag, an unclosed `<u>`, a wrapper left
     /// unclosed or outside a tag line, an attribute it cannot carry.
+    dropped: Drops,
+    /// The footnote definition being read.
+    note: Option<NoteAcc>,
+    /// Each definition read, by the label pulldown matches references with.
+    notes: HashMap<UniCase<String>, Note>,
+    /// Each footnote island minted, by index, and the label it reads.
+    note_refs: Vec<(usize, UniCase<String>)>,
+}
+
+/// A footnote definition whose events the import is reading into a note.
+#[derive(Default)]
+struct NoteAcc {
+    label: String,
+    /// The definition's byte offset.
+    at: usize,
+    inline: Inline,
+    /// Whether the note's current line holds anything, and whether a block
+    /// opened since, so the next content starts a line.
+    filled: bool,
+    broken: bool,
+    img_depth: usize,
+    in_code: bool,
+    /// Whether the table row being read has a cell already.
+    in_row: bool,
+    /// Definitions opened inside this one, which drop.
+    nested: usize,
+    /// What the note drops, reported once a reference reads it.
+    dropped: Drops,
+}
+
+impl NoteAcc {
+    /// A block opens: its content starts a line where the note holds some.
+    fn block(&mut self) {
+        self.broken |= self.filled;
+        self.filled = false;
+    }
+
+    /// Inline content arrives, on the line a block opened if one did.
+    fn fill(&mut self) {
+        if std::mem::take(&mut self.broken) {
+            self.inline.push_raw('\n');
+        }
+        self.filled = true;
+    }
+}
+
+/// A note read off its definition.
+struct Note {
+    props: serde_json::Value,
+    at: usize,
+    used: bool,
     dropped: Drops,
 }
 
@@ -656,7 +746,7 @@ impl Builder {
             let event = match item {
                 Fixed::Event(event) => event,
                 Fixed::Carrier(tag) => {
-                    if tag.block {
+                    if tag.block && self.note.is_none() {
                         self.retract_empty_line();
                     }
                     self.carrier_tag(tag)?;
@@ -671,10 +761,35 @@ impl Builder {
                     continue;
                 }
                 Fixed::Dropped(construct, at) => {
-                    self.dropped.add(construct, at);
+                    match self.note.as_mut() {
+                        Some(note) => note.dropped.add(construct, at),
+                        None => self.dropped.add(construct, at),
+                    }
+                    continue;
+                }
+                Fixed::NoteDef { label, at } => {
+                    match self.note.as_mut() {
+                        Some(note) => {
+                            note.nested += 1;
+                            self.dropped.add(Dropped::Footnote, at);
+                        }
+                        None => self.note = Some(NoteAcc { label, at, ..NoteAcc::default() }),
+                    }
+                    continue;
+                }
+                Fixed::NoteRef { label, at } => {
+                    self.note_ref(label, at);
+                    continue;
+                }
+                Fixed::Math { tex, display, source, at } => {
+                    self.math(&tex, display, source, at);
                     continue;
                 }
             };
+            if self.note.is_some() {
+                self.note_event(event);
+                continue;
+            }
             // An inline run ends at the first event outside it, and the
             // underlines it left open with it.
             if self.image_depth == 0 && self.table.is_none() && !is_inline(&event) {
@@ -692,11 +807,7 @@ impl Builder {
                         }
                     }
                     other => {
-                        let alt = match other {
-                            Event::Text(t) | Event::Code(t) => &**t,
-                            Event::SoftBreak | Event::HardBreak => " ",
-                            _ => "",
-                        };
+                        let alt = alt_text(other).unwrap_or_default();
                         match self.table.as_mut().and_then(|acc| acc.cell.as_mut()) {
                             Some(cell) => cell.push_text(alt),
                             None => self.image_alt.extend(admitted(alt)),
@@ -919,6 +1030,12 @@ impl Builder {
     /// open tag drops, and any other close tag drops silently.
     fn carrier_tag(&mut self, tag: CarrierTag) -> Result<(), ImportError> {
         let CarrierTag { name, attrs, block, at, space } = tag;
+        if let Some(note) = self.note.as_mut() {
+            if attrs.is_some() {
+                note.dropped.add(Dropped::Element(name), at);
+            }
+            return Ok(());
+        }
         if let Some(acc) = self.table.as_mut().filter(|acc| acc.cell.is_some()) {
             match attrs {
                 _ if name != carrier::CELL || self.image_depth > 0 => {
@@ -1013,6 +1130,15 @@ impl Builder {
     /// Pair one `<u>` tag in the run or table cell it stands in. In an image's
     /// alt text, where nothing is marked, it underlines nothing.
     fn underline_tag(&mut self, tag: UTag) {
+        if let Some(note) = self.note.as_mut() {
+            if note.img_depth == 0 {
+                if matches!(tag, UTag::Open { .. }) {
+                    note.fill();
+                }
+                note.inline.underline(tag);
+            }
+            return;
+        }
         if self.image_depth > 0 {
             return;
         }
@@ -1056,6 +1182,9 @@ impl Builder {
     /// Report a close tag that dropped with the markdown under it, once for
     /// the innermost wrapper it names: that wrapper stays open past it.
     fn swallowed(&mut self, name: String, at: usize) {
+        if let Some(note) = self.note.as_mut() {
+            return note.dropped.add(Dropped::Element(name), at);
+        }
         match self.blocks.iter_mut().rev().find(|open| open.name == name) {
             Some(open) if open.reported => return,
             Some(open) => open.reported = true,
@@ -1174,7 +1303,154 @@ impl Builder {
         self.mint_island(IslandType::Image, props);
     }
 
+    /// One event of the definition being read into its note.
+    fn note_event(&mut self, event: Event) {
+        let Some(note) = self.note.as_mut() else {
+            return;
+        };
+        if note.img_depth > 0 {
+            match &event {
+                Event::Start(Tag::Image { .. }) => note.img_depth += 1,
+                Event::End(TagEnd::Image) => note.img_depth -= 1,
+                other => {
+                    if let Some(s) = alt_text(other) {
+                        note.fill();
+                        note.inline.push_text(s);
+                    }
+                }
+            }
+            return;
+        }
+        let structure = match &event {
+            Event::Start(Tag::List(_)) => Some("list"),
+            Event::Start(Tag::Heading { .. }) => Some("heading"),
+            Event::Start(Tag::CodeBlock(_)) => Some("code"),
+            Event::Start(Tag::BlockQuote(_)) => Some("quote"),
+            Event::Start(Tag::Table(_)) => Some("table"),
+            Event::Rule => Some("rule"),
+            _ => None,
+        };
+        if let Some(block) = structure {
+            note.dropped.add(Dropped::NoteBlock(block), note.at);
+        }
+        match event {
+            Event::End(TagEnd::FootnoteDefinition) if note.nested > 0 => note.nested -= 1,
+            Event::End(TagEnd::FootnoteDefinition) => {
+                self.close_note();
+                self.rearm_item();
+            }
+            Event::Start(Tag::Paragraph | Tag::Heading { .. } | Tag::Item | Tag::TableHead | Tag::TableRow) => {
+                note.block();
+                note.in_row = false;
+            }
+            Event::Start(Tag::CodeBlock(_)) => {
+                note.block();
+                note.in_code = true;
+            }
+            Event::End(TagEnd::CodeBlock) => note.in_code = false,
+            Event::Rule => note.block(),
+            Event::Start(Tag::TableCell) => {
+                if std::mem::replace(&mut note.in_row, true) {
+                    note.fill();
+                    note.inline.push_text(" ");
+                }
+            }
+            Event::Text(t) if note.in_code => {
+                let t = t.strip_suffix('\n').unwrap_or(&t);
+                for (k, line) in t.split('\n').enumerate() {
+                    note.fill();
+                    if k > 0 {
+                        note.inline.push_raw('\n');
+                    }
+                    note.inline.push_code(line);
+                }
+            }
+            Event::Start(Tag::Image { .. }) => {
+                note.fill();
+                note.img_depth = 1;
+            }
+            other => {
+                if !matches!(other, Event::End(_)) && is_inline(&other) {
+                    note.fill();
+                }
+                note.inline.flat_event(&other);
+            }
+        }
+    }
+
+    /// Settle the definition being read into its note: the first under its
+    /// label is the one references read.
+    fn close_note(&mut self) {
+        let Some(mut note) = self.note.take() else {
+            return;
+        };
+        note.inline.close_marks();
+        note.inline.drop_open(&mut note.dropped);
+        let key = UniCase::new(note.label);
+        if self.notes.contains_key(&key) {
+            return self.dropped.add(Dropped::Footnote, note.at);
+        }
+        let props = crate::serial::cell_to_value(&note.inline.text, &note.inline.marks);
+        self.notes.insert(key, Note { props, at: note.at, used: false, dropped: note.dropped });
+    }
+
+    /// A footnote reference: an island in prose, its note filled in once
+    /// every definition is read. Anywhere else it drops.
+    fn note_ref(&mut self, label: String, at: usize) {
+        if let Some(note) = self.note.as_mut() {
+            return note.dropped.add(Dropped::Footnote, at);
+        }
+        if self.table.is_some() || self.image_depth > 0 {
+            return self.dropped.add(Dropped::Footnote, at);
+        }
+        self.ensure_open(LineKind::Para);
+        self.inline.push_raw(ISLAND_SLOT);
+        self.note_refs.push((self.islands.len(), UniCase::new(label)));
+        self.mint_island(IslandType::Footnote, serde_json::Value::Null);
+    }
+
+    /// An equation: an island in prose, and its markup's text, `source`,
+    /// where no island can sit.
+    fn math(&mut self, tex: &str, display: bool, source: &str, at: usize) {
+        if let Some(note) = self.note.as_mut() {
+            note.fill();
+            note.inline.push_text(source);
+            return note.dropped.add(Dropped::Math, at);
+        }
+        let cell = self.table.as_mut().and_then(|acc| {
+            acc.pair.content();
+            acc.cell.as_mut()
+        });
+        if self.image_depth > 0 || cell.is_some() {
+            match cell {
+                Some(cell) => cell.push_text(source),
+                None => self.image_alt.extend(admitted(source)),
+            }
+            return self.dropped.add(Dropped::Math, at);
+        }
+        self.ensure_open(LineKind::Para);
+        self.inline.push_raw(ISLAND_SLOT);
+        let props = match display {
+            true => json!({ "tex": tex, "display": true }),
+            false => json!({ "tex": tex }),
+        };
+        self.mint_island(IslandType::Math, props);
+    }
+
     fn finish(mut self) -> (Content, Drops) {
+        self.close_note();
+        for (index, label) in std::mem::take(&mut self.note_refs) {
+            if let Some(note) = self.notes.get_mut(&label) {
+                self.islands[index].props = note.props.clone();
+                note.used = true;
+            }
+        }
+        for note in std::mem::take(&mut self.notes).into_values() {
+            match note.used {
+                true => self.dropped.absorb(note.dropped),
+                false => self.dropped.add(Dropped::Footnote, note.at),
+            }
+        }
         self.inline.drop_open(&mut self.dropped);
         self.retract_empty_line();
         self.drop_unclosed_blocks();
@@ -1200,6 +1476,15 @@ impl Builder {
             islands: self.islands,
         };
         (content, self.dropped)
+    }
+}
+
+/// What `event` contributes to an image's alt text.
+fn alt_text<'e>(event: &'e Event) -> Option<&'e str> {
+    match event {
+        Event::Text(t) | Event::Code(t) => Some(t),
+        Event::SoftBreak | Event::HardBreak => Some(" "),
+        _ => None,
     }
 }
 
@@ -1237,7 +1522,14 @@ fn ends_mark(end: &TagEnd) -> bool {
 /// Whether `event` stands inside an inline run.
 fn is_inline(event: &Event) -> bool {
     match event {
-        Event::Text(_) | Event::Code(_) | Event::SoftBreak | Event::HardBreak | Event::InlineHtml(_) => true,
+        Event::Text(_)
+        | Event::Code(_)
+        | Event::SoftBreak
+        | Event::HardBreak
+        | Event::InlineHtml(_)
+        | Event::InlineMath(_)
+        | Event::DisplayMath(_)
+        | Event::FootnoteReference(_) => true,
         Event::Start(tag) => matches!(tag, Tag::Image { .. }) || mark_kind(tag).is_some(),
         Event::End(end) => matches!(end, TagEnd::Image) || ends_mark(end),
         _ => false,
@@ -1274,6 +1566,13 @@ enum Fixed<'a> {
     Swallowed(String, usize),
     /// A construct the fixer dropped, at its byte offset.
     Dropped(Dropped, usize),
+    /// A footnote definition's start, at its byte offset.
+    NoteDef { label: String, at: usize },
+    /// A footnote reference, at its byte offset.
+    NoteRef { label: String, at: usize },
+    /// An equation: its TeX, whether `$$` delimits it, and its markup as
+    /// written, at its byte offset.
+    Math { tex: pulldown_cmark::CowStr<'a>, display: bool, source: &'a str, at: usize },
 }
 
 /// An inline `<u>` tag, paired by the builder as HTML pairs it.
@@ -1347,6 +1646,15 @@ impl Drops {
             None => {
                 self.index.insert(construct.clone(), self.entries.len());
                 self.entries.push((construct, 1, at));
+            }
+        }
+    }
+
+    /// Every drop `other` counted, at its own offset.
+    fn absorb(&mut self, other: Drops) {
+        for (construct, count, at) in other.entries {
+            for _ in 0..count {
+                self.add(construct.clone(), at);
             }
         }
     }
@@ -1527,24 +1835,6 @@ where
         self.held.push_back(Fixed::Event(Event::End(TagEnd::HtmlBlock)));
     }
 
-    /// Consume a footnote definition through its end, which alone reaches the
-    /// builder.
-    fn drop_note(&mut self, at: usize) {
-        self.held.push_back(Fixed::Dropped(Dropped::Footnote, at));
-        let mut depth = 1;
-        for (event, _) in self.inner.by_ref() {
-            match event {
-                Event::Start(Tag::FootnoteDefinition(_)) => depth += 1,
-                Event::End(TagEnd::FootnoteDefinition) => depth -= 1,
-                _ => {}
-            }
-            if depth == 0 {
-                break;
-            }
-        }
-        self.held.push_back(Fixed::Event(Event::End(TagEnd::FootnoteDefinition)));
-    }
-
     /// One event as the builder takes it, or `None` for one that `held` now
     /// carries or that drops.
     fn fix(&mut self, event: Event<'a>, range: Range<usize>) -> Option<Fixed<'a>> {
@@ -1606,11 +1896,16 @@ where
                 self.drop_tag(&tag, range.start);
                 return None;
             }
-            Event::Start(Tag::FootnoteDefinition(_)) => {
-                self.drop_note(range.start);
-                return None;
-            }
-            Event::FootnoteReference(label) => Fixed::Event(Event::Text(format!("[^{label}]").into())),
+            Event::Start(Tag::FootnoteDefinition(label)) => Fixed::NoteDef {
+                label: label.to_string(),
+                at: range.start,
+            },
+            Event::FootnoteReference(label) => Fixed::NoteRef {
+                label: label.to_string(),
+                at: range.start,
+            },
+            Event::InlineMath(tex) => Fixed::Math { tex, display: false, source: &self.src[range.clone()], at: range.start },
+            Event::DisplayMath(tex) => Fixed::Math { tex, display: true, source: &self.src[range.clone()], at: range.start },
             other => Fixed::Event(other),
         })
     }
@@ -2086,16 +2381,47 @@ pub(crate) mod tests {
         assert_eq!(checked(&rt), [vec![Some(true)], vec![Some(true)]]);
     }
 
-    /// A footnote definition drops whole, wherever it sits and whatever it
-    /// holds, and a reference to one is its text; with no definition the
-    /// reference was text already.
+    /// Each footnote reference is an inline island holding a copy of the note
+    /// its label names, however the label is cased and wherever the
+    /// definition sits; a note keeps the text of the blocks it holds, a line
+    /// each.
     #[test]
-    fn a_footnote_definition_drops_and_its_reference_is_text() {
+    fn a_footnote_reference_is_an_island_holding_its_note() {
+        let md = "[^n]: **bold** note\n\nOne[^1] two[^N].\n\n# Head[^1]\n\n\
+                  [^1]: first<br>second\n\n    para\n    - item";
+        let imported = imp_fixed(md);
+        let rt = &imported.content;
+        assert_eq!(rt.text, "One\u{FFFC} two\u{FFFC}.\nHead\u{FFFC}");
+        let notes: Vec<(String, Vec<Mark>)> = rt
+            .islands
+            .iter()
+            .map(|isl| {
+                assert_eq!(isl.island_type, IslandType::Footnote);
+                crate::serial::parse_cell(&isl.props)
+            })
+            .collect();
+        let first = ("first\nsecond\npara\nitem".to_string(), vec![]);
+        assert_eq!(
+            notes,
+            [
+                first.clone(),
+                ("bold note".into(), vec![Mark::new(0, 4, MarkKind::Strong)]),
+                first,
+            ]
+        );
+        assert_eq!(dropped(&imported), [("footnote[list]", 1)]);
+    }
+
+    /// A definition nothing reads and one repeating a label drop, and so does
+    /// a reference where no note can sit; a reference to no definition is
+    /// text.
+    #[test]
+    fn a_footnote_with_no_place_drops() {
         let cases: &[(&str, &str, &[(&str, usize)])] = &[
-            ("a[^1]\n\n[^1]: **x**\n\n    - y", "a[^1]", &[("footnote", 1)]),
-            ("[^n]: x\n\nb[^N]", "b[^N]", &[("footnote", 1)]),
-            ("- a\n\n  [^1]: <u>x</u>\n\n  b", "a\nb", &[("footnote", 1)]),
-            ("| h[^1] |\n| --- |\n| c |\n\n[^1]: x\n\n[^2]: y", "\u{FFFC}", &[("footnote", 2)]),
+            ("a[^1]\n\n[^1]: x\n\n[^2]: y", "a\u{FFFC}", &[("footnote", 1)]),
+            ("a[^1]\n\n[^1]: x\n\n[^1]: y", "a\u{FFFC}", &[("footnote", 1)]),
+            ("| h[^1] |\n| --- |\n| c |\n\n[^1]: x", "\u{FFFC}", &[("footnote", 2)]),
+            ("a[^1]\n\n[^1]: x[^2]\n\n[^2]: y", "a\u{FFFC}", &[("footnote", 2)]),
             ("a[^9]", "a[^9]", &[]),
         ];
         for (md, text, warned) in cases {
@@ -2103,8 +2429,42 @@ pub(crate) mod tests {
             assert_eq!(imported.content.text, *text, "{md:?}");
             assert_eq!(dropped(&imported), *warned, "{md:?}");
         }
-        let table = imp_fixed("| h[^1] |\n| --- |\n| c |\n\n[^1]: x").content;
-        assert_eq!(table.islands[0].props["header"][0]["text"], "h[^1]");
+    }
+
+
+    /// `$…$` is an inline equation and `$$…$$` a display one, each an island
+    /// holding its TeX; where no island can sit, the source stays as text.
+    #[test]
+    fn math_is_an_island_holding_its_tex() {
+        let imported = imp_fixed("Let $x^2$ and $$\\frac{a}{b}$$ cost $5 and $10.");
+        let rt = &imported.content;
+        assert_eq!(rt.text, "Let \u{FFFC} and \u{FFFC} cost $5 and $10.");
+        let props: Vec<&serde_json::Value> = rt.islands.iter().map(|isl| &isl.props).collect();
+        assert_eq!(
+            props,
+            [
+                &serde_json::json!({"tex": "x^2"}),
+                &serde_json::json!({"tex": "\\frac{a}{b}", "display": true}),
+            ]
+        );
+        assert!(dropped(&imported).is_empty());
+
+        let cases: &[(&str, &str)] = &[
+            ("| $a$ |\n| --- |\n| c |", "\u{FFFC}"),
+            ("![$a$ b](u)", "\u{FFFC}"),
+            ("n[^1]\n\n[^1]: $a$", "n\u{FFFC}"),
+        ];
+        for (md, text) in cases {
+            let imported = imp_fixed(md);
+            assert_eq!(imported.content.text, *text, "{md:?}");
+            assert_eq!(dropped(&imported), [("math", 1)], "{md:?}");
+        }
+        let rt = imp("| $a$ |\n| --- |\n| c |");
+        assert_eq!(rt.islands[0].props["header"][0]["text"], "$a$");
+        let rt = imp("![$a$ b](u)");
+        assert_eq!(rt.islands[0].props["alt"], "$a$ b");
+        let rt = imp("n[^1]\n\n[^1]: $a$");
+        assert_eq!(rt.islands[0].props["text"], "$a$");
     }
 
     #[test]

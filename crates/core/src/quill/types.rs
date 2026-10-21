@@ -61,6 +61,8 @@ pub enum BlockConstruct {
     Quote,
     Table,
     Image,
+    Footnote,
+    Math,
 }
 
 impl BlockConstruct {
@@ -72,15 +74,17 @@ impl BlockConstruct {
         Self::Quote,
         Self::Table,
         Self::Image,
+        Self::Footnote,
+        Self::Math,
     ];
 
     /// How many of each construct `content` holds, indexed by discriminant: a
     /// heading, rule or code block per block, a list or quote per container
-    /// run at any depth, a table or image per island.
-    pub fn tally(content: &quillmark_content::model::Content) -> [usize; 7] {
+    /// run at any depth, a table, image, footnote or equation per island.
+    pub fn tally(content: &quillmark_content::model::Content) -> [usize; 9] {
         use quillmark_content::island::IslandType;
         use quillmark_content::model::{Container, LineKind};
-        let mut counts = [0; 7];
+        let mut counts = [0; 9];
         for line in content.lines.iter().filter(|l| !l.continues) {
             match line.kind {
                 LineKind::Heading { .. } => counts[Self::Heading as usize] += 1,
@@ -98,6 +102,8 @@ impl BlockConstruct {
             match island.island_type {
                 IslandType::Table => counts[Self::Table as usize] += 1,
                 IslandType::Image => counts[Self::Image as usize] += 1,
+                IslandType::Footnote => counts[Self::Footnote as usize] += 1,
+                IslandType::Math => counts[Self::Math as usize] += 1,
             }
         }
         counts
@@ -113,6 +119,8 @@ impl BlockConstruct {
             Self::Quote => "quote",
             Self::Table => "table",
             Self::Image => "image",
+            Self::Footnote => "footnote",
+            Self::Math => "math",
         }
     }
 }
