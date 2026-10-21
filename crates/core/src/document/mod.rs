@@ -124,7 +124,7 @@ fn dropped_message(construct: &Dropped, n: usize) -> (String, String) {
                 some("equation", "equations")
             ),
             "An equation `$…$` or `$$…$$` reads as one in prose, outside a table cell, an image's alt text \
-             and a footnote's note; write `\\$` for a dollar sign that opens none."
+             and a footnote's note, around TeX that is not blank; write `\\$` for a dollar sign that opens none."
                 .to_string(),
         ),
         Dropped::ElementAttr { element, attr } if element == TABLE => attr_dropped(

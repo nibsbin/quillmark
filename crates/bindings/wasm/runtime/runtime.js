@@ -334,7 +334,7 @@ function requireLocalQuill(quill, method) {
 // every container has an entry. An entry of `'*'` welds on the whole bag: an
 // element's attributes are open, its name among them.
 
-const WELD_KEYS = { list_item: ['ordered'], quote: [], element: '*' };
+const WELD_KEYS = { list_item: ['ordered'], quote: [], description: [], element: '*' };
 
 /**
  * @param {import('../core/wasm.js').ContentContainer} a

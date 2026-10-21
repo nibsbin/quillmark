@@ -343,6 +343,7 @@ pub fn line_kind_from_value(v: &Value) -> Result<LineKind, ParseError> {
         // the name and the kind it decodes to spell one line.
         "island" | "para" => Ok(LineKind::Para),
         "rule" => Ok(LineKind::Rule),
+        "term" => Ok(LineKind::Term),
         other => Err(ParseError::UnknownName {
             axis: "line kind",
             name: other.to_string(),
@@ -424,6 +425,7 @@ pub fn container_from_value(v: &Value) -> Result<Container, ParseError> {
             instance,
         }),
         "quote" => Ok(Container::Quote { instance }),
+        "description" => Ok(Container::Description { instance }),
         "element" => {
             let element = element_payload(o)?;
             Ok(Container::Element { element, instance })

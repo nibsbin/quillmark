@@ -1569,7 +1569,7 @@ card_kinds:
     fn acroform_declines_every_construct_but_the_paragraph() {
         let md = "# H\n\nprose\n\n- a\n  - b\n- c\n\n1. d\n\n> q\n>\n> > r\n\n\
                   ```\nx\ny\n```\n\n---\n\n| t |\n|---|\n| u |\n\n![i](i.png)\n\n\
-                  n[^1] $x$ $$y$$\n\n[^1]: note\n";
+                  n[^1] $x$ $$y$$\n\n[^1]: note\n\nT\n: d\n: e\n";
         let content = crate::document::import_body(md).expect("imports");
         let counts = |id: &str| -> Vec<(crate::quill::BlockConstruct, usize)> {
             let tally = crate::quill::BlockConstruct::tally(&content);
@@ -1588,6 +1588,7 @@ card_kinds:
                 (Image, 1),
                 (Footnote, 1),
                 (Math, 2),
+                (Definition, 1),
             ]
         );
         assert_eq!(counts("typst"), vec![(Image, 1)]);

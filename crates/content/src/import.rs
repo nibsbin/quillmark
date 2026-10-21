@@ -6,7 +6,7 @@
 //! line of carrier tags in an HTML block apart) so the content invariants hold
 //! by construction, then
 //! parsed with `pulldown_cmark` (CommonMark + strikethrough + pipe tables +
-//! task lists + footnotes + math) and
+//! task lists + footnotes + math + definition lists) and
 //! walked into a [`Content`]. This is the one place the `<u>`/`<br>` allowlist
 //! runs, and the one place a dropped raw tag is counted into the
 //! [`ImportWarning`]s an import returns beside its content.
@@ -42,8 +42,13 @@
 //!   kept.
 //! - `$…$` and `$$…$$` are an inline `math` island holding the TeX between the
 //!   delimiters, `display` for `$$`. Where no island can sit, in a table
-//!   cell, a note or an image's alt text, the markup stays as its text,
-//!   reported.
+//!   cell, a note or an image's alt text, and where the TeX, its edge
+//!   whitespace dropped, is not what its delimiters write back, as `$ $`
+//!   around a Unicode space is empty, the markup stays as its text, reported.
+//! - A definition list is its terms and descriptions: each term a `Term`
+//!   line, each description a [`Container::Description`] under the term above
+//!   it. Where one list ends and the next begins is not kept, and neither is
+//!   whether a description is tight.
 //! - Raw HTML produces no content beyond the allowlist and the carrier. An HTML
 //!   block drops whole, as CommonMark runs it; one of tag lines alone passes
 //!   its carrier tags on. A `qm-table` wrapper pairs as an element does,
@@ -119,10 +124,10 @@ pub enum Dropped {
     Footnote,
     /// The structure of a block inside a footnote, whose text the note keeps:
     /// `footnote[<block>]`, the block `list`, `heading`, `code`, `quote`,
-    /// `table` or `rule`.
+    /// `table`, `rule` or `definition list`.
     NoteBlock(&'static str),
-    /// An equation where no island can sit, which stays as its markup's
-    /// text: `math`.
+    /// An equation where no island can sit, or whose TeX its delimiters would
+    /// not write back, which stays as its markup's text: `math`.
     Math,
 }
 
@@ -157,6 +162,7 @@ pub(crate) fn options() -> Options {
     options.insert(Options::ENABLE_TASKLISTS);
     options.insert(Options::ENABLE_FOOTNOTES);
     options.insert(Options::ENABLE_MATH);
+    options.insert(Options::ENABLE_DEFINITION_LIST);
     options
 }
 
@@ -164,8 +170,8 @@ pub(crate) fn options() -> Options {
 /// [`ImportWarning`] per construct it dropped: each dropped opening tag, a
 /// `<pre>`, `<script>`, `<style>` or `<textarea>` block's included, a block
 /// holding no other opening tag under its first where it drops markdown with
-/// it, each footnote no reference reads and each equation where no island
-/// can sit. A comment, the content of a type 1–5 HTML block, and any other
+/// it, each footnote no reference reads and each equation that stays as its
+/// markup's text. A comment, the content of a type 1–5 HTML block, and any other
 /// closing tag or `qm-anchor` tag drop silently. What a footnote nothing
 /// reads holds reports nothing of its own.
 pub fn from_markdown(markdown: &str) -> Result<Imported, ImportError> {
@@ -965,6 +971,17 @@ impl Builder {
                 self.containers.push(Container::Quote { instance });
                 self.check_depth()?;
             }
+            Tag::DefinitionList => self.pending = None,
+            Tag::DefinitionListTitle => self.pending = Some((LineKind::Term, false)),
+            Tag::DefinitionListDefinition => {
+                // A tight description's text arrives with no `Paragraph`, as a
+                // tight list item's does.
+                self.pending = Some((LineKind::Para, false));
+                self.container_marks.push(self.emitted());
+                let instance = self.mint_instance();
+                self.containers.push(Container::Description { instance });
+                self.check_depth()?;
+            }
             Tag::Table(aligns) => {
                 self.pending = None;
                 self.open_line(LineKind::Para, false);
@@ -1009,15 +1026,16 @@ impl Builder {
                 let mark = self.container_marks.pop().unwrap_or(0);
                 self.close_container(mark);
             }
-            TagEnd::BlockQuote(_) => {
+            TagEnd::BlockQuote(_) | TagEnd::DefinitionListDefinition => {
                 self.drop_unclosed_blocks();
                 let mark = self.container_marks.pop().unwrap_or(0);
                 self.close_container(mark);
                 self.rearm_item();
             }
+            TagEnd::DefinitionList => self.rearm_item(),
             end if ends_mark(&end) => self.inline.close_mark(),
             // A block that produced no inline content still gets its line.
-            TagEnd::Heading(_) | TagEnd::Paragraph => {
+            TagEnd::Heading(_) | TagEnd::Paragraph | TagEnd::DefinitionListTitle => {
                 self.flush_empty_block();
                 self.rearm_item();
             }
@@ -1197,7 +1215,7 @@ impl Builder {
     /// arm its line, so after a block nested in the item the next text must be
     /// armed here or it joins that block's last line.
     fn rearm_item(&mut self) {
-        if matches!(self.containers.last(), Some(Container::ListItem { .. })) {
+        if matches!(self.containers.last(), Some(Container::ListItem { .. } | Container::Description { .. })) {
             self.pending = Some((LineKind::Para, false));
         }
     }
@@ -1327,6 +1345,7 @@ impl Builder {
             Event::Start(Tag::CodeBlock(_)) => Some("code"),
             Event::Start(Tag::BlockQuote(_)) => Some("quote"),
             Event::Start(Tag::Table(_)) => Some("table"),
+            Event::Start(Tag::DefinitionList) => Some("definition list"),
             Event::Rule => Some("rule"),
             _ => None,
         };
@@ -1339,7 +1358,15 @@ impl Builder {
                 self.close_note();
                 self.rearm_item();
             }
-            Event::Start(Tag::Paragraph | Tag::Heading { .. } | Tag::Item | Tag::TableHead | Tag::TableRow) => {
+            Event::Start(
+                Tag::Paragraph
+                | Tag::Heading { .. }
+                | Tag::Item
+                | Tag::DefinitionListTitle
+                | Tag::DefinitionListDefinition
+                | Tag::TableHead
+                | Tag::TableRow,
+            ) => {
                 note.block();
                 note.in_row = false;
             }
@@ -1421,10 +1448,14 @@ impl Builder {
             acc.pair.content();
             acc.cell.as_mut()
         });
-        if self.image_depth > 0 || cell.is_some() {
+        if self.image_depth > 0 || cell.is_some() || !crate::export::tex_is_writable(&crate::serial::settle_tex(tex), display) {
             match cell {
                 Some(cell) => cell.push_text(source),
-                None => self.image_alt.extend(admitted(source)),
+                None if self.image_depth > 0 => self.image_alt.extend(admitted(source)),
+                None => {
+                    self.ensure_open(LineKind::Para);
+                    self.inline.push_text(source);
+                }
             }
             return self.dropped.add(Dropped::Math, at);
         }
@@ -2435,6 +2466,33 @@ pub(crate) mod tests {
     /// `$…$` is an inline equation and `$$…$$` a display one, each an island
     /// holding its TeX; where no island can sit, the source stays as text.
     #[test]
+    fn a_definition_list_is_term_lines_and_the_descriptions_under_them() {
+        let d = |instance| Container::Description { instance };
+        let rt = imp_fixed("T\\\nU\n: a\n\n  b\n: c\n  - x\n\nV\n:").content;
+        assert_eq!(rt.text, "T\nU\na\nb\nc\nx\nV\n");
+        let shape: Vec<(LineKind, Vec<Container>, bool)> =
+            rt.lines.iter().map(|l| (l.kind.clone(), l.containers.clone(), l.continues)).collect();
+        let item = Container::ListItem { ordered: false, start: 1, ordinal: 0, checked: None, instance: 0 };
+        assert_eq!(
+            shape,
+            [
+                (LineKind::Term, vec![], false),
+                (LineKind::Term, vec![], true),
+                (LineKind::Para, vec![d(0)], false),
+                (LineKind::Para, vec![d(0)], false),
+                (LineKind::Para, vec![d(1)], false),
+                (LineKind::Para, vec![d(1), item], false),
+                (LineKind::Term, vec![], false),
+                (LineKind::Para, vec![d(0)], false),
+            ]
+        );
+
+        let rt = imp_fixed("n[^1]\n\n[^1]: T\n    : d");
+        assert_eq!(rt.content.islands[0].props["text"], "T\nd");
+        assert_eq!(dropped(&rt), [("footnote[definition list]", 1)]);
+    }
+
+    #[test]
     fn math_is_an_island_holding_its_tex() {
         let imported = imp_fixed("Let $x^2$ and $$\\frac{a}{b}$$ cost $5 and $10.");
         let rt = &imported.content;
@@ -2463,6 +2521,9 @@ pub(crate) mod tests {
         assert_eq!(rt.islands[0].props["header"][0]["text"], "$a$");
         let rt = imp("![$a$ b](u)");
         assert_eq!(rt.islands[0].props["alt"], "$a$ b");
+        let imported = imp_fixed("a $\u{2000}$ b");
+        assert_eq!(imported.content.text, "a $\u{2000}$ b", "a blank equation stays as its text");
+        assert_eq!(dropped(&imported), [("math", 1)]);
         let rt = imp("n[^1]\n\n[^1]: $a$");
         assert_eq!(rt.islands[0].props["text"], "$a$");
     }

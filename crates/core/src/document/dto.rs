@@ -755,6 +755,7 @@ fn append_block(mut dst: Content, mut src: Content) -> Content {
             match top {
                 Container::ListItem { instance, .. }
                 | Container::Quote { instance }
+                | Container::Description { instance }
                 | Container::Element { instance, .. } => {
                     *instance += lift;
                 }

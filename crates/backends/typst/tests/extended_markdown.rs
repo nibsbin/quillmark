@@ -1,6 +1,7 @@
-//! A footnote renders its note at the page foot, and an equation sets in a
-//! math face whatever fonts the quill ships, a command outside the TeX
-//! vocabulary drawing as its name under `typst::unsupported_tex`.
+//! A footnote renders its note at the page foot, an equation sets in a math
+//! face whatever fonts the quill ships, a command outside the TeX vocabulary
+//! drawing as its name under `typst::unsupported_tex`, and a definition list
+//! sets each term beside what describes it.
 
 use quillmark_core::{
     backend::Backend,
@@ -51,6 +52,26 @@ fn a_footnote_renders_its_note() {
         glyphs(&noted) >= glyphs(&bare) + "Thenotetext.".len() + 2,
         "the note and its two numbers render"
     );
+}
+
+#[test]
+fn a_definition_list_renders_its_terms_and_descriptions() {
+    let cases: &[(&str, &str)] = &[
+        ("Term\n: Description.", "TermDescription."),
+        ("Term\n: One.\n\n  Two.\n: Three.", "TermOne.Two.Three."),
+        ("A\n: B\n\nC\n: D", "ABCD"),
+        ("A\\\nB\n: C\n  - D\n  - E", "ABCDE"),
+        ("- A\n  : B", "AB"),
+        ("> A\n> : B", "AB"),
+        ("A\n: B\n  : C", "ABC"),
+        ("A\n:", "A"),
+        ("A[^1]\n: $x$\n\n[^1]: N", "A1x1N"),
+    ];
+    for (markdown, text) in cases {
+        let (svg, warnings) = render(&quill(), markdown);
+        assert!(warnings.is_empty(), "{markdown:?}: {warnings:?}");
+        assert!(glyphs(&svg) >= text.len(), "{markdown:?} draws its text");
+    }
 }
 
 const EQUATIONS: &[&str] = &[

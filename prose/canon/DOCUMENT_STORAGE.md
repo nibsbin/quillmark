@@ -86,7 +86,8 @@ the DTO alike.
 
 Documents written under `"schema": "quillmark/document@0.124.0"` carry the
 current tree, over the content vocabulary without the `footnote` and `math`
-islands (§ Content vocabularies), and the hop decodes the `body`.
+islands, the `term` line kind or the `description` container (§ Content
+vocabularies), and the hop decodes the `body`.
 
 Documents written under `"schema": "quillmark/document@0.116.0"` carry the
 V0_124_0 tree, over the content vocabulary without `element` or a list item's
@@ -240,8 +241,8 @@ four discriminators are covered by their own rule: each is a **closed set**.
 
 | Axis | Members | Rust type |
 |---|---|---|
-| Line `kind` | `para`, `heading`, `code`, `rule` | `LineKind` |
-| Container | `list_item`, `quote`, `element` | `Container` |
+| Line `kind` | `para`, `heading`, `code`, `rule`, `term` | `LineKind` |
+| Container | `list_item`, `quote`, `description`, `element` | `Container` |
 | Mark `type` | `strong`, `emph`, `underline`, `strike`, `code`, `link`, `anchor` | `MarkKind` |
 | Island `type` | `table`, `image`, `footnote`, `math` | `IslandType` |
 
@@ -364,6 +365,13 @@ rewrites a cell's `text` and `marks` in place rather than minting a fresh
 A `footnote` island's props are one table cell, `{text, marks}`: the note,
 with no `\n` at either edge, normalized as a cell is and keeping a key it does
 not name as a cell does. The island is inline, its slot the reference.
+
+A `term` line is a definition list's term, a paragraph; a `description`
+container holds what describes the term line above its run, and carries
+nothing in `attrs`. Two descriptions of one term are two adjacent runs, told
+apart by `instance` as two adjacent quotes are. A term with no description
+below it, and a description with no term above it, store as written; markdown
+writes the missing half empty.
 
 A `math` island's props hold the equation's TeX under `tex`, a string on one
 line with no edge whitespace, and `display: true` on an equation set on its own
@@ -668,7 +676,8 @@ block island's line `para`. `0.116.0` writes a field item as
 item carrying a key its type does not name, where every earlier tag reads past
 one. `0.124.0` leaves the tree unchanged, adds `element` to the container
 vocabulary and `checked` to a list item's `attrs`. `0.129.0` leaves it
-unchanged again and adds `footnote` and `math` to the island vocabulary.
+unchanged again, adds `footnote` and `math` to the island vocabulary, `term`
+to the line kinds and `description` to the containers.
 
 The V0_92_0 hop cold-imports the stored markdown `body` string through the same
 Markdown → richtext path `Document::parse` uses, so a pathologically

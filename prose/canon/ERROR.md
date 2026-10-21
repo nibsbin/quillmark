@@ -153,9 +153,11 @@ families:
     definition of one label, or a reference in a table cell, an image's alt
     text or a note;
   - `footnote[<block>]` for a block in a note, which keeps its text as lines
-    of the note: `heading`, `list`, `code`, `quote`, `table` or `rule`;
+    of the note: `heading`, `list`, `code`, `quote`, `table`, `rule` or
+    `definition list`;
   - `math` for an equation in a table cell, an image's alt text or a note,
-    which keeps its source as text.
+    or one whose TeX is blank once its edge whitespace drops, which keeps its
+    source as text.
 
   A parse reports a body's drops alone, since it knows no field's type: a
   `richtext` field's markdown string reports its drops at its path from

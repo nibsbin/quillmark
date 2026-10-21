@@ -187,9 +187,9 @@ A task item draws a box before its content, ticked when done. A plate replaces t
 
 As with `elements`, the renderer is read from the state's final value, so the update may stand anywhere in the plate.
 
-### Footnotes and equations
+### Footnotes, equations and definition lists
 
-A footnote lowers to Typst's `footnote`, so `#set footnote(..)` and `#set footnote.entry(..)` style it. An equation lowers to Typst math, inline or on its own line, so `#set math.equation(..)` and `#show math.equation: ..` reach it.
+A footnote lowers to Typst's `footnote`, so `#set footnote(..)` and `#set footnote.entry(..)` style it. An equation lowers to Typst math, inline or on its own line, so `#set math.equation(..)` and `#show math.equation: ..` reach it. A definition list lowers to Typst's `terms.item`, one per term holding every description under it, so `#set terms(..)` and `#show terms.item: ..` reach it.
 
 Typst sets an equation in `New Computer Modern Math` and lays one out only in a font with a math table. A quill shipping no font of that family has the backend's embedded Noto Sans Math answer to the name, so equations draw whatever text fonts the quill ships. To set them in a math font of its own, a quill bundles it under `assets/fonts/` and names it:
 
@@ -281,7 +281,7 @@ and the failed render carries the warning after that error.
 
 A quill carries its own fonts. The backend loads every `.ttf`, `.otf`, `.ttc` and `.otc` under `assets/fonts/` and inside vendored `packages/`. A `.ttc` or `.otc` collection loads every face it holds, up to 256; one declaring more loads none and warns `typst::font_collection_skipped`. An asset font wins a family a package also ships. A quill bundling none renders in the embedded Roboto, upright and italic, at any weight from 100 to 900. The host's installed fonts are not among them, so `#set text(font: "Arial")` names a family the compile cannot find. A character no loaded font covers draws as an empty box, and the render warns `typst::missing_glyph` naming it.
 
-Equations draw in the embedded Noto Sans Math unless the quill ships a math font of its own (see [Footnotes and equations](#footnotes-and-equations)).
+Equations draw in the embedded Noto Sans Math unless the quill ships a math font of its own (see [Footnotes, equations and definition lists](#footnotes-equations-and-definition-lists)).
 
 To bundle fonts with the quill, drop them in `assets/fonts/`:
 

@@ -17,7 +17,7 @@ this page documents how the backend lowers the content it produces.
 
 ```
 emit_content(&Normalized) -> Result<Emission, EmitError>
-  ├─ block walk    lines → headings, paragraphs, code fences, lists, quotes, elements, islands
+  ├─ block walk    lines → headings, paragraphs, code fences, lists, quotes, terms, elements, islands
   ├─ mark sweep    anchored marks → nested #strong[…] / #emph[…] / #link(…)[…] / …
   └─ source map    per-segment (content ↔ gen) windows + one (content, gen) pair per run
 ```
@@ -32,7 +32,7 @@ A **segment** is a maximal run of lines joined by `Line::continues`: one
 paragraph, one heading, one whole code fence, one block island's line. It is what
 "paragraph-level" means against the content, and the unit a region keys on.
 
-Only a `para` or `code` block takes continuations
+Only a `para`, `term` or `code` block takes continuations
 (`LineKind::takes_continuations`), and a continuation stays inside one container
 path. A heading and a rule are one line, and so is a `para` whose sole content
 is a block island's slot — the kind cannot tell that one from prose, so
@@ -122,6 +122,7 @@ is a lowering bug, never a document's.
 | `LineKind::Para` | inline content; a hard break (a `continues` line join) emits `#linebreak()`, a soft break is a space (both settled at import). A slot alone on the line is the island's block, lowered by the island dispatch below |
 | `LineKind::Code{lang}` (code fence) | `#raw(block: true, lang: "…", "…")`; `lang:` emitted only when the language tag is non-empty |
 | `LineKind::Rule` (thematic break) | `#line(length: 100%)` |
+| `LineKind::Term` | `#terms.item[…][…]`, the term's inline content, then every `Container::Description` run adjacent below it lowered under the block-level discipline, one after another |
 | `MarkKind::Strong` | `#strong[…]` |
 | `MarkKind::Emph` | `#emph[…]` |
 | `MarkKind::Underline` | `#underline[…]` |
@@ -133,6 +134,7 @@ is a lowering bug, never a document's.
 | `Container::ListItem` (ordered) | `+ ` auto-numbered; the run's first item emits `N. `, which restarts Typst's running counter so an adjacent list numbers from its own `start` |
 | `Container::ListItem{checked}` (task) | the item's marker, then `#_qm-task(done)[…]` around its body (see [Tasks](#tasks)) |
 | `Container::Quote` | `#quote(block: true)[…]` |
+| `Container::Description` | the description of the term line above its run (see `LineKind::Term`); a run with none above lowers as `#terms.item[][…]` |
 | `Container::Element{element}` | `#_qm-element("name", (…))[…]` (see [Elements](#elements)) |
 | `image` island | nothing, plus one `backend::declined_construct` warning per field (see [Declined images](#declined-images)) |
 | `table` island | `#table(columns: N, align: (…), table.header(…), …)` |
@@ -167,8 +169,7 @@ leaves and containers alike: what the content nests, the markup nests.
 Anchor marks emit nothing; an `image` island emits nothing (see
 [Declined images](#declined-images)).
 Raw HTML other than an inline `<u>`, `<br>` (a hard break) and the `qm-*`
-carrier (markdown-spec §6.4) never enters the content, so it is absent here; definition lists
-enter it as literal text (markdown-spec §6.3).
+carrier (markdown-spec §6.4) never enters the content, so it is absent here.
 
 ### Elements
 

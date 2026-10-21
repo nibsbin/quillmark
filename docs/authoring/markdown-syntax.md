@@ -25,6 +25,7 @@ Quillmark enables a small, stable subset of GFM:
 | Task lists | `- [ ] open`, `- [x] done` | A checkbox before the item's text, ticked for `[x]`. |
 | Footnotes | `text[^1]` and a `[^1]: note` definition | The note at the foot of the page, numbered. See [Footnotes](#footnotes). |
 | Math | `$x^2$` inline, `$$\frac{a}{b}$$` on its own line | TeX math. See [Math](#math). |
+| Definition lists | `Term` and `: description` on the line under it | A term and what describes it. See [Definition lists](#definition-lists). |
 
 Autolinks beyond CommonMark's and other GFM features are **not** enabled.
 
@@ -71,6 +72,21 @@ The Typst backend draws:
 | Other | `\dots`, `\cdots`, `\infty`, `\partial`, `\nabla`, `\forall`, `\exists`, `\emptyset`, `\pmod`, `\bmod`, `\displaystyle` |
 
 A command outside these draws as its own name and warns `typst::unsupported_tex`, naming it.
+
+## Definition lists
+
+A paragraph with a line opening `: ` under it is a term and its description:
+
+```markdown
+Plate
+: The Typst file a quill renders through.
+
+Card
+: A block of structured data.
+: Its body, the prose after it.
+```
+
+A term takes several descriptions, one `: ` line each. A description holding more than one block indents the rest two spaces under its `: `. A line of prose that should open with a colon writes it `\:`.
 
 ## Table layout and elements: `qm-*` tags
 
@@ -198,10 +214,6 @@ Consequences:
   a CommonMark code block.
 
 ## Out of scope
-
-The following are not supported:
-
-- **Definition lists**: they render as the literal text written.
 
 A link's title (`[text](url "Title")`) drops at import, with no warning. A construct the active backend has no target for, such as an image under Typst, drops at render with a `backend::declined_construct` warning; see each backend's documentation.
 

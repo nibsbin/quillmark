@@ -440,6 +440,10 @@ impl<'a> Emit<'a> {
                 continue;
             }
             let j = self.segment_end(range.clone(), depth, i);
+            if self.rt.lines[i].kind == LineKind::Term {
+                i = self.emit_term(Some(i..j), j, range.clone(), depth);
+                continue;
+            }
             self.emit_leaf_terminated(i..j);
             i = j;
         }
@@ -465,6 +469,7 @@ impl<'a> Emit<'a> {
                 self.emit_quote(i..j, depth);
                 Some(j)
             }
+            Container::Description { .. } => Some(self.emit_term(None, i, range, depth)),
             Container::Element { element, .. } => {
                 self.emit_element(i..j, depth, element.name(), element.attrs());
                 Some(j)
@@ -587,6 +592,10 @@ impl<'a> Emit<'a> {
                 continue;
             }
             let j = self.segment_end(range.clone(), content_depth, i);
+            if self.rt.lines[i].kind == LineKind::Term {
+                i = self.emit_term(Some(i..j), j, range.clone(), content_depth);
+                continue;
+            }
             self.open_line();
             self.emit_segment(i..j);
             if !self.end_newline {
@@ -619,6 +628,33 @@ impl<'a> Emit<'a> {
         self.out.push(']');
         self.out.push_str("\n\n");
         self.end_newline = true;
+    }
+
+    /// `#terms.item[term][…]`: a term, empty for a description with none
+    /// above it, and the description runs adjacent at `from`, each one's
+    /// blocks after the last's. Returns where those runs end.
+    fn emit_term(&mut self, term: Option<Range<usize>>, from: usize, range: Range<usize>, depth: usize) -> usize {
+        let rt = self.rt;
+        self.open_line();
+        self.out.push_str("#terms.item[");
+        if let Some(term) = term {
+            self.emit_segment(term);
+        }
+        self.out.push_str("][\n");
+        self.end_newline = true;
+        let mut at = from;
+        while at < range.end && matches!(rt.lines[at].containers.get(depth), Some(Container::Description { .. })) {
+            let run = quillmark_content::traverse::runs(&rt.lines, at..range.end, depth)
+                .next()
+                .expect("a line with a container at `depth` opens a run");
+            self.emit_block_level(run.range.clone(), depth + 1);
+            at = run.range.end;
+        }
+        self.open_line();
+        self.out.push(']');
+        self.out.push_str("\n\n");
+        self.end_newline = true;
+        at
     }
 
     /// `#_qm-element("keep", (:))[…]` around an element's run.
@@ -659,7 +695,7 @@ impl<'a> Emit<'a> {
                 (g0, Vec::new())
             }
             LineKind::Code { .. } => unreachable!("code handled by early return"),
-            LineKind::Para => {
+            LineKind::Para | LineKind::Term => {
                 let g0 = self.out.len();
                 (g0, self.emit_inline(lo, hi))
             }
@@ -1435,6 +1471,21 @@ mod tests {
             "quote must render, got {out:?}"
         );
         assert!(out.contains("quoted text"), "quote body present: {out:?}");
+    }
+
+    #[test]
+    fn a_term_carries_its_descriptions_and_a_stray_description_an_empty_term() {
+        let out = emit("A: x\n: one\n: two\n\nB\n:").markup;
+        assert_eq!(
+            out,
+            "#terms.item[A: x][\none\n\ntwo\n\n]\n\n#terms.item[B][\n]\n\n",
+            "{out:?}"
+        );
+        let description = vec![Container::Description { instance: 0 }];
+        let rt = Content::new("d".to_string(), vec![quillmark_content::model::Line::new(LineKind::Para).with_containers(description)])
+            .into_normalized();
+        let out = emit_content(&rt).expect("emit").markup;
+        assert_eq!(out, "#terms.item[][\nd\n\n]\n\n");
     }
 
     #[test]

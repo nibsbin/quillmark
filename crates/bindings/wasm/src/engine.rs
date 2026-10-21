@@ -235,7 +235,8 @@ export type ContentLineKind =
     | { kind: "para" }
     | { kind: "heading"; attrs: { level: number } }
     | { kind: "code"; attrs?: { lang?: string } }
-    | { kind: "rule" };
+    | { kind: "rule" }
+    | { kind: "term" };
 
 /** An ancestor block a line nests inside, outermost first. Closed like
  * `ContentLine.kind`.
@@ -265,6 +266,7 @@ export type ContentContainer =
           instance?: number;
       }
     | { container: "quote"; instance?: number }
+    | { container: "description"; instance?: number }
     | { container: "element"; attrs: ElementAttrs; instance?: number };
 
 /** A carrier element's name and attributes, one bag: `$name` is the part of

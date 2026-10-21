@@ -374,6 +374,7 @@ Body regions (the root body and every card body) are rendered as CommonMark
 | Task lists | `- [ ] open`, `- [x] done` | GFM rules: the marker opens a list item's first paragraph. A list item's `checked`. |
 | Footnotes | `text[^1]` and a `[^1]: note` definition | GFM rules. A `footnote` island at the reference, holding the note (§6.5). |
 | Math | `$tex$` inline, `$$tex$$` display | pulldown-cmark's math rules. A `math` island holding the TeX (§6.6). |
+| Definition lists | `Term` and a `: description` line under it | pulldown-cmark's rules. A `term` line and a `description` container (§6.7). |
 
 ### 6.2 Declared Deviations from CommonMark
 
@@ -447,7 +448,6 @@ handles them, but produce limited or no Quillmark-specific output:
   across the versions its `$quill` selector admits and declares every other
   thing it references, so a path into one quill's file tree is not a binding a
   document may take.
-- Definition lists: not supported; each imports as the literal text it is.
 - HTML comments: accepted syntactically, not rendered (see §6.2).
 - `<br>` (any case, with attributes or a closing `/`) inside a paragraph or a
   table cell: a hard break. In a paragraph, one at its block's start or right
@@ -638,7 +638,7 @@ What the island cannot hold drops, reported under `parse::dropped_construct`:
 |---|---|
 | A definition nothing references, or a second definition of one label | `footnote` |
 | A reference in a table cell, an image's alt text or a note | `footnote` |
-| A heading, list, code block, block quote, table or rule in a note, which keeps its text as lines of the note | `footnote[<block>]`: `heading`, `list`, `code`, `quote`, `table`, `rule` |
+| A heading, list, code block, block quote, table, rule or definition list in a note, which keeps its text as lines of the note | `footnote[<block>]`: `heading`, `list`, `code`, `quote`, `table`, `rule`, `definition list` |
 
 Export numbers the references `[^1]`, `[^2]`, … in reading order and writes
 each note as a definition after the body, a line break as `<br>`. Link text
@@ -662,7 +662,25 @@ Export writes `$tex$` or `$$tex$$`, and writes each `$` of the text in a
 paragraph, cell, note or alt text as `\$` wherever another `$` or an equation
 there could pair with it, so a lone `$5` stays as written. A `tex` the dollars
 cannot read back as itself (an unescaped `$`, unbalanced braces, an empty inline
-equation) the authored lanes refuse.
+equation) the authored lanes refuse. Import keeps such an equation's source as
+text, reported as `math`, where the TeX left once its edge whitespace drops is
+one: `$ $` around a Unicode space reads empty.
+
+### 6.7 Definition Lists
+
+A paragraph followed by a line opening `: ` is a term and its description. The
+term imports as a `term` line, a paragraph's inline text across its hard
+breaks; the description as a `description` container around its blocks, which
+indent two spaces under the `: `. Several `: ` lines under one term are several
+descriptions, adjacent runs of the container, and a term after a description
+starts the next definition. Where one list ends and the next begins is not
+kept, and neither is whether a description is tight.
+
+Export writes a term, then each description on the line under it or after a
+blank line, then a blank line before the next term. A paragraph line opening
+`:` writes it `\:`. A term with no description writes `:` under it, which
+re-imports with an empty description, and a description with no term above it
+writes the empty term `[]()`, which re-imports as an empty term.
 
 ## 7. Input Normalization
 

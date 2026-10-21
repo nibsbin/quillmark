@@ -173,6 +173,41 @@
     }
   },
   {
+    "name": "line.term",
+    "markdown": "One\\\nTwo\n: Both.",
+    "content": {
+      "islands": [],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "term"
+        },
+        {
+          "containers": [],
+          "continues": true,
+          "kind": "term"
+        },
+        {
+          "containers": [
+            {
+              "container": "description"
+            }
+          ],
+          "kind": "para"
+        }
+      ],
+      "marks": [],
+      "text": "One\nTwo\nBoth."
+    },
+    "typst": [
+      "#terms.item[One"
+    ],
+    "signals": {
+      "import": [],
+      "render": []
+    }
+  },
+  {
     "name": "container.list_item.bullet",
     "markdown": "- one\n- two",
     "content": {
@@ -502,6 +537,75 @@
     "typst": [
       "#quote(block: true)[\none",
       "#quote(block: true)[\ntwo"
+    ],
+    "signals": {
+      "import": [],
+      "render": []
+    }
+  },
+  {
+    "name": "container.description",
+    "markdown": "Term\n: Description.",
+    "content": {
+      "islands": [],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "term"
+        },
+        {
+          "containers": [
+            {
+              "container": "description"
+            }
+          ],
+          "kind": "para"
+        }
+      ],
+      "marks": [],
+      "text": "Term\nDescription."
+    },
+    "typst": [
+      "#terms.item[Term][\nDescription."
+    ],
+    "signals": {
+      "import": [],
+      "render": []
+    }
+  },
+  {
+    "name": "container.description.instance",
+    "markdown": "Term\n: One.\n\n: Two.",
+    "content": {
+      "islands": [],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "term"
+        },
+        {
+          "containers": [
+            {
+              "container": "description"
+            }
+          ],
+          "kind": "para"
+        },
+        {
+          "containers": [
+            {
+              "container": "description",
+              "instance": 1
+            }
+          ],
+          "kind": "para"
+        }
+      ],
+      "marks": [],
+      "text": "Term\nOne.\nTwo."
+    },
+    "typst": [
+      "#terms.item[Term][\nOne.\n\nTwo."
     ],
     "signals": {
       "import": [],
@@ -2720,6 +2824,32 @@
     },
     "typst": [
       "It costs \\$5, or \\$6 with tax."
+    ],
+    "signals": {
+      "import": [],
+      "render": []
+    }
+  },
+  {
+    "name": "markdown.description.colon",
+    "markdown": "Above\n\n\\: not a description",
+    "content": {
+      "islands": [],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "para"
+        },
+        {
+          "containers": [],
+          "kind": "para"
+        }
+      ],
+      "marks": [],
+      "text": "Above\n: not a description"
+    },
+    "typst": [
+      ": not a description"
     ],
     "signals": {
       "import": [],

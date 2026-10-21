@@ -77,6 +77,7 @@ import meets. The columns:
 | `line.code.html`: a fence holding `<!-- a --> b` | spells | spells | spells | honors | silent: honored | none |
 | `line.rule`: thematic break | spells | spells | spells | honors | silent: honored | none |
 | `line.continues`: hard break | spells | spells | spells | honors | silent: honored | none |
+| `line.term`: a definition list's term, across a hard break | spells | spells | spells | honors | silent: honored | none |
 
 ### Containers
 
@@ -90,6 +91,8 @@ import meets. The columns:
 | `container.list_item.task`: a task item, ticked and open | spells | spells | spells | honors | silent: honored | none |
 | `container.quote`: block quote | spells | spells | spells | honors | silent: honored | none |
 | `container.quote.instance`: two adjacent quotes | spells | spells | spells | honors | silent: honored | none |
+| `container.description`: a term's description | spells | spells | spells | honors | silent: honored | none |
+| `container.description.instance`: two descriptions of one term | spells | spells | spells | honors | silent: honored | none |
 | `container.element`: an element around blocks | spells | spells | spells | honors | silent: honored | none |
 | `container.element.attrs`: an element carrying an attribute | spells | spells | spells | honors | silent: honored | none |
 | `container.element.instance`: two adjacent runs of one element | spells | spells | spells | honors | silent: honored | none |
@@ -210,6 +213,7 @@ above, or markup the content does not store.
 | `markdown.footnote.in_cell`: a footnote reference in a table cell, and its note | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `footnote` |
 | `markdown.math.in_cell`: an equation in a table cell, kept as its source | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `math` |
 | `markdown.math.dollar`: a `$` that opens no equation | silent: honored | n/a | n/a | n/a | n/a | none |
+| `markdown.description.colon`: a paragraph line opening `\:`, which no term takes | silent: honored | n/a | n/a | n/a | n/a | none |
 
 `html.br` and `html.u` land as a hard break and an underline, so their cells
 past markdown read those constructs. What a markup row wraps imports as

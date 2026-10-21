@@ -16,13 +16,15 @@ fn line_kind_tags() -> Vec<&'static str> {
         LineKind::Heading { level: 1 },
         LineKind::Code { lang: None },
         LineKind::Rule,
+        LineKind::Term,
     ];
     for k in &all {
         match k {
             LineKind::Para
             | LineKind::Heading { .. }
             | LineKind::Code { .. }
-            | LineKind::Rule => {}
+            | LineKind::Rule
+            | LineKind::Term => {}
         }
     }
     all.iter().map(LineKind::tag).collect()
@@ -39,6 +41,7 @@ fn container_tags() -> Vec<&'static str> {
             instance: 0,
         },
         Container::Quote { instance: 0 },
+        Container::Description { instance: 0 },
         Container::Element {
             element: quillmark_content::carrier::Element::new("keep", Default::default()).unwrap(),
             instance: 0,
@@ -46,7 +49,10 @@ fn container_tags() -> Vec<&'static str> {
     ];
     for c in &all {
         match c {
-            Container::ListItem { .. } | Container::Quote { .. } | Container::Element { .. } => {}
+            Container::ListItem { .. }
+            | Container::Quote { .. }
+            | Container::Description { .. }
+            | Container::Element { .. } => {}
         }
     }
     all.iter().map(Container::tag).collect()
