@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.129.0 - 2026-10-21
+
+- fix(typst)!: a one-line text value prints with no space at its edges
+- feat(core)!: ui.layout: flat is deprecated, and a loose field after an object warns
+- fix(typst,content): what a review of footnotes and math found
+- docs: open Creating Quills with quillkit init, and add a glossary
+- feat(content)!: definition lists
+- feat(content)!: footnotes and math; storage moves to quillmark/document@0.129.0
+- fix(core): bound the fence scanner's container depth
+- fix(core): close a code fence where its list item or block quote ends
+
 ## v0.128.0 - 2026-10-21
 
 Upgrade path: [0.127 → 0.128](docs/migrations/0.127-to-0.128.md). A quill
