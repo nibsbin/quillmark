@@ -28,7 +28,9 @@ pub const HELPER_DIR: &str = "local/quillmark-helper";
 ///
 /// Typst there reads what Quillmark refuses: any file under the root, a
 /// vendored package's file by its path, and a package the quill does not
-/// vendor. A plate that compiles from the workspace can still fail to render.
+/// vendor. A plate that compiles from the workspace can still fail to render,
+/// and an equation compiles there only in a math face the quill ships: the
+/// embedded one answers to Typst's math family inside Quillmark alone.
 #[non_exhaustive]
 pub struct Workspace {
     /// Paths relative to the workspace directory, every component a plain name.

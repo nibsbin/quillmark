@@ -61,6 +61,9 @@ pub enum BlockConstruct {
     Quote,
     Table,
     Image,
+    Footnote,
+    Math,
+    Definition,
 }
 
 impl BlockConstruct {
@@ -72,32 +75,51 @@ impl BlockConstruct {
         Self::Quote,
         Self::Table,
         Self::Image,
+        Self::Footnote,
+        Self::Math,
+        Self::Definition,
     ];
 
     /// How many of each construct `content` holds, indexed by discriminant: a
     /// heading, rule or code block per block, a list or quote per container
-    /// run at any depth, a table or image per island.
-    pub fn tally(content: &quillmark_content::model::Content) -> [usize; 7] {
+    /// run at any depth, a table, image, footnote or equation per island, and
+    /// a definition per term block or description run with no term above it.
+    pub fn tally(content: &quillmark_content::model::Content) -> [usize; 10] {
         use quillmark_content::island::IslandType;
         use quillmark_content::model::{Container, LineKind};
-        let mut counts = [0; 7];
+        let mut counts = [0; 10];
         for line in content.lines.iter().filter(|l| !l.continues) {
             match line.kind {
                 LineKind::Heading { .. } => counts[Self::Heading as usize] += 1,
                 LineKind::Rule => counts[Self::Rule as usize] += 1,
                 LineKind::Code { .. } => counts[Self::Code as usize] += 1,
+                LineKind::Term => counts[Self::Definition as usize] += 1,
                 _ => {}
             }
         }
-        visit_runs(&content.lines, 0..content.lines.len(), 0, &mut |c| match c {
+        let lines = &content.lines;
+        visit_runs(lines, 0..lines.len(), 0, &mut |c, at, depth| match c {
             Container::ListItem { .. } => counts[Self::List as usize] += 1,
             Container::Quote { .. } => counts[Self::Quote as usize] += 1,
+            Container::Description { .. } => {
+                let described = at.checked_sub(1).is_some_and(|above| {
+                    let above = &lines[above];
+                    above.containers.get(..depth) == lines[at].containers.get(..depth)
+                        && (above.containers.len() == depth && above.kind == LineKind::Term
+                            || matches!(above.containers.get(depth), Some(Container::Description { .. })))
+                });
+                if !described {
+                    counts[Self::Definition as usize] += 1;
+                }
+            }
             _ => {}
         });
         for island in &content.islands {
             match island.island_type {
                 IslandType::Table => counts[Self::Table as usize] += 1,
                 IslandType::Image => counts[Self::Image as usize] += 1,
+                IslandType::Footnote => counts[Self::Footnote as usize] += 1,
+                IslandType::Math => counts[Self::Math as usize] += 1,
             }
         }
         counts
@@ -113,6 +135,9 @@ impl BlockConstruct {
             Self::Quote => "quote",
             Self::Table => "table",
             Self::Image => "image",
+            Self::Footnote => "footnote",
+            Self::Math => "math",
+            Self::Definition => "definition",
         }
     }
 }
@@ -123,7 +148,7 @@ impl BlockConstruct {
 pub fn element_runs(content: &quillmark_content::model::Content, name: &str) -> usize {
     use quillmark_content::model::Container;
     let mut count = 0;
-    visit_runs(&content.lines, 0..content.lines.len(), 0, &mut |c| {
+    visit_runs(&content.lines, 0..content.lines.len(), 0, &mut |c, _, _| {
         if matches!(c, Container::Element { element, .. } if element.name() == name) {
             count += 1;
         }
@@ -135,11 +160,11 @@ fn visit_runs(
     lines: &[quillmark_content::model::Line],
     range: std::ops::Range<usize>,
     depth: usize,
-    f: &mut dyn FnMut(&quillmark_content::model::Container),
+    f: &mut dyn FnMut(&quillmark_content::model::Container, usize, usize),
 ) {
     use quillmark_content::traverse::{items, runs};
     for run in runs(lines, range, depth) {
-        f(run.container);
+        f(run.container, run.range.start, depth);
         for item in items(lines, run.range, depth) {
             visit_runs(lines, item.range, depth + 1, f);
         }

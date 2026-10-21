@@ -173,6 +173,41 @@
     }
   },
   {
+    "name": "line.term",
+    "markdown": "One\\\nTwo\n: Both.",
+    "content": {
+      "islands": [],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "term"
+        },
+        {
+          "containers": [],
+          "continues": true,
+          "kind": "term"
+        },
+        {
+          "containers": [
+            {
+              "container": "description"
+            }
+          ],
+          "kind": "para"
+        }
+      ],
+      "marks": [],
+      "text": "One\nTwo\nBoth."
+    },
+    "typst": [
+      "#terms.item[One"
+    ],
+    "signals": {
+      "import": [],
+      "render": []
+    }
+  },
+  {
     "name": "container.list_item.bullet",
     "markdown": "- one\n- two",
     "content": {
@@ -502,6 +537,75 @@
     "typst": [
       "#quote(block: true)[\none",
       "#quote(block: true)[\ntwo"
+    ],
+    "signals": {
+      "import": [],
+      "render": []
+    }
+  },
+  {
+    "name": "container.description",
+    "markdown": "Term\n: Description.",
+    "content": {
+      "islands": [],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "term"
+        },
+        {
+          "containers": [
+            {
+              "container": "description"
+            }
+          ],
+          "kind": "para"
+        }
+      ],
+      "marks": [],
+      "text": "Term\nDescription."
+    },
+    "typst": [
+      "#terms.item[Term][\nDescription."
+    ],
+    "signals": {
+      "import": [],
+      "render": []
+    }
+  },
+  {
+    "name": "container.description.instance",
+    "markdown": "Term\n: One.\n\n: Two.",
+    "content": {
+      "islands": [],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "term"
+        },
+        {
+          "containers": [
+            {
+              "container": "description"
+            }
+          ],
+          "kind": "para"
+        },
+        {
+          "containers": [
+            {
+              "container": "description",
+              "instance": 1
+            }
+          ],
+          "kind": "para"
+        }
+      ],
+      "marks": [],
+      "text": "Term\nOne.\nTwo."
+    },
+    "typst": [
+      "#terms.item[Term][\nOne.\n\nTwo."
     ],
     "signals": {
       "import": [],
@@ -1499,6 +1603,136 @@
     }
   },
   {
+    "name": "island.footnote",
+    "markdown": "Cited.[^1]\n\n[^1]: The *source*.",
+    "content": {
+      "islands": [
+        {
+          "id": "isl-0",
+          "props": {
+            "marks": [
+              {
+                "end": 10,
+                "start": 4,
+                "type": "emph"
+              }
+            ],
+            "text": "The source."
+          },
+          "type": "footnote"
+        }
+      ],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "para"
+        }
+      ],
+      "marks": [],
+      "text": "Cited.￼"
+    },
+    "typst": [
+      "Cited.#footnote[The #emph[source].]"
+    ],
+    "signals": {
+      "import": [],
+      "render": []
+    }
+  },
+  {
+    "name": "island.math",
+    "markdown": "Area $\\pi r^2$.",
+    "content": {
+      "islands": [
+        {
+          "id": "isl-0",
+          "props": {
+            "tex": "\\pi r^2"
+          },
+          "type": "math"
+        }
+      ],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "para"
+        }
+      ],
+      "marks": [],
+      "text": "Area ￼."
+    },
+    "typst": [
+      "$π attach(r, t: 2)$"
+    ],
+    "signals": {
+      "import": [],
+      "render": []
+    }
+  },
+  {
+    "name": "island.math.display",
+    "markdown": "$$\\frac{a}{b}$$",
+    "content": {
+      "islands": [
+        {
+          "id": "isl-0",
+          "props": {
+            "display": true,
+            "tex": "\\frac{a}{b}"
+          },
+          "type": "math"
+        }
+      ],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "para"
+        }
+      ],
+      "marks": [],
+      "text": "￼"
+    },
+    "typst": [
+      "$ frac(a, b) $"
+    ],
+    "signals": {
+      "import": [],
+      "render": []
+    }
+  },
+  {
+    "name": "island.math.unsupported",
+    "markdown": "$\\foo$",
+    "content": {
+      "islands": [
+        {
+          "id": "isl-0",
+          "props": {
+            "tex": "\\foo"
+          },
+          "type": "math"
+        }
+      ],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "para"
+        }
+      ],
+      "marks": [],
+      "text": "￼"
+    },
+    "typst": [
+      "$\"\\\\foo\"$"
+    ],
+    "signals": {
+      "import": [],
+      "render": [
+        "typst::unsupported_tex"
+      ]
+    }
+  },
+  {
     "name": "html.br",
     "markdown": "one<br>two",
     "content": {
@@ -2442,8 +2676,8 @@
     }
   },
   {
-    "name": "markdown.footnote",
-    "markdown": "Cited.[^1]\n\n[^1]: The note.",
+    "name": "markdown.footnote.unused",
+    "markdown": "Text.\n\n[^1]: Never cited.",
     "content": {
       "islands": [],
       "lines": [
@@ -2453,10 +2687,10 @@
         }
       ],
       "marks": [],
-      "text": "Cited.[^1]"
+      "text": "Text."
     },
     "typst": [
-      "Cited."
+      "Text."
     ],
     "signals": {
       "import": [
@@ -2465,6 +2699,192 @@
           "count": 1
         }
       ],
+      "render": []
+    }
+  },
+  {
+    "name": "markdown.footnote.block",
+    "markdown": "Cited.[^1]\n\n[^1]: First.\n\n    > Quoted.",
+    "content": {
+      "islands": [
+        {
+          "id": "isl-0",
+          "props": {
+            "marks": [],
+            "text": "First.\nQuoted."
+          },
+          "type": "footnote"
+        }
+      ],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "para"
+        }
+      ],
+      "marks": [],
+      "text": "Cited.￼"
+    },
+    "typst": [
+      "#footnote[First.#linebreak()Quoted.]"
+    ],
+    "signals": {
+      "import": [
+        {
+          "construct": "footnote[quote]",
+          "count": 1
+        }
+      ],
+      "render": []
+    }
+  },
+  {
+    "name": "markdown.footnote.in_cell",
+    "markdown": "| a |\n|---|\n| x[^1] |\n\n[^1]: n",
+    "content": {
+      "islands": [
+        {
+          "id": "isl-0",
+          "props": {
+            "aligns": [
+              "none"
+            ],
+            "header": [
+              {
+                "marks": [],
+                "text": "a"
+              }
+            ],
+            "rows": [
+              [
+                {
+                  "marks": [],
+                  "text": "x"
+                }
+              ]
+            ]
+          },
+          "type": "table"
+        }
+      ],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "para"
+        }
+      ],
+      "marks": [],
+      "text": "￼"
+    },
+    "typst": [
+      "[x]"
+    ],
+    "signals": {
+      "import": [
+        {
+          "construct": "footnote",
+          "count": 2
+        }
+      ],
+      "render": []
+    }
+  },
+  {
+    "name": "markdown.math.in_cell",
+    "markdown": "| a |\n|---|\n| $x$ |",
+    "content": {
+      "islands": [
+        {
+          "id": "isl-0",
+          "props": {
+            "aligns": [
+              "none"
+            ],
+            "header": [
+              {
+                "marks": [],
+                "text": "a"
+              }
+            ],
+            "rows": [
+              [
+                {
+                  "marks": [],
+                  "text": "$x$"
+                }
+              ]
+            ]
+          },
+          "type": "table"
+        }
+      ],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "para"
+        }
+      ],
+      "marks": [],
+      "text": "￼"
+    },
+    "typst": [
+      "[\\$x\\$]"
+    ],
+    "signals": {
+      "import": [
+        {
+          "construct": "math",
+          "count": 1
+        }
+      ],
+      "render": []
+    }
+  },
+  {
+    "name": "markdown.math.dollar",
+    "markdown": "It costs $5, or $6 with tax.",
+    "content": {
+      "islands": [],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "para"
+        }
+      ],
+      "marks": [],
+      "text": "It costs $5, or $6 with tax."
+    },
+    "typst": [
+      "It costs \\$5, or \\$6 with tax."
+    ],
+    "signals": {
+      "import": [],
+      "render": []
+    }
+  },
+  {
+    "name": "markdown.description.colon",
+    "markdown": "Above\n\n\\: not a description",
+    "content": {
+      "islands": [],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "para"
+        },
+        {
+          "containers": [],
+          "kind": "para"
+        }
+      ],
+      "marks": [],
+      "text": "Above\n: not a description"
+    },
+    "typst": [
+      ": not a description"
+    ],
+    "signals": {
+      "import": [],
       "render": []
     }
   },

@@ -149,8 +149,15 @@ families:
   - `qm-table` for a `qm-table` wrapper that drops whole;
   - `qm-table[<attr>]` or `qm-<name>[<attr>]` for one attribute that
     drops;
-  - `footnote` for a footnote definition, which drops whole, any tag in it
-    unreported, while a reference to it stays as text.
+  - `footnote` for a footnote definition nothing references, a second
+    definition of one label, or a reference in a table cell, an image's alt
+    text or a note;
+  - `footnote[<block>]` for a block in a note, which keeps its text as lines
+    of the note: `heading`, `list`, `code`, `quote`, `table`, `rule` or
+    `definition list`;
+  - `math` for an equation in a table cell, an image's alt text or a note,
+    or one whose TeX is blank once its edge whitespace drops, which keeps its
+    source as text.
 
   A parse reports a body's drops alone, since it knows no field's type: a
   `richtext` field's markdown string reports its drops at its path from
@@ -223,6 +230,14 @@ families:
   `DocPath` in `path`. The run count rides the message, and the names the
   plate renders ride the hint. It rides the session's compile warnings. The
   registry is plate code, so `validate`, which compiles nothing, has no twin
+  for it.
+- **`typst::unsupported_tex`: a TeX command an equation cannot lower.** The
+  Typst compile warns once per content field whose equations hold a command
+  outside the vocabulary the lowering knows ([CONVERT.md](CONVERT.md#equations)),
+  naming each, with the field's `DocPath` in `path`. Each draws as its own
+  name, save a `\not` and a `\left` delimiter, which draw nothing. A field
+  whose equations nest groups past the depth the lowering reads warns once
+  more under the code, naming the depth. It rides the session's compile warnings, and `validate` has no twin
   for it.
 - **`typst::missing_glyph`: text no font draws.** The Typst compile warns
   once, naming each character the laid-out pages draw as a `.notdef` box,

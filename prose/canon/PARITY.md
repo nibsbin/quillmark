@@ -77,6 +77,7 @@ import meets. The columns:
 | `line.code.html`: a fence holding `<!-- a --> b` | spells | spells | spells | honors | silent: honored | none |
 | `line.rule`: thematic break | spells | spells | spells | honors | silent: honored | none |
 | `line.continues`: hard break | spells | spells | spells | honors | silent: honored | none |
+| `line.term`: a definition list's term, across a hard break | spells | spells | spells | honors | silent: honored | none |
 
 ### Containers
 
@@ -90,6 +91,8 @@ import meets. The columns:
 | `container.list_item.task`: a task item, ticked and open | spells | spells | spells | honors | silent: honored | none |
 | `container.quote`: block quote | spells | spells | spells | honors | silent: honored | none |
 | `container.quote.instance`: two adjacent quotes | spells | spells | spells | honors | silent: honored | none |
+| `container.description`: a term's description | spells | spells | spells | honors | silent: honored | none |
+| `container.description.instance`: two descriptions of one term | spells | spells | spells | honors | silent: honored | none |
 | `container.element`: an element around blocks | spells | spells | spells | honors | silent: honored | none |
 | `container.element.attrs`: an element carrying an attribute | spells | spells | spells | honors | silent: honored | none |
 | `container.element.instance`: two adjacent runs of one element | spells | spells | spells | honors | silent: honored | none |
@@ -145,6 +148,10 @@ diff-rebase alone. The row's corpus entry pins the spelling under
 | `island.table.props.align`: the table's placement | spells | spells | spells | honors | silent: honored | none |
 | `island.table.props.headless`: a table drawn with no header row | spells | spells | spells | honors | silent: honored | none |
 | `island.image` | spells | spells | spells | declines with a signal | declines with a signal | `backend::declined_construct`, `image` |
+| `island.footnote`: a footnote reference and its note | spells | spells | spells | honors | silent: honored | none |
+| `island.math`: an inline equation's TeX | spells | spells | spells | honors | silent: honored | none |
+| `island.math.display`: a display equation's TeX | spells | spells | spells | honors | silent: honored | none |
+| `island.math.unsupported`: a TeX command the lowering does not know | spells | spells | spells | declines with a signal | drops silently | `typst::unsupported_tex` |
 
 A table re-imports from its pipe syntax, so `to_markdown` and `revise` both
 mint it without a key Quillmark does not name.
@@ -158,6 +165,15 @@ whole content (§6.4).
 
 A table or cell key holding a value outside its set rests as written and rides
 as a key Quillmark does not name does.
+
+A footnote's island sits at its reference and holds the note as one table
+cell. Markdown writes the reference as `[^n]` and the note as a definition
+under the body, numbered in reading order.
+
+An equation's island holds its TeX as written between the dollars. Markdown
+writes `$tex$` or `$$tex$$`, escaping each `$` of the text around it wherever
+another `$` could pair with one, and the Typst lowering translates the TeX to
+Typst math ([CONVERT.md](CONVERT.md#equations)).
 
 ### Spellings
 
@@ -193,7 +209,12 @@ above, or markup the content does not store.
 | `carrier.anchor`: an echoed `qm-anchor` | silent: honored | n/a | n/a | n/a | n/a | none |
 | `markdown.link_title`: a link's title | drops silently | n/a | n/a | n/a | n/a | none |
 | `markdown.cell_image`: an image in a table cell | drops silently | n/a | n/a | n/a | n/a | none |
-| `markdown.footnote`: a footnote definition, its reference kept as text | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `footnote` |
+| `markdown.footnote.unused`: a footnote definition nothing references | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `footnote` |
+| `markdown.footnote.block`: a note holding a block quote, flattened to its text | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `footnote[quote]` |
+| `markdown.footnote.in_cell`: a footnote reference in a table cell, and its note | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `footnote` |
+| `markdown.math.in_cell`: an equation in a table cell, kept as its source | declines with a signal | n/a | n/a | n/a | n/a | `parse::dropped_construct`, `math` |
+| `markdown.math.dollar`: a `$` that opens no equation | silent: honored | n/a | n/a | n/a | n/a | none |
+| `markdown.description.colon`: a paragraph line opening `\:`, which no term takes | silent: honored | n/a | n/a | n/a | n/a | none |
 
 `html.br` and `html.u` land as a hard break and an underline, so their cells
 past markdown read those constructs. What a markup row wraps imports as

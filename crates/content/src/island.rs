@@ -23,6 +23,15 @@ pub enum IslandType {
     Table,
     /// `{url, alt}`. No cell model, no shape invariants.
     Image,
+    /// A footnote: `{text, marks}`, the note, shaped as one table cell and
+    /// normalized as one, with no line break at either edge. Its slot is the
+    /// reference, so the note sits where it is cited.
+    Footnote,
+    /// An equation: `{tex}`, its TeX source, and `display: true` for one set
+    /// apart from the line. `tex` holds no line break and no whitespace at
+    /// either edge, which TeX reads as nothing; `display` is absent at
+    /// `false`. No cell model.
+    Math,
 }
 
 /// The values of a table's `align` key, its placement, and of a cell's, its
@@ -91,13 +100,16 @@ fn one_of(value: Option<&Value>, set: &[&'static str]) -> Option<&'static str> {
 
 impl IslandType {
     /// Every known type, for a reader that needs the closed set whole.
-    pub const ALL: &'static [IslandType] = &[IslandType::Table, IslandType::Image];
+    pub const ALL: &'static [IslandType] =
+        &[IslandType::Table, IslandType::Image, IslandType::Footnote, IslandType::Math];
 
     /// The wire discriminator; `parse(k.as_str()) == Some(k)` for every variant.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Table => "table",
             Self::Image => "image",
+            Self::Footnote => "footnote",
+            Self::Math => "math",
         }
     }
 
@@ -107,17 +119,20 @@ impl IslandType {
         match s {
             "table" => Some(Self::Table),
             "image" => Some(Self::Image),
+            "footnote" => Some(Self::Footnote),
+            "math" => Some(Self::Math),
             _ => None,
         }
     }
 
     /// Whether this type's markdown projection is a **block**: markup no
     /// paragraph line can hold, so its slot has to sit alone on its line. A
-    /// pipe table is one; an image is inline (`![alt](url)`).
+    /// pipe table is one; an image (`![alt](url)`), a footnote reference
+    /// (`[^1]`) and an equation (`$x$`, `$$x$$`) are inline.
     pub fn block_only(self) -> bool {
         match self {
             Self::Table => true,
-            Self::Image => false,
+            Self::Image | Self::Footnote | Self::Math => false,
         }
     }
 
@@ -127,7 +142,8 @@ impl IslandType {
     pub fn cell_marks(self, props: &Value) -> Vec<(String, Vec<Mark>)> {
         match self {
             Self::Table => crate::serial::table_cells(props),
-            Self::Image => Vec::new(),
+            Self::Footnote => vec![crate::serial::parse_cell(props)],
+            Self::Image | Self::Math => Vec::new(),
         }
     }
 
@@ -137,8 +153,9 @@ impl IslandType {
     /// re-encoded without the mark.
     pub fn reject_unknown_cell_mark(self, props: &Value) -> Result<(), crate::serial::ParseError> {
         match self {
-            Self::Table => crate::serial::reject_unknown_cell_mark_name(props),
-            Self::Image => Ok(()),
+            Self::Table => crate::serial::reject_unknown_cell_mark_name(crate::serial::table_cell_values(props)),
+            Self::Footnote => crate::serial::reject_unknown_cell_mark_name([props]),
+            Self::Image | Self::Math => Ok(()),
         }
     }
 
@@ -147,6 +164,8 @@ impl IslandType {
     pub fn normalize_props(self, props: &mut Value) {
         match self {
             Self::Table => crate::serial::normalize_table_props(props),
+            Self::Footnote => crate::serial::normalize_note_props(props),
+            Self::Math => crate::serial::normalize_math_props(props),
             Self::Image => {}
         }
     }
