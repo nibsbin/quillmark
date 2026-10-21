@@ -1,5 +1,70 @@
 # Changelog
 
+## v0.129.0 - 2026-10-21
+
+Upgrade path: [0.128 → 0.129](docs/migrations/0.128-to-0.129.md). Footnotes,
+`$…$` math and definition lists render, where 0.128 imported each as text, so
+markdown that spelled one changes what it renders and nothing reports it. A
+save writes `quillmark/document@0.129.0`, which a 0.128 build refuses. A
+one-line text value printed in a Typst plate carries no space at its edges,
+and `ui.layout: flat` is deprecated.
+
+### Content
+
+- feat(content)!: **`text[^1]` with a `[^1]: note` definition renders a
+  footnote**, stored as a `footnote` island holding the note as one table
+  cell and drawn through Typst's `footnote`. A definition nothing references,
+  a second definition of one label, a reference in a table cell, an alt text
+  or a note, and a block inside a note warn `parse::dropped_construct`
+  (`footnote`, `footnote[<block>]`). Export numbers the references in reading
+  order and writes each note after the body. (#2258)
+- feat(content)!: **`$tex$` and `$$tex$$` render equations**, stored as a
+  `math` island holding the TeX under `tex`, `display: true` on the second.
+  The Typst backend translates the TeX to Typst math, warns
+  `typst::unsupported_tex` for a command outside its vocabulary, and embeds
+  Noto Sans Math, which answers to `New Computer Modern Math` for a quill
+  shipping no font of that family. An equation in a table cell, an alt text
+  or a note, or one whose TeX is blank, keeps its source and warns `math`.
+  Export escapes a text `$` wherever another could pair with it. (#2258)
+- feat(content)!: **a paragraph with a `: description` line under it is a
+  definition list**, stored as a `term` line and a `description` container
+  and drawn through Typst's `terms.item`. Export writes `\:` before a
+  paragraph line opening `:`. (#2258)
+- feat(content)!: **a save writes `quillmark/document@0.129.0`**, the first
+  tag that holds a footnote, an equation or a definition; a row under an older
+  tag loads as before, and a 0.128 build refuses one under the new tag. An
+  acroform quill declines all three constructs under
+  `backend::declined_construct`. (#2258)
+
+### Plates
+
+- fix(typst)!: **a one-line text value printed in a Typst plate carries no
+  space at either edge**, so `Dear #qm.ink(qm.data, "name"),` renders "Dear
+  Mr. Babbage," where it rendered "Dear Mr. Babbage ,". A plate that trimmed
+  the spaces can drop the trim; one that leaned on them writes the space
+  itself. (#2262)
+
+### Schemas
+
+- feat(core)!: **`ui.layout: flat` is deprecated** and warns
+  `quill::deprecated_flat` per field, naming its path; it still loads, and
+  `schema()` still echoes it. `schema()` no longer writes it on an object
+  alone in its legacy `ui.group`. A card-level field outside every group,
+  declared after a top-level object or a grouped field, warns
+  `quill::field_after_object`. (#2261)
+
+### Parsing
+
+- fix(core): **a code fence inside a list item or block quote closes where
+  its container ends**, so it no longer shields a column-zero card below it,
+  and markers nested past the parser's depth limit read as text. (#2255)
+
+### Docs
+
+- docs: **Creating Quills opens with `quillkit init`** and walks the starter
+  letter in studio, a quillkit & studio page names the verbs, and a glossary
+  defines the author's terms. (#2259)
+
 ## v0.128.0 - 2026-10-21
 
 Upgrade path: [0.127 → 0.128](docs/migrations/0.127-to-0.128.md). A quill
