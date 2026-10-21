@@ -424,6 +424,11 @@ main:
 - **The group is data.** The document stores `letterhead: { letterhead_title: … }`
   and a plate reads `data.letterhead.letterhead_title`, so moving a field
   between groups is an address change, the same MINOR bump a rename is.
+- **Fields outside every group lead.** An editor draws them above the groups,
+  so a card-level field that is no `object` and joins no `ui.group`, declared
+  after a top-level `object` or a grouped field, warns
+  `quill::field_after_object`, naming the first: the order declared and the
+  order drawn would part.
 - **`sections:` is not a card key** (`quill::invalid_card_schema`, its hint
   naming the top-level `object`).
 
@@ -431,9 +436,7 @@ The legacy spelling, a `ui.groups` registry on the card and a `ui.group`
 reference on each field, frames card-level fields without nesting them. It
 loads with a `quill::deprecated_groups` warning and settles at load: ungrouped
 fields first, then each group's in registry order, whatever order they were
-declared in, with a registry entry no field names dropped. An object alone in
-its group is written `ui.layout: flat` where it names no layout, the group being
-its frame. The registry's own checks are `quill::unknown_group`,
+declared in, with a registry entry no field names dropped. The registry's own checks are `quill::unknown_group`,
 `quill::implicit_group`, `quill::duplicate_group`, `quill::invalid_group_id`,
 and `quill::nested_group_not_supported` for a `ui.group` below card level.
 
@@ -1128,12 +1131,9 @@ The type-gated keys:
 
   `flat` is valid only on an `object`, and not on an array's element, whose row
   has no field list around it; `quill::invalid_ui` names the field anywhere
-  else. It asks that the typed dictionary draw no frame of its own: its
-  properties stand at the depth of the field list around it rather than a rung
-  inside it. It is presentation alone, so the value, its addresses and the
-  blueprint keep the dictionary. An object alone in a legacy `ui.group` is
-  written `flat` at load, the group being its frame, and what names it there is
-  the consumer's.
+  else. It is deprecated, warning `quill::deprecated_flat` per field: an
+  editor honors no `flat`, a card's top-level object being a panel that frames
+  its properties and a nested one a subform.
 - `variants`: per-member field sets on an `enum` field, valid only there and only
   where a world may open (see [Enum variants](#enum-variants)). `schema()` emits it as
   authored, keyed by member; the transform schema instead projects the container,

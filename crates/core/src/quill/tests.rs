@@ -639,7 +639,42 @@ main:
     assert_eq!(keys(&main["ui"]["groups"]), ["addressing", "letterhead", "quals"]);
     assert_eq!(main["ui"]["groups"]["letterhead"]["title"], "Letterhead & Seal");
     assert_eq!(main["fields"]["memo_for"]["ui"]["group"], "addressing");
-    assert_eq!(main["fields"]["qualifications"]["ui"]["layout"], "flat");
+    assert!(main["fields"]["qualifications"]["ui"].get("layout").is_none(), "{main}");
+}
+
+/// A card-level field outside every group draws above the groups, so one
+/// declared after a top-level object or a grouped field warns; one declared
+/// ahead of them, or a legacy card's that settles ahead, does not.
+#[test]
+fn a_loose_field_after_a_top_level_object_warns() {
+    let warned = |main: &str| {
+        let (_, warnings) =
+            QuillConfig::from_yaml_with_warnings(&with_header(&format!("main:\n{main}"))).unwrap();
+        warnings
+            .into_iter()
+            .filter(|d| d.code.as_deref() == Some("quill::field_after_object"))
+            .collect::<Vec<_>>()
+    };
+    let [diag] = warned(
+        "  fields:\n    subject: { type: text }\n    letterhead:\n      type: object\n      \
+         properties:\n        title: { type: text }\n    signature: { type: text }\n    \
+         notes: { type: text }\n",
+    )
+    .try_into()
+    .unwrap_or_else(|w: Vec<_>| panic!("one warning expected, got {w:?}"));
+    assert!(diag.message.contains("'signature'") && diag.message.contains("'letterhead'"), "{diag:?}");
+
+    assert!(warned(
+        "  fields:\n    subject: { type: text }\n    letterhead:\n      type: object\n      \
+         properties:\n        title: { type: text }\n    seal:\n      type: object\n      \
+         properties:\n        image: { type: text }\n",
+    )
+    .is_empty());
+    assert!(warned(
+        "  ui:\n    groups: [addressing]\n  fields:\n    memo_for: { type: text, ui: { group: addressing } }\n    \
+         subject: { type: text }\n",
+    )
+    .is_empty());
 }
 
 #[test]
@@ -1645,17 +1680,25 @@ fn ui_layout_table_loads_on_a_typed_table_and_is_refused_elsewhere() {
     }
 }
 
-/// Flat hands a typed dictionary's properties to the field list it stands in,
-/// so it loads on an `object` wherever one stands in a list and is refused on
-/// an array's element, whose row has none around it.
+/// Flat loads, warning, on an `object` wherever one stands in a field list, and
+/// is refused on an array's element, whose row has none around it.
 #[test]
 fn ui_layout_flat_loads_on_a_typed_dictionary_and_is_refused_elsewhere() {
-    let config = quill_with_field(
-        "    quals:\n      type: object\n      ui:\n        layout: flat\n      \
+    let (config, warnings) = QuillConfig::from_yaml_with_warnings(&with_header(
+        "main:\n  fields:\n    quals:\n      type: object\n      ui:\n        layout: flat\n      \
          properties:\n        home:\n          type: object\n          ui: { layout: flat }\n          \
          properties:\n            city: { type: text }\n",
-    )
+    ))
     .expect("a card field and a property may each go flat");
+    let deprecated: Vec<_> = warnings
+        .iter()
+        .filter(|d| d.code.as_deref() == Some("quill::deprecated_flat"))
+        .map(|d| d.message.as_str())
+        .collect();
+    assert!(
+        deprecated.len() == 2 && deprecated[1].contains("'quals.home'"),
+        "each flat field warns by its path: {deprecated:?}"
+    );
     assert_eq!(
         config.schema()["main"]["fields"]["quals"]["ui"]["layout"],
         serde_json::json!("flat")

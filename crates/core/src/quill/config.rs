@@ -12,7 +12,6 @@ use crate::value::QuillValue;
 use super::types::{BODY_CARD_SCHEMA_KEYS, UI_CARD_SCHEMA_KEYS, VARIANT_DISCRIMINANT_KEY};
 use super::{
     BodyCardSchema, CardSchema, FieldLayout, FieldSchema, FieldType, GroupRegistry, UiCardSchema,
-    UiFieldSchema,
 };
 
 /// Where a field sits in the type tree. Every type nests at every depth; this
@@ -2091,9 +2090,59 @@ impl QuillConfig {
         .with_hint(
             "Make each group an `object` field keyed by its id, in `ui.groups` order: \
              `<group>: { type: object, title: <group title>, properties: { <field>: … } }`. \
-             Ungrouped fields stay beside them; drop `ui.group` and `ui.groups`. Documents \
-             then nest each group's keys under its id."
+             A group holding one `object` alone needs no wrapper: give that object the \
+             group's title. Ungrouped fields stay beside them; drop `ui.group` and \
+             `ui.groups`. Documents then nest each group's keys under its id."
                 .to_string(),
+        )
+    }
+
+    fn deprecated_flat(label: &str, owner: &str) -> Diagnostic {
+        Diagnostic::new(
+            Severity::Warning,
+            format!(
+                "Field '{owner}' on '{label}' sets `ui.layout: flat`, which an editor no \
+                 longer honors."
+            ),
+        )
+        .with_code("quill::deprecated_flat".to_string())
+        .with_hint(
+            "Drop the key. A card's top-level `object` is its own panel, the panel being \
+             its frame; a nested one draws as a subform."
+                .to_string(),
+        )
+    }
+
+    /// The first card-level field standing after a panel, a panel being a
+    /// top-level `object` or a `ui.group`, where the field is neither. An
+    /// editor draws such a field above every panel, so declaration order and
+    /// display order part.
+    fn field_after_object(label: &str, card: &CardSchema) -> Option<Diagnostic> {
+        let panel = |field: &FieldSchema| {
+            field.r#type == FieldType::Object
+                || field.ui.as_ref().is_some_and(|ui| ui.group.is_some())
+        };
+        let first = card.fields.iter().position(|(_, field)| panel(field))?;
+        let (after, _) = card
+            .fields
+            .iter()
+            .skip(first)
+            .find(|(_, field)| !panel(field))?;
+        let (before, _) = card.fields.get_index(first).expect("found above");
+        Some(
+            Diagnostic::new(
+                Severity::Warning,
+                format!(
+                    "Field '{after}' on '{label}' is declared after the object '{before}', \
+                     but draws above every panel."
+                ),
+            )
+            .with_code("quill::field_after_object".to_string())
+            .with_hint(
+                "Declare a card's fields outside any object before its first top-level \
+                 object, or move the field into one."
+                    .to_string(),
+            ),
         )
     }
 
@@ -2694,6 +2743,11 @@ impl QuillConfig {
         }
 
         for (label, card) in &labeled {
+            let mut flat = Vec::new();
+            for (name, field) in &card.fields {
+                flat_paths(field, name, &mut flat);
+            }
+            warnings.extend(flat.iter().map(|owner| Self::deprecated_flat(label, owner)));
             if !uses_groups(card) {
                 continue;
             }
@@ -2726,6 +2780,11 @@ impl QuillConfig {
         for card in &mut card_kinds {
             settle_groups(card);
         }
+        warnings.extend(Self::field_after_object("main", &main));
+        for card in &card_kinds {
+            let label = format!("card_kinds.{}", card.name);
+            warnings.extend(Self::field_after_object(&label, card));
+        }
 
         Ok((
             QuillConfig {
@@ -2756,9 +2815,8 @@ fn uses_groups(card: &CardSchema) -> bool {
 }
 
 /// Settle a loaded card's groups: fields in display order (ungrouped first,
-/// then each group's in registry order), a registry entry no field names
-/// dropped, and an object alone in its group drawn flat, the group being its
-/// frame.
+/// then each group's in registry order), and a registry entry no field names
+/// dropped.
 fn settle_groups(card: &mut CardSchema) {
     let Some(GroupRegistry(registry)) = card.ui.as_mut().and_then(|ui| ui.groups.take()) else {
         return;
@@ -2777,16 +2835,6 @@ fn settle_groups(card: &mut CardSchema) {
             .collect();
         if held.is_empty() {
             continue;
-        }
-        if let [only] = held.as_slice() {
-            let field = &mut grouped[only];
-            if field.r#type == FieldType::Object {
-                field
-                    .ui
-                    .get_or_insert_with(UiFieldSchema::default)
-                    .layout
-                    .get_or_insert(FieldLayout::Flat);
-            }
         }
         for name in held {
             let (name, field) = grouped.shift_remove_entry(&name).expect("held above");
@@ -2818,6 +2866,25 @@ fn spells_ui_title(field: &serde_json::Value) -> bool {
             .filter_map(|world| world.as_object())
             .flat_map(|world| world.values())
             .any(spells_ui_title)
+}
+
+/// The field-name path (`letterhead.seal`) of every field in `field`'s type
+/// tree setting `ui.layout: flat`, `owner` naming `field` itself.
+fn flat_paths(field: &FieldSchema, owner: &str, out: &mut Vec<String>) {
+    if field.ui.as_ref().and_then(|ui| ui.layout) == Some(FieldLayout::Flat) {
+        out.push(owner.to_string());
+    }
+    let cells = field
+        .properties
+        .iter()
+        .flatten()
+        .chain(field.variants.iter().flat_map(|variants| variants.values()).flatten());
+    for (name, child) in cells {
+        flat_paths(child, &format!("{owner}.{name}"), out);
+    }
+    if let Some(items) = &field.items {
+        flat_paths(items, &format!("{owner}[]"), out);
+    }
 }
 
 /// The field-name path (`rows[].quals`) of the first open matrix in `field`'s
