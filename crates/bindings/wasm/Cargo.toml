@@ -41,13 +41,13 @@ web-sys = { version = "0.3", optional = true, features = [
 # Two artifacts from one crate. The boundary is *which types exist*, not
 # feature-gated methods inside a shared type.
 default = ["render"]
-# Render build: the engine, LiveSession, and canvas preview over both
+# Render build: the `Engine`, `LiveSession`, and canvas preview over both
 # backends. Strict API superset of core; Typst is nearly all of the
 # artifact. The canvas painter dispatches through the core `SessionHandle`
 # seam, so the binding depends on the backend crates only transitively.
 render = ["quillmark/typst", "quillmark/acroform", "dep:web-sys"]
 # Core build = no features: Document + Quill (parse / load / validate / schema
-# / seed / blueprint). No engine, no Typst; `scripts/build-wasm.sh` enforces its
+# / seed / blueprint). No `Engine`, no Typst; `scripts/build-wasm.sh` enforces its
 # gzip ceiling.
 
 [package.metadata.cargo-machete]

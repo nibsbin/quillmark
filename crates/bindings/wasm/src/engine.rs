@@ -529,7 +529,7 @@ export interface ChangeBundle {
 }
 "#;
 
-/// Render engine: a backend registry and render dispatcher. Render build only:
+/// `Engine`: a backend registry and render dispatcher. Render build only:
 /// the core build constructs and validates quills without it.
 #[cfg(feature = "render")]
 #[wasm_bindgen]
