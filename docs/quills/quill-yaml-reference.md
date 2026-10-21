@@ -50,9 +50,8 @@ Every Quill.yaml must have a `quill` section with the quill's metadata.
 
 `requires` is quoted: a bare `>` opens a YAML folded scalar. A Quillmark release older
 than it refuses the quill with one `quill::requires_unmet` error, ahead of every
-other check, so keys it has not learned yet do not read as typos; 0.126 and 0.127
-report the same refusal as `quill::engine_too_old`, and a release from before
-`requires` existed reports `requires` itself as `quill::unknown_key`. Any
+other check, so keys it has not learned yet do not read as typos; a release from
+before `requires` existed reports `requires` itself as `quill::unknown_key`. Any
 other spelling, whitespace included, is `quill::invalid_requires`.
 
 `license` is an SPDX license expression on one line, such as `MIT`,

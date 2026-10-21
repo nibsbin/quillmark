@@ -2,25 +2,26 @@
 
 ## v0.128.0 - 2026-10-21
 
-Upgrade path: [0.127 → 0.128](docs/migrations/0.127-to-0.128.md). The Rust
-struct and the Python class `Quillmark` are `Engine`, with no alias, so
-`use quillmark::Quillmark` fails to compile and `from quillmark import
-Quillmark` fails to import. A quill whose `requires` floor is above the
-running release fails to load as `quill::requires_unmet`, where it failed
-as `quill::engine_too_old`. The JavaScript `Engine` is unchanged.
+Upgrade path: [0.127 → 0.128](docs/migrations/0.127-to-0.128.md). A quill
+whose `requires` floor is above the running release fails to load as
+`quill::requires_unmet`, where it failed as `quill::engine_too_old`, and a
+host matching the old code stops matching. The Rust struct and the Python
+class `Quillmark` are `Engine`, with no alias, so `use quillmark::Quillmark`
+fails to compile and `from quillmark import Quillmark` fails to import. The
+JavaScript `Engine` is unchanged.
 
 ### API
 
-- refactor!: **the Rust struct and the Python class `Quillmark` are
-  `Engine`**, the name the JavaScript surface already carries, with no alias.
-  Rename at the import and the constructor: `Engine::new()` in Rust,
-  `Engine()` in Python. Every method keeps its name and signature. (#2252)
 - refactor(core)!: **a quill whose `requires` floor is above the running
   release fails to load as `quill::requires_unmet`**, where it failed as
   `quill::engine_too_old`. It is still the load's only error, and its message
   still names the release the quill requires; a host matching the old code
   stops matching, and matches both while a 0.126 or 0.127 host can load its
-  quills. (#2252)
+  quills. (#2252, #2254)
+- refactor!: **the Rust struct and the Python class `Quillmark` are
+  `Engine`**, the name the JavaScript surface already carries, with no alias.
+  Rename at the import and the constructor: `Engine::new()` in Rust,
+  `Engine()` in Python. Every method keeps its name and signature. (#2252)
 
 ### Docs
 
