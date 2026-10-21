@@ -19,7 +19,8 @@ as `quill::engine_too_old`. The JavaScript `Engine` is unchanged.
   release fails to load as `quill::quillmark_too_old`**, where it failed as
   `quill::engine_too_old`. It is still the load's only error, and its message
   still names the release the quill requires; a host matching the old code
-  stops matching. (#2252)
+  stops matching, and matches both while a 0.126 or 0.127 host can load its
+  quills. (#2252)
 
 ### Docs
 
