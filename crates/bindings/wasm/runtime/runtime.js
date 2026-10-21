@@ -25,7 +25,7 @@ import { parseDocPath, formatDocPath, formatDiagnostic } from '../core/wasm.js';
 
 // A `--target web` build exports its classes synchronously but carries no wasm
 // instance until something instantiates it. This module owns that for core,
-// behind one awaited gate; `Quillmark` owns it for the backends, inside their lazy
+// behind one awaited gate; `Engine` owns it for the backends, inside their lazy
 // load. Which values that gate holds and which stay static exports:
 // `prose/canon/BINDINGS.md`.
 
@@ -263,7 +263,7 @@ function unknownKeyRefusal(options, known, what) {
 }
 
 // These checks deliver the ERROR, not the rejection, at the seams that cross
-// into backend memory as DATA — `Quillmark` and `LiveSession.update` — where a
+// into backend memory as DATA — `Engine` and `LiveSession.update` — where a
 // foreign handle would otherwise work silently at the price of a whole-document
 // round trip and a per-copy split of the quill clone cache, and at the four
 // writer/reader binds, whose constructors hold both handles. A method declaring
@@ -384,7 +384,7 @@ export function assignInstances(runs) {
  * Build a `load` thunk: dynamic-import a backend build, then instantiate it.
  *
  * Under `--target web` a freshly imported build is inert, so instantiation is
- * part of loading. Memoized at MODULE scope, not per `Quillmark`: two instances
+ * part of loading. Memoized at MODULE scope, not per `Engine`: two engines
  * issuing their first render concurrently must share one instantiation, and the
  * generated entry's own `wasm !== undefined` guard only catches a call arriving
  * after one finished, not one already in flight.
@@ -408,7 +408,7 @@ function backendLoad(id, importThunk, wasmUrl) {
 			throw Object.assign(
 				quillmarkError(
 					'runtime::backend_load_failed',
-					`Quillmark: could not load the '${id}' build: ${
+					`Engine: could not load the '${id}' build: ${
 						/** @type {any} */ (cause)?.message ?? cause
 					}`,
 					'The build ships beside the package files; check the network tab for a 404 or an HTML response.'
@@ -449,19 +449,19 @@ const DEFAULT_BACKENDS = {
  */
 function validateBackend(id, entry) {
 	if (!entry || typeof entry !== 'object') {
-		throw new Error(`Quillmark: backend '${id}' must be a descriptor { load, formats }.`);
+		throw new Error(`Engine: backend '${id}' must be a descriptor { load, formats }.`);
 	}
 	const { load, formats } = /** @type {any} */ (entry);
 	if (typeof load !== 'function') {
-		throw new Error(`Quillmark: backend '${id}' descriptor needs a callable 'load'.`);
+		throw new Error(`Engine: backend '${id}' descriptor needs a callable 'load'.`);
 	}
 	if (!Array.isArray(formats)) {
-		throw new Error(`Quillmark: backend '${id}' descriptor needs a 'formats' array.`);
+		throw new Error(`Engine: backend '${id}' descriptor needs a 'formats' array.`);
 	}
 	return { load, formats };
 }
 
-export class Quillmark {
+export class Engine {
 	/**
 	 * The three caches below key on a descriptor's `load` thunk, the build's
 	 * identity: two backend ids sharing one build (the built-ins) share one
@@ -485,11 +485,11 @@ export class Quillmark {
 	/**
 	 * `load` must resolve to a READY module: a registrant shipping its own
 	 * `--target web` build instantiates inside the thunk, and more than one
-	 * `Quillmark` may call it, so memoize (the built-ins do, at module scope).
+	 * `Engine` may call it, so memoize (the built-ins do, at module scope).
 	 * @param {{ backends?: Record<string, { load: () => Promise<unknown>, formats: string[] }> }} [options]
 	 */
 	constructor(options) {
-		rejectUnknownKeys(options, ['backends'], 'Quillmark options');
+		rejectUnknownKeys(options, ['backends'], 'Engine options');
 		const merged = { ...DEFAULT_BACKENDS, ...(options?.backends ?? {}) };
 		/** @type {Record<string, { load: () => Promise<unknown>, formats: string[] }>} */
 		const loaders = {};
@@ -511,7 +511,7 @@ export class Quillmark {
 		if (!descriptor) {
 			throw quillmarkError(
 				'engine::backend_not_found',
-				`Quillmark: backend '${backendId}' not registered or not enabled.`,
+				`Engine: backend '${backendId}' not registered or not enabled.`,
 				`Available backends: ${Object.keys(this.#loaders).join(', ') || '(none)'}`
 			);
 		}
@@ -519,7 +519,7 @@ export class Quillmark {
 	}
 
 	/**
-	 * `quill`'s backend id, after checking the handle. The ONE way a `Quillmark`
+	 * `quill`'s backend id, after checking the handle. The ONE way an `Engine`
 	 * verb reaches `backendId`, so "no verb touches a foreign quill" is
 	 * structural rather than four remembered calls.
 	 * @param {Quill} quill
@@ -589,7 +589,7 @@ export class Quillmark {
 
 	/**
 	 * Materialize the backend-memory clones for `quill` + `doc` in `backendId`'s
-	 * memory and run `fn` against the backend engine. Only `render`/`open` call
+	 * memory and run `fn` against the backend. Only `render`/`open` call
 	 * this, so `doc` is always present.
 	 *
 	 * OWNERSHIP WINDOW: both caller handles are snapshotted (`doc.toStored()`,
@@ -636,7 +636,7 @@ export class Quillmark {
 	 */
 	async render(quill, doc, options, today) {
 		return this.#withClones(
-			'quillmark.render(quill, doc)',
+			'engine.render(quill, doc)',
 			quill,
 			doc,
 			({ engine, quill: q, doc: d }) => engine.render(q, d, options ?? undefined, today)
@@ -651,7 +651,7 @@ export class Quillmark {
 	 */
 	async open(quill, doc, today) {
 		return this.#withClones(
-			'quillmark.open(quill, doc)',
+			'engine.open(quill, doc)',
 			quill,
 			doc,
 			({ mod, engine, quill: q, doc: d }) => new LiveSession(engine.open(q, d, today), mod)
@@ -663,7 +663,7 @@ export class Quillmark {
 	 * @returns {Promise<void>}
 	 */
 	async load(quill) {
-		await this.#resolveBackend(this.#backendOf(quill, 'quillmark.load(quill)'));
+		await this.#resolveBackend(this.#backendOf(quill, 'engine.load(quill)'));
 	}
 
 	/**
@@ -671,14 +671,11 @@ export class Quillmark {
 	 * @returns {Promise<import('./runtime.js').OutputFormat[]>}
 	 */
 	async supportedFormats(quill) {
-		const descriptor = this.#descriptorFor(this.#backendOf(quill, 'quillmark.supportedFormats(quill)'));
+		const descriptor = this.#descriptorFor(this.#backendOf(quill, 'engine.supportedFormats(quill)'));
 		// Defensive copy so callers can't mutate the shared manifest.
 		return descriptor.formats.slice();
 	}
 }
-
-/** @deprecated Use {@link Quillmark}; `Engine` is the same class. */
-export const Engine = Quillmark;
 
 /**
  * Thin wrapper over a backend's live render session. The quill/document clones

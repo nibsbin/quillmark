@@ -21,7 +21,7 @@ favorite_color: green
 ";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let quillmark = Quillmark::new();
+    let engine = Quillmark::new();
     let out_dir = example_output_dir();
     let today = CalendarDate::new(2026, 3, 14).expect("a calendar day");
 
@@ -29,7 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let gf_quill =
         quillmark::quill_from_path(quills_path("sample_form")).expect("load sample_form quill");
     let gf_doc = Document::parse(SAMPLE_FORM_MD).expect("parse sample_form markdown").document;
-    let gf_result = quillmark
+    let gf_result = engine
         .render(
             &gf_quill,
             &gf_doc,
@@ -45,7 +45,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Region geometry is a session-level query, not on the render result.
-    let gf_session = quillmark
+    let gf_session = engine
         .open(&gf_quill, &gf_doc, today)
         .expect("open sample_form session");
     let regions = gf_session.regions();

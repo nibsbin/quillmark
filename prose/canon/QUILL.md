@@ -7,9 +7,9 @@
 
 A `Quill` is a loaded template bundle: file tree plus parsed `Quill.yaml`
 config: tagged with its declared backend id but holding no backend and
-needing no `Quillmark`. It carries the pure config-read operations (`validate`,
+needing no engine. It carries the pure config-read operations (`validate`,
 `schema`, `blueprint`, `seed_*`, `example_document`, `compile_data`,
-`dry_run`); rendering is `Quillmark`'s job.
+`dry_run`); rendering is the engine's job.
 
 ## The `Quill` type
 
@@ -17,10 +17,10 @@ One type models a loaded quill: **`Quill`** (in `quillmark-core`), declarative
 data. It is the authored input (file bundle, parsed config) tagged
 with its *declared* backend id, and it carries the pure config-read
 operations (`validate`, `schema`, `blueprint`, `seed_*`, `example_document`,
-`compile_data`, `dry_run`). It holds **no backend** and needs **no `Quillmark`** to
-construct or use; rendering is `Quillmark`'s job (see
+`compile_data`, `dry_run`). It holds **no backend** and needs **no engine** to
+construct or use; rendering is the engine's job (see
 [ARCHITECTURE.md](ARCHITECTURE.md)). A `Quill` is `Send + Sync` and portable
-across `Quillmark` instances: any instance with a backend matching its `backend_id()` can
+across engines: any engine with a backend matching its `backend_id()` can
 render it.
 
 Bindings expose `Quill` directly.
@@ -49,7 +49,7 @@ pub struct Quill {
 ## In-memory Tree Contract (`Quill::from_tree`)
 
 In-memory construction is `Quill::from_tree(tree)`: a pure constructor in
-`quillmark-core` with no backend and no `Quillmark`. Filesystem loading
+`quillmark-core` with no backend and no engine. Filesystem loading
 (`quillmark::quill_from_path`) lives in `quillmark` rather than in core, so core
 stays filesystem-agnostic. Input is a `FileTreeNode` directory tree with UTF-8
 and binary file contents represented as bytes.
@@ -176,7 +176,7 @@ Construction:
 The two differ in error shape: the pure constructor hands back the raw
 `Vec<Diagnostic>` and bindings map it at the call site, while the loader wraps
 it in `RenderError`. Either way the `Quill` carries no backend: rendering goes
-through `Quillmark` (`quillmark.render` / `quillmark.open`).
+through the `Quillmark` engine (`engine.render` / `engine.open`).
 
 Advisory diagnostics ride the loaded quill rather than the constructor's return
 value, so both doors keep them and a host reads them when it likes:

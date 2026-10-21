@@ -10,14 +10,14 @@ Quillmark in browsers and Node, over explicit in-memory trees
 (`Map<string, Uint8Array>` / `Record<string, Uint8Array>`).
 
 The package has one import surface: `@quillmark/wasm`, whose `init` resolves to
-`Quill` and `Document`, plus a `Quillmark` that renders them.
+`Quill` and `Document`, plus an `Engine` that renders them.
 
 `Quill` and `Document` are the internal Typst-less core build's own classes,
 handed out verbatim by `init`, so editor/validation code (`Quill.fromTree`,
 `Document.fromMarkdown`) loads only that small core binary: no backend is
-loaded until you render. `Quillmark` hides everything else: the render build,
+loaded until you render. The `Engine` hides everything else: the render build,
 carrying both backends (`typst`, `acroform`), is a private WASM binary with its
-own linear memory, lazily loaded on the first render. `Quillmark` clones a
+own linear memory, lazily loaded on the first render. The Engine clones a
 `Quill` / `Document` into that memory as data and frees the clones: you never
 hold a backend object or cross a memory boundary yourself.
 
@@ -30,12 +30,12 @@ npm install @quillmark/wasm
 ## Usage
 
 ```ts
-import { init, Quillmark } from "@quillmark/wasm";
+import { init, Engine } from "@quillmark/wasm";
 
 const { Quill, Document } = await init(); // see Initialization
 
-const quill = Quill.fromTree(tree);   // no Quillmark needed: build + validate
-const quillmark = new Quillmark();    // loads a backend lazily on first render
+const quill = Quill.fromTree(tree);   // no engine needed: build + validate
+const engine = new Engine();          // loads a backend lazily on first render
 
 const markdown = `~~~
 $quill: my_quill
@@ -46,7 +46,7 @@ title: My Document
 # Hello`;
 
 const parsed = Document.fromMarkdown(markdown);
-const result = await quillmark.render(quill, parsed, { format: "pdf" });
+const result = await engine.render(quill, parsed, { format: "pdf" });
 ```
 
 ## Initialization
@@ -56,7 +56,7 @@ functions. Everything after the await is the synchronous surface the rest of
 this README describes.
 
 ```js
-import { init, Quillmark } from "@quillmark/wasm";
+import { init, Engine } from "@quillmark/wasm";
 const { Quill, Document } = await init();
 ```
 
@@ -73,7 +73,7 @@ instantiation. Destructure at **every** entry point (route loader, hydration
 path, worker) rather than threading one result around. A failed init clears the
 memo, so a retry works. Each realm initializes its own copy, a Worker included.
 
-**Backends need nothing.** `Quillmark` instantiates a backend inside its lazy load,
+**Backends need nothing.** `Engine` instantiates a backend inside its lazy load,
 on the first render against it.
 
 **Overriding the source.** `init(source)` accepts bytes, a `Response`, a
@@ -100,7 +100,7 @@ A load failure surfaces as `runtime::init_failed`, whose hint names that line.
 
 ## API
 
-### `new Quillmark(options?)`
+### `new Engine(options?)`
 Create the render dispatcher. Routes each quill to its backend by
 `quill.backendId`, lazily loads that backend binary, and renders: cloning the
 quill/document into the backend's memory and freeing the clones internally.
@@ -109,9 +109,8 @@ may load a backend). Pass `{ backends }` to register or override backend descrip
 Each entry is a descriptor (`{ [backendId]: { load, formats } }`) where `load`
 is the lazy thunk returning the backend module and `formats` is the
 **required** static capability manifest. A malformed descriptor throws at
-`new Quillmark(...)`, naming the backend id, and so does any options key other
-than `backends`. `Engine` is a deprecated alias of `Quillmark`, and
-`EngineOptions` of `QuillmarkOptions`.
+`new Engine(...)`, naming the backend id, and so does any options key other
+than `backends`.
 
 **The format probe is always free.** `supportedFormats` depends only on
 `quill.backendId`, and answers from the descriptor's required `formats`
@@ -124,10 +123,10 @@ compiles the document as it stood at the call. Mount the editor on core, start
 the load, and open once it lands:
 
 ```js
-void quillmark.load(quill);       // start the fetch as soon as the quill resolves
+void engine.load(quill);          // start the fetch as soon as the quill resolves
 mountEditor(quill, doc);          // core alone
-await quillmark.load(quill);      // memoized: the same load
-const session = await quillmark.open(quill, doc); // one compile, current document
+await engine.load(quill);         // memoized: the same load
+const session = await engine.open(quill, doc); // one compile, current document
 ```
 
 `load` reads only `quill.backendId` and clones nothing. A failed load rejects
@@ -355,10 +354,10 @@ value throws `FieldDecode`; an absent field reads back `undefined` and a
 present-null `null`. A read never coerces a scalar (`qty: "3"` reads `"3"`);
 `resolve()` is the coerced view.
 
-### `quillmark.render(quill, parsed, opts?, today?)` vs. `quillmark.open(quill, parsed, today?)`
+### `engine.render(quill, parsed, opts?, today?)` vs. `engine.open(quill, parsed, today?)`
 
-Use **`quillmark.render`** for one-shot exports (PDF/SVG/PNG): compiles, emits
-artifacts, done. Use **`LiveSession`** (returned by `quillmark.open`) for
+Use **`engine.render`** for one-shot exports (PDF/SVG/PNG): compiles, emits
+artifacts, done. Use **`LiveSession`** (returned by `engine.open`) for
 reactive previews: the session is a persistent compiler. `paint` / `render` /
 `regions` / `fieldAt` read its current compile without recompiling, and `update(doc)`
 recompiles in place on each edit, returning a `ChangeSet` whose `dirtyPages`
@@ -371,13 +370,13 @@ the local date): what a `today` date field and a plate's `datetime.today()`
 render as. A session keeps the date it opened with, so a preview left open past
 midnight renders yesterday's until it is reopened.
 
-`opts` takes `format`, `ppi`, `pages` and `regions`, on `quillmark.render` and
+`opts` takes `format`, `ppi`, `pages` and `regions`, on `engine.render` and
 `session.render` alike. Any other key throws rather than reading as absent,
-`today` included, so `quillmark.render(quill, doc, { today })` rejects instead of
+`today` included, so `engine.render(quill, doc, { today })` rejects instead of
 rendering the local date. The date goes last:
 
 ```js
-await quillmark.render(quill, doc, { format: "pdf" }, "2026-03-14");
+await engine.render(quill, doc, { format: "pdf" }, "2026-03-14");
 ```
 
 A document that compiles to zero pages still produces a valid session
@@ -385,7 +384,7 @@ A document that compiles to zero pages still produces a valid session
 `pageCount === 0` to render a "no pages to preview" UI rather than relying on
 the throw.
 
-Their `warnings` differ in reach. `quillmark.render` returns every
+Their `warnings` differ in reach. `engine.render` returns every
 `quill.validate(doc)` warning but `backend::declined_construct`, then the
 compile's own, a decline among them;
 `session.render` and `session.warnings` carry the compile's alone, so read
@@ -446,7 +445,7 @@ uses it when the document omits the field. Without one, the blueprint leaves the
 cell empty and an absent field blank-fills.
 
 An unanswered field draws no diagnostic. Partial documents are accepted, and
-`quillmark.render(quill, doc)` throws only for malformed input.
+`engine.render(quill, doc)` throws only for malformed input.
 
 ### Errors
 
@@ -457,7 +456,7 @@ Every method that can fail throws a **`QuillmarkError`**: a JS `Error` with
 import { isQuillmarkError, type QuillmarkError } from "@quillmark/wasm";
 
 try {
-  const result = await quillmark.render(quill, doc);
+  const result = await engine.render(quill, doc);
 } catch (e) {
   if (isQuillmarkError(e)) {
     for (const d of e.diagnostics) console.error(d.severity, d.message);
@@ -469,7 +468,7 @@ try {
 
 **Delivery follows the function, not the failure.** A synchronous method throws;
 a promise-returning one rejects. The promise-returning surface is `init` and the
-four `Quillmark` verbs (`render`, `open`, `load`, `supportedFormats`), so a programming
+four `Engine` verbs (`render`, `open`, `load`, `supportedFormats`), so a programming
 error reached through one of them (a foreign handle, an unregistered backend)
 rejects like any other failure. Nothing here both returns
 a promise and throws, so a `.catch` on a promise-returning call is a whole
@@ -482,7 +481,7 @@ from any build or WASM instance in the page.
 
 `diagnostics` is always non-empty: length 1 for most failures, length N for
 backend compilation errors, and `message` is derived from it. `diagnostics[0]`
-is an error. A failed Typst `quillmark.render` or `quillmark.open` also carries the
+is an error. A failed Typst `engine.render` or `engine.open` also carries the
 quill's load warnings after its errors, so read each entry's `severity`. The
 same shape applies to every throw site:
 
@@ -493,10 +492,10 @@ same shape applies to every throw site:
   `diagnostics[0]` (`edit::invalid_field_name`, `edit::unknown_field`,
   `edit::index_out_of_range`, `edit::field_coercion_failed`, …). Route on
   `diagnostics[0].code`, never on message text.
-- `quillmark.render` / `session.render`: backend compilation failures and
+- `engine.render` / `session.render`: backend compilation failures and
   validation errors.
 - An object argument carrying a key its verb does not read: the render
-  options, `new Quillmark` options, an `Addr`, a `CardInput`. Every own string
+  options, `new Engine` options, an `Addr`, a `CardInput`. Every own string
   key counts, a non-enumerable one and one holding `undefined` included. The
   argument must be a plain object, its prototype `null`, `Object.prototype`
   of any realm, or a null-prototype object whose keys count too, so a `Map`, a
@@ -506,13 +505,13 @@ same shape applies to every throw site:
   read nor refused.
   The diagnostic names the key or what was passed, and carries no `code`: it
   is a call site to fix, not a condition to route on.
-- `quillmark.render(quill, parsed)` against a quill whose *name* differs
+- `engine.render(quill, parsed)` against a quill whose *name* differs
   (`quill::name_mismatch`) or whose *version* falls outside the document's
   selector (`quill::version_mismatch`): a throw, never a warning.
-- The four `Quillmark` verbs against a quill whose declared `backend:` is not in
+- The four `Engine` verbs against a quill whose declared `backend:` is not in
   the registry: `engine::backend_not_found`, the code core raises for the same
   condition, hinting the registered ids.
-- The `Quillmark` verbs, `session.update`, and the writer/reader binds against a
+- The `Engine` verbs, `session.update`, and the writer/reader binds against a
   value that is not one of *this* copy's handles — the wrong type, or the right
   class from a second copy of `@quillmark/wasm`: `runtime::not_a_quill` /
   `runtime::not_a_document`, hinting `npm ls @quillmark/wasm` for the second
@@ -523,16 +522,16 @@ same shape applies to every throw site:
 ### Lifecycle
 
 Handles begin at [`init`](#initialization), which instantiates the core build;
-`Quillmark` instantiates a backend on the first render against it.
+`Engine` instantiates a backend on the first render against it.
 
 The wasm bindings are built with `--weak-refs`, so dropped `Document`,
 `Quill`, and `LiveSession` handles are reclaimed by `FinalizationRegistry`
 without manual `.free()` discipline. `.free()` is still emitted as an eager
 teardown hook for callers that want deterministic release.
 
-`quillmark.render` and `quillmark.open` read the `quill` and `doc` handles
+`engine.render` and `engine.open` read the `quill` and `doc` handles
 synchronously, before their first await, so freeing a handle as soon as the
-call returns: `try { return quillmark.render(quill, doc); } finally
+call returns: `try { return engine.render(quill, doc); } finally
 { doc.free(); }`: is safe even on the first render, while the backend
 binary is still loading.
 
@@ -543,7 +542,7 @@ an explicit `try` / `finally` is the equivalent, and the form that also runs
 on Node 22 and in a browser that hasn't shipped it:
 
 ```ts
-const session = await quillmark.open(quill, doc);
+const session = await engine.open(quill, doc);
 try {
   for (let p = 0; p < session.pageCount; p++) {
     session.paint(canvases[p].getContext("2d")!, p, scale);

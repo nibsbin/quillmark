@@ -7,7 +7,7 @@ use wasm_bindgen::prelude::*;
 // `from_wasm_abi` ABI impls throw mid-conversion while holding that handle,
 // which strands it (tsify#65), so no type here derives them.
 
-/// Output formats supported by backends. Gated behind the render surface so
+/// Output formats supported by backends. Gated behind the engine surface so
 /// tsify omits it from the core bundle, which has no rendering surface.
 #[cfg(feature = "render")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]

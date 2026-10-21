@@ -258,7 +258,7 @@ Python and WASM bindings delegate to core types:
 
 **WASM delivery follows the function kind, not the failure kind.** A synchronous verb throws; a promise-returning verb rejects; nothing does both.
 
-- The promise-returning surface is `init` plus the four `Quillmark` verbs (`render`, `open`, `load`, `supportedFormats`). A programming error reached through one of them (a handle that is not this copy's, `runtime::not_a_quill` / `runtime::not_a_document`; an unregistered backend, `engine::backend_not_found`) arrives as a rejection like any other failure.
+- The promise-returning surface is `init` plus the four `Engine` verbs (`render`, `open`, `load`, `supportedFormats`). A programming error reached through one of them (a handle that is not this copy's, `runtime::not_a_quill` / `runtime::not_a_document`; an unregistered backend, `engine::backend_not_found`) arrives as a rejection like any other failure.
 - A `WebAssembly.RuntimeError` from a backend build's `render`, `open`, or `LiveSession` `update` / `render` / `paint` becomes `runtime::backend_trapped`, the trap on `cause`, and so does a `RangeError` or `InternalError` for stack or memory exhaustion, the engines' report of a native stack overflow inside wasm. The trap leaves the module-scoped instance undefined; the host discards the realm.
 - `init` is the one promise-returning export not declared `async`: its memo is returned by identity rather than re-wrapped per call. Its conflict guard therefore returns `Promise.reject(runtime::init_conflict)` where an `async` body would have converted a throw.
 - A synchronous throw from `init` would lose the rule at exactly one export, and silently: `Promise<void>` cannot declare it, so the declaration invites `init(BYTES).catch(…)` and the throw escapes.

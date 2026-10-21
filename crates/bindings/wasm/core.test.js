@@ -1,6 +1,6 @@
 /**
  * The Typst-less `@quillmark/wasm/core` bundle: a `Quill` loads, validates,
- * seeds, and exposes schema/blueprint/metadata with no `Quillmark` and no render
+ * seeds, and exposes schema/blueprint/metadata with no engine and no render
  * surface. The render suites cover the superset.
  */
 import { describe, it, expect } from 'vitest'
@@ -34,8 +34,8 @@ main:
 }
 
 describe('@quillmark/wasm/core surface', () => {
-  it('loads a quill with no `Quillmark` and carries no render API', () => {
-    // `Quillmark` and `LiveSession` live only in the render build.
+  it('loads a quill with no engine and carries no render API', () => {
+    // The engine and session live only in the render build.
     expect(core.Quillmark).toBeUndefined()
     expect(core.LiveSession).toBeUndefined()
     const quill = Quill.fromTree(makeCoreQuill())
