@@ -2170,7 +2170,7 @@ impl QuillConfig {
                     env!("CARGO_PKG_VERSION")
                 ),
             )
-            .with_code("quill::quillmark_too_old".to_string())
+            .with_code("quill::requires_unmet".to_string())
             .with_hint("Upgrade Quillmark, or load an older version of this quill.".to_string()));
         }
         Ok(())
@@ -2180,7 +2180,7 @@ impl QuillConfig {
     ///
     /// Returns `Ok((config, warnings))` on success, or `Err(errors)` containing all
     /// parse/validation errors when the config is invalid. Errors are collected
-    /// exhaustively, except that `quill::quillmark_too_old` is reported alone.
+    /// exhaustively, except that `quill::requires_unmet` is reported alone.
     pub fn from_yaml_with_warnings(
         yaml_content: &str,
     ) -> Result<(Self, Vec<Diagnostic>), Vec<Diagnostic>> {
@@ -2220,7 +2220,7 @@ impl QuillConfig {
         // carry keys this one would report as typos.
         if let Some(requires) = quill_section.get("requires") {
             if let Err(diag) = Self::check_release_floor(requires) {
-                if diag.code.as_deref() == Some("quill::quillmark_too_old") {
+                if diag.code.as_deref() == Some("quill::requires_unmet") {
                     return Err(vec![diag]);
                 }
                 errors.push(diag);

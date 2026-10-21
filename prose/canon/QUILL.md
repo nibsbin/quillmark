@@ -110,7 +110,7 @@ Identity resolution:
   as `QuillConfig::backend_config`.
 - `quill.requires` (`">=MAJOR.MINOR[.PATCH]"`) is a floor on Quillmark's
   crate version. It is read before anything else in the file, and a floor above
-  the running Quillmark is the load's only error, `quill::quillmark_too_old`:
+  the running Quillmark is the load's only error, `quill::requires_unmet`:
   strict parsing would otherwise report a newer Quillmark's keys as typos. The
   floor is checked and not stored on `QuillConfig`. Quillmark's version is its
   release with any prerelease suffix dropped, so a release candidate meets its
@@ -145,7 +145,7 @@ example's `$quill`.
 
 ## Strict Parsing
 
-`Quill.yaml` is parsed strictly: every problem the parser can detect is collected and reported in one pass as a `Vec<Diagnostic>`, rather than failing on the first error or silently dropping unsupported shapes. The exception is `quill::quillmark_too_old`, which is reported alone. Specifically:
+`Quill.yaml` is parsed strictly: every problem the parser can detect is collected and reported in one pass as a `Vec<Diagnostic>`, rather than failing on the first error or silently dropping unsupported shapes. The exception is `quill::requires_unmet`, which is reported alone. Specifically:
 
 - Unknown keys in the `quill:` section error with `quill::unknown_key` (typos like `platefile` are not silently captured).
 - Unknown top-level sections error with `quill::unknown_section` (typos like `card_kind:` are not silently ignored). Root-level `fields:` gets a targeted hint pointing to `main.fields:`.
