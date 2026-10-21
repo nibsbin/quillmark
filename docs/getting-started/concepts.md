@@ -4,6 +4,8 @@ Quillmark is the whole framework: the Markdown format and its card-yaml blocks, 
 
 ## Terms
 
+The engine's own terms are below. The words a quill author meets (card, seed, blueprint, blank, ink, region, quiver and the rest) are in the [Glossary](glossary.md).
+
 | Term | Means |
 |---|---|
 | Quillmark | The framework. Also a release, as in "Quillmark 0.127". |
@@ -73,9 +75,9 @@ Each document names its quill in the root block's `$quill` system metadata line.
 
 Quillmark follows a three-stage pipeline:
 
-1. **Parse & Normalize** - Extract card-yaml blocks and body prose; apply schema coercion/defaults, strip bidi characters, fix HTML fences. Absent fields are blank-filled in the backend projection (never persisted): partial documents are always renderable.
-2. **Compile** - Backend receives the quill's layout + JSON data and converts them into final artifacts (PDF, SVG, PNG)
-3. **Output** - Return artifacts with metadata
+1. **Parse** - Read the card-yaml blocks and the Markdown under them, and check each value against the quill's schema, converting it to the field's type and filling in defaults. A field the document leaves out reaches the backend as its blank, so a half-written document still renders; the blank is never saved into the document.
+2. **Compile** - The backend takes the quill's layout and the document's data and produces the pages (PDF, SVG or PNG).
+3. **Output** - The render returns the pages, each as bytes.
 
 ```
 Markdown + YAML → Parse/Normalize → Compile (Backend) → Artifacts

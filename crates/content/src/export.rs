@@ -29,9 +29,13 @@
 //! percent-encoded (`%0A`/`%0D`): CommonMark admits none in a destination, and
 //! the import decodes no percent escape. A `url` or `alt` carrying a character
 //! the import does not admit there (a bidi control, a line separator, a line
-//! ending in an `alt`) comes back rewritten. Each arises only from adversarial
-//! delimiter/break placement, a hand-built island prop, a stored value, or an
-//! editor's empty line.
+//! ending in an `alt`) comes back rewritten. A link over a footnote reference
+//! comes back as two links, one each side: link text reads no reference. An
+//! equation whose `tex` its dollars cannot read back as itself comes back as
+//! other markup. A term with no description below it comes back with an empty
+//! one, and a description with no term above it under an empty term: markdown
+//! writes neither half of a definition alone. Each arises only from adversarial delimiter/break placement, a
+//! hand-built island prop or mark, a stored value, or an editor's empty line.
 
 use crate::island::IslandType;
 use crate::model::{
@@ -41,9 +45,11 @@ use crate::model::{
 /// Render a content to markdown.
 pub fn to_markdown(rt: &Normalized) -> String {
     let segments = line_segments(rt);
+    let labels = note_labels(rt);
     project(&Ctx {
         rt,
         segments: &segments,
+        labels: &labels,
         tags: &[],
     })
 }
@@ -74,14 +80,17 @@ pub struct AnchorRead {
 /// A tag sits after the delimiters of the marks closing at its position and
 /// before those opening there. Inside a code span or a link it moves to the
 /// span's start. A code-block line, a block island's line and an empty line
-/// hold none, and neither does a table cell, whose anchors are not listed.
+/// hold none, and neither does a table cell or a footnote's note, whose
+/// anchors are not listed.
 /// Where a line's tags change what it imports to, they move to its end, and
 /// where that changes it too, the line holds none.
 pub fn to_markdown_annotated(rt: &Normalized) -> Annotated {
     let segments = line_segments(rt);
+    let labels = note_labels(rt);
     let plain = Ctx {
         rt,
         segments: &segments,
+        labels: &labels,
         tags: &[],
     };
     let mut found: Vec<(Usv, &str)> = rt
@@ -113,6 +122,7 @@ pub fn to_markdown_annotated(rt: &Normalized) -> Annotated {
     let markdown = project(&Ctx {
         rt,
         segments: &segments,
+        labels: &labels,
         tags: &tags,
     });
     Annotated { markdown, anchors }
@@ -134,9 +144,11 @@ pub fn anchors_where(rt: &Normalized, keep: impl Fn(&str) -> bool) -> Vec<Anchor
     }
     found.sort_unstable();
     let segments = line_segments(rt);
+    let labels = note_labels(rt);
     let ctx = Ctx {
         rt,
         segments: &segments,
+        labels: &labels,
         tags: &[],
     };
     found.into_iter().map(|(start, id)| anchor_read(&ctx, start, id).1).collect()
@@ -163,7 +175,29 @@ fn project(ctx: &Ctx) -> String {
     while out.ends_with('\n') {
         out.pop();
     }
+    // Each note is defined after the body, at the root, where a blank line
+    // closes whatever container the body ended in.
+    for (isl, label) in ctx.rt.islands.iter().zip(ctx.labels) {
+        if isl.island_type == IslandType::Footnote {
+            out.push_str(&format!("\n\n[^{label}]: "));
+            out.push_str(&render_note_md(&isl.props));
+        }
+    }
     out
+}
+
+/// Per island, the label its footnote reference is written with: the count of
+/// footnotes up to and including it, so the notes number `1, 2, …` in text
+/// order. Re-import pairs a reference with its definition by label and keeps
+/// none of it.
+fn note_labels(rt: &Content) -> Vec<usize> {
+    rt.islands
+        .iter()
+        .scan(0, |n, isl| {
+            *n += usize::from(isl.island_type == IslandType::Footnote);
+            Some(*n)
+        })
+        .collect()
 }
 
 /// Render a content to plaintext: [`Content::text`] with island slots
@@ -189,6 +223,8 @@ struct Ctx<'a> {
     rt: &'a Content,
     /// One entry per [`Content::lines`] entry.
     segments: &'a [Segment],
+    /// One entry per island: [`note_labels`].
+    labels: &'a [usize],
     /// Per line, the anchor tags it holds at line-local positions, in
     /// `(position, id)` order; empty for the plain projection.
     tags: &'a [Vec<(Usv, &'a str)>],
@@ -268,6 +304,9 @@ struct Frame<'a> {
     container: Option<&'a Container>,
     at: usize,
     head: Option<usize>,
+    /// What the block written last describes a [`Container::Description`]
+    /// after it as.
+    last: Before,
     range: std::ops::Range<usize>,
     depth: usize,
     buf: String,
@@ -279,6 +318,7 @@ impl<'a> Frame<'a> {
             container,
             at: range.start,
             head: None,
+            last: Before::Other,
             range,
             depth,
             buf: String::new(),
@@ -305,7 +345,16 @@ fn emit_block(ctx: &Ctx, range: std::ops::Range<usize>, depth: usize, out: &mut 
                 let item = crate::traverse::items(lines, i..frame.range.end, frame.depth)
                     .next()
                     .expect("a line with a container at `depth` opens an item");
-                block_separator(&mut frame.buf, frame.head.is_none());
+                let description = matches!(item.container, Container::Description { .. });
+                match std::mem::replace(&mut frame.last, if description { Before::Description } else { Before::Other }) {
+                    Before::Term if description => frame.buf.push('\n'),
+                    before => {
+                        block_separator(&mut frame.buf, frame.head.is_none());
+                        if description && before == Before::Other {
+                            frame.buf.push_str("[]()\n");
+                        }
+                    }
+                }
                 frame.head.get_or_insert(i);
                 frame.at = item.range.end;
                 let child = Frame::open(Some(item.container), item.range, frame.depth + 1);
@@ -321,7 +370,17 @@ fn emit_block(ctx: &Ctx, range: std::ops::Range<usize>, depth: usize, out: &mut 
                 }
                 block_separator(&mut frame.buf, frame.head.is_none());
                 frame.head.get_or_insert(i);
+                let term = lines[i].kind == LineKind::Term && block_island(ctx, i).is_none();
+                frame.last = if term { Before::Term } else { Before::Other };
+                let described = lines
+                    .get(seg.end)
+                    .filter(|_| seg.end < frame.range.end)
+                    .and_then(|l| l.containers.get(frame.depth))
+                    .is_some_and(|c| matches!(c, Container::Description { .. }));
                 emit_leaf_block(ctx, seg, &mut frame.buf);
+                if term && !described {
+                    frame.buf.push_str("\n:");
+                }
             }
             continue;
         }
@@ -341,6 +400,14 @@ fn emit_block(ctx: &Ctx, range: std::ops::Range<usize>, depth: usize, out: &mut 
             None => out.push_str(&done.buf),
         }
     }
+}
+
+/// The block a [`Frame`] wrote last, as a description below it reads it.
+#[derive(Clone, Copy, PartialEq)]
+enum Before {
+    Term,
+    Description,
+    Other,
 }
 
 fn block_separator(out: &mut String, first_block: bool) {
@@ -425,6 +492,7 @@ fn close_container(key: &Container, inner: &str, prose_head: bool, out: &mut Str
             // one quote on re-import.
             prefix_quote(inner, out);
         }
+        Container::Description { .. } => prefix_lines(inner, ": ", "  ", out),
         Container::Element { element, .. } => out.push_str(&element.wrap_block(inner)),
     }
 }
@@ -509,10 +577,11 @@ fn emit_leaf_block(ctx: &Ctx, range: std::ops::Range<usize>, out: &mut String) {
     // re-imports as prose with the island gone, so a mark reaching over the
     // slot projects as nothing.
     if let Some(isl) = block_island(ctx, range.start) {
-        emit_island(isl, out);
+        emit_island(isl, 0, out);
         return;
     }
     let first = &ctx.rt.lines[range.start];
+    let dollar = block_escapes_dollar(ctx, range.clone());
     match &first.kind {
         LineKind::Code { lang } => emit_code(ctx, range, lang.as_deref(), out),
         LineKind::Heading { level } => {
@@ -522,15 +591,19 @@ fn emit_leaf_block(ctx: &Ctx, range: std::ops::Range<usize>, out: &mut String) {
             out.push(' ');
             // Headings never carry continuations (import maps a hard break in a
             // heading to a space), so only the first line contributes.
-            out.push_str(&render_inline(ctx, range.start, true));
+            out.push_str(&render_inline(ctx, range.start, true, dollar));
         }
         // An empty line between hard breaks writes nothing, which a trailing
         // `\` would spell as text.
-        LineKind::Para => {
+        LineKind::Para | LineKind::Term => {
             let parts: Vec<String> = range
-                .map(|i| render_inline(ctx, i, false))
+                .map(|i| render_inline(ctx, i, false, dollar))
                 .filter(|part| !part.is_empty())
                 .collect();
+            // An empty link is the one empty spelling of a term.
+            if parts.is_empty() && first.kind == LineKind::Term {
+                out.push_str("[]()");
+            }
             out.push_str(&parts.join("\\\n"));
         }
         // `***`, not `---`: all three break spellings import alike, but `---` is
@@ -540,6 +613,32 @@ fn emit_leaf_block(ctx: &Ctx, range: std::ops::Range<usize>, out: &mut String) {
         // prefix.
         LineKind::Rule => out.push_str("***"),
     }
+}
+
+/// Whether the block in `range` writes each `$` of its text as `\$`: one
+/// that holds a `$` and, counting each equation's two delimiters, another.
+/// A lone `$` pairs with nothing, so `$5` stays as written, and an equation
+/// can span the block's hard breaks.
+fn block_escapes_dollar(ctx: &Ctx, range: std::ops::Range<usize>) -> bool {
+    let (mut dollars, mut maths) = (0, 0);
+    for i in range {
+        let text = seg_str(ctx, i);
+        dollars += text.matches('$').count();
+        let first = ctx.segments[i].slots_before;
+        let slots = text.matches(ISLAND_SLOT).count();
+        maths += ctx.rt.islands[first.min(ctx.rt.islands.len())..]
+            .iter()
+            .take(slots)
+            .filter(|isl| isl.island_type == IslandType::Math)
+            .count();
+    }
+    escapes_dollar(dollars, maths)
+}
+
+/// Whether a fragment holding `dollars` `$` chars in its text and `maths`
+/// equations writes each `$` escaped.
+fn escapes_dollar(dollars: usize, maths: usize) -> bool {
+    dollars > 0 && dollars + 2 * maths >= 2
 }
 
 /// Whether the block in `range` is a paragraph whose every line is empty.
@@ -559,11 +658,44 @@ fn block_island<'a>(ctx: &'a Ctx, i: usize) -> Option<&'a Island> {
     isl.filter(|_| crate::model::is_block_island_line(seg_str(ctx, i), isl))
 }
 
-fn emit_island(isl: &Island, out: &mut String) {
+/// An island's markup; a footnote's is its reference, written with `label`
+/// ([`note_labels`]).
+fn emit_island(isl: &Island, label: usize, out: &mut String) {
     match isl.island_type {
         IslandType::Table => emit_table(isl, out),
         IslandType::Image => emit_image(isl, out),
+        IslandType::Footnote => out.push_str(&format!("[^{label}]")),
+        IslandType::Math => emit_math(isl, out),
     }
+}
+
+/// `$tex$`, or `$$tex$$` for a display equation.
+fn emit_math(isl: &Island, out: &mut String) {
+    let tex = isl.props.get("tex").and_then(|v| v.as_str()).unwrap_or("");
+    let display = isl.props.get("display") == Some(&serde_json::Value::Bool(true));
+    let delim = if display { "$$" } else { "$" };
+    out.push_str(delim);
+    out.push_str(tex);
+    out.push_str(delim);
+}
+
+/// Whether an equation's `tex`, as it rests, reads back as itself between its
+/// delimiters: `$tex$`, or `$$tex$$` where `display`, parsed alone. An empty
+/// inline `tex`, an unescaped `$` and braces that do not balance are what it
+/// refuses. The authored lanes refuse the rest
+/// ([`crate::serial::from_authored_value`],
+/// [`crate::serial::island_from_authored_value`]).
+pub(crate) fn tex_is_writable(tex: &str, display: bool) -> bool {
+    let delim = if display { "$$" } else { "$" };
+    let md = format!("{delim}{tex}{delim}");
+    let mut events = pulldown_cmark::Parser::new_ext(&md, crate::import::options())
+        .filter(|e| !matches!(e, pulldown_cmark::Event::Start(_) | pulldown_cmark::Event::End(_)));
+    let read = match (events.next(), events.next()) {
+        (Some(pulldown_cmark::Event::InlineMath(t)), None) if !display => t,
+        (Some(pulldown_cmark::Event::DisplayMath(t)), None) if display => t,
+        _ => return false,
+    };
+    &*read == tex
 }
 
 fn emit_table(isl: &Island, out: &mut String) {
@@ -615,7 +747,8 @@ fn emit_image(isl: &Island, out: &mut String) {
     // Alt is inline content of `![…]`: escape it like a link's display text so a
     // `]`/`\`/`&`/delimiter can't terminate the markup or decode on re-import.
     out.push_str("![");
-    out.push_str(&escape_run(&alt.chars().collect::<Vec<_>>(), false));
+    let dollar = escapes_dollar(alt.matches('$').count(), 0);
+    out.push_str(&escape_run(&alt.chars().collect::<Vec<_>>(), Esc { frag: Frag::Prose, dollar }));
     out.push_str("](");
     emit_url(url, out);
     out.push(')');
@@ -684,31 +817,61 @@ fn url_is_bare_safe(url: &str) -> bool {
 }
 
 /// Line `i`'s inline markdown, as a heading's text after its `#`s or as a
-/// paragraph line, which escapes what would open a block.
-fn render_inline(ctx: &Ctx, i: usize, heading: bool) -> String {
+/// paragraph line, which escapes what would open a block. `dollar` escapes
+/// each `$` ([`block_escapes_dollar`]).
+fn render_inline(ctx: &Ctx, i: usize, heading: bool, dollar: bool) -> String {
     let escape_leading_block = !heading;
     let seg = &ctx.segments[i];
     let line_start = seg.start;
     let text = seg_str(ctx, i);
     let chars: Vec<char> = text.chars().collect();
-    let n = chars.len();
 
-    let (code_ranges, fmt, links) = bucket_marks(&ctx.rt.marks, line_start, n, false);
+    let (code_ranges, fmt, links) = bucket_marks(&ctx.rt.marks, line_start, chars.len(), false);
+    let mut slot = seg.slots_before;
+    let note_labels: Vec<Option<usize>> = chars
+        .iter()
+        .map(|&c| {
+            if c != ISLAND_SLOT {
+                return None;
+            }
+            slot += 1;
+            let isl = ctx.rt.islands.get(slot - 1)?;
+            (isl.island_type == IslandType::Footnote).then(|| ctx.labels[slot - 1])
+        })
+        .collect();
+    // A footnote reference inside link text is not read as one, so a link
+    // over a reference parts around it.
+    let links: Vec<(usize, usize, &str)> = links
+        .into_iter()
+        .flat_map(|(s, e, url)| {
+            let mut parts = Vec::new();
+            let mut run = s;
+            for at in (s..e).filter(|&at| note_labels[at].is_some()) {
+                if run < at {
+                    parts.push((run, at, url));
+                }
+                run = at + 1;
+            }
+            if run < e {
+                parts.push((run, e, url));
+            }
+            parts
+        })
+        .collect();
+    // The probe reads the line back alone, so it carries a definition for
+    // each reference the line writes.
+    let probe_tail: String = note_labels
+        .iter()
+        .flatten()
+        .map(|label| format!("\n\n[^{label}]: x"))
+        .collect();
 
-    // Leading ordered-list marker: a line whose text starts `<digits>.` or
-    // `<digits>)` would re-import as an ordered list, so escape that punctuation.
     let escape_punct_at = if escape_leading_block {
-        let lead_digits = chars.iter().take_while(|c| c.is_ascii_digit()).count();
-        if lead_digits > 0 && lead_digits < n && matches!(chars[lead_digits], '.' | ')') {
-            Some(lead_digits)
-        } else {
-            None
-        }
+        list_marker_punct(&chars)
     } else {
         None
     };
 
-    let slots_before_line = seg.slots_before;
     let (mut md, mut points) = render_marked_core(
         &chars,
         &code_ranges,
@@ -716,16 +879,13 @@ fn render_inline(ctx: &Ctx, i: usize, heading: bool) -> String {
         &links,
         escape_punct_at,
         escape_leading_block,
-        false, // prose text does not escape `|`
+        Esc { frag: Frag::Prose, dollar },
+        &probe_tail,
         |pos_local| {
-            let before = slots_before_line
-                + chars[..pos_local]
-                    .iter()
-                    .filter(|&&c| c == ISLAND_SLOT)
-                    .count();
+            let before = seg.slots_before + chars[..pos_local].iter().filter(|&&c| c == ISLAND_SLOT).count();
             ctx.rt.islands.get(before).map(|isl| {
                 let mut markup = String::new();
-                emit_island(isl, &mut markup);
+                emit_island(isl, ctx.labels[before], &mut markup);
                 markup
             })
         },
@@ -745,6 +905,14 @@ fn render_inline(ctx: &Ctx, i: usize, heading: bool) -> String {
         Some(tags) => annotate(md, &points, tags),
         None => md,
     }
+}
+
+/// Where a line's text starts `<digits>.` or `<digits>)`, the punctuation to
+/// escape so it does not re-import as an ordered list.
+fn list_marker_punct(chars: &[char]) -> Option<usize> {
+    let lead_digits = chars.iter().take_while(|c| c.is_ascii_digit()).count();
+    (lead_digits > 0 && lead_digits < chars.len() && matches!(chars[lead_digits], '.' | ')'))
+        .then_some(lead_digits)
 }
 
 /// `md`, one line's markdown, with each of `tags` at its position's tag point
@@ -827,10 +995,12 @@ fn bucket_marks(
 }
 
 /// Render marks over a standalone char slice to markdown: the projection's mark
-/// boundary sweep, shared by prose lines and table cells. `code_ranges`/`fmt`/
-/// `links` are the marks clipped to `chars` (local offsets); `escape_pipe` adds
-/// `|`→`\|` for cells; `island_markup_at` renders an island slot (prose) or
-/// yields `None` (cells carry no slot).
+/// boundary sweep, shared by prose lines, table cells and footnote notes.
+/// `code_ranges`/`fmt`/`links` are the marks clipped to `chars` (local
+/// offsets); `esc` says which of the three `chars` is and whether a `$`
+/// escapes; `probe_tail` follows a prose line when the net reads it back;
+/// `island_markup_at` renders an island slot (prose) or yields `None` (cells
+/// and notes carry no slot).
 ///
 /// Returns the markdown and each position's tag point, one entry per position
 /// `0..=n`: the byte offset in the markdown after the delimiters of the marks
@@ -858,9 +1028,11 @@ fn render_marked_core(
     links: &[(usize, usize, &str)],
     escape_punct_at: Option<usize>,
     escape_leading_block: bool,
-    escape_pipe: bool,
+    esc: Esc,
+    probe_tail: &str,
     island_markup_at: impl Fn(usize) -> Option<String>,
 ) -> (String, Vec<usize>) {
+    let escape_pipe = esc.frag == Frag::Cell;
     let n = chars.len();
 
     // A code span is emitted verbatim between backticks, so a slot inside it
@@ -1005,6 +1177,11 @@ fn render_marked_core(
                 li += 1;
             }
             if let Some(&(ls, le, url)) = links.get(li).filter(|l| l.0 == pos) {
+                // `[^1][…](…)` reads the reference as text, so an empty
+                // comment, which the import drops, parts the two.
+                if ls > 0 && chars[ls - 1] == ISLAND_SLOT && out.ends_with(']') {
+                    out.push_str("<!---->");
+                }
                 out.push('[');
                 for (i, &c) in chars[ls..le].iter().enumerate() {
                     if c == ISLAND_SLOT {
@@ -1012,7 +1189,7 @@ fn render_marked_core(
                             out.push_str(&slot);
                         }
                     } else {
-                        escape_char_into(c, i == 0, escape_pipe, &mut out);
+                        escape_char_into(c, i == 0, esc, &mut out);
                     }
                 }
                 out.push_str("](");
@@ -1060,17 +1237,22 @@ fn render_marked_core(
                         out.push_str(&slot);
                     }
                 } else if Some(pos) == escape_punct_at
-                    // A bare `!` before a link's `[` would open an image.
+                    // A bare `!` before a link's `[` or a reference's `[^`
+                    // would open an image.
                     || (c == '!' && links.get(li).is_some_and(|l| l.0 == pos + 1))
+                    || (c == '!' && chars.get(pos + 1) == Some(&ISLAND_SLOT))
+                    // After a footnote reference, `(` would read `[^1](…)` as
+                    // a link and `:` would read `[^1]:` as a definition.
+                    || (matches!(c, '(' | ':') && pos > 0 && chars[pos - 1] == ISLAND_SLOT && out.ends_with(']'))
                 {
                     out.push('\\');
                     out.push(c);
-                } else if let Some(esc) = edge_space_ref(c)
+                } else if let Some(space) = edge_space_ref(c)
                     && (pos < lead_edge || pos >= trail_edge)
                 {
-                    out.push_str(esc);
+                    out.push_str(space);
                 } else {
-                    escape_char_into(c, pos == 0 && escape_leading_block, escape_pipe, &mut out);
+                    escape_char_into(c, pos == 0 && escape_leading_block, esc, &mut out);
                 }
             }
             pos += 1;
@@ -1142,17 +1324,24 @@ fn render_marked_core(
     // to a `***` run CommonMark re-segments into one `Strong` over all three spans,
     // spending no character and moving where bold starts and ends.
     //
-    // A cell fragment is read back as a cell, where `<br>` is a `\n` wherever it
-    // sits; prose reads a break at a mark edge or a second one in a row
-    // differently.
+    // A cell fragment is read back as a cell and a note as a note, where `<br>`
+    // is a `\n` wherever it sits; prose reads a break at a mark edge or a
+    // second one in a row differently.
     let probe = |md: &str, want_marks: &[Mark]| -> Option<bool> {
-        let (text, marks) = if escape_pipe {
-            let rt = crate::import::from_markdown(&format!("| h |\n| --- |\n| ,{md}, |")).ok()?.content;
-            let cell = rt.islands.first()?.props.get("rows")?.get(0)?.get(0)?;
-            crate::serial::parse_cell(cell)
-        } else {
-            let rt = crate::import::from_markdown(&format!(",{md},")).ok()?.content.into_content();
-            (rt.text, rt.marks)
+        let (text, marks) = match esc.frag {
+            Frag::Cell => {
+                let rt = crate::import::from_markdown(&format!("| h |\n| --- |\n| ,{md}, |")).ok()?.content;
+                let cell = rt.islands.first()?.props.get("rows")?.get(0)?.get(0)?;
+                crate::serial::parse_cell(cell)
+            }
+            Frag::Note => {
+                let rt = crate::import::from_markdown(&format!("a[^1]\n\n[^1]: ,{md},")).ok()?.content;
+                crate::serial::parse_cell(&rt.islands.first()?.props)
+            }
+            Frag::Prose => {
+                let rt = crate::import::from_markdown(&format!(",{md},{probe_tail}")).ok()?.content.into_content();
+                (rt.text, rt.marks)
+            }
         };
         if text != want {
             return None;
@@ -1346,11 +1535,42 @@ fn render_cell_md(v: &serde_json::Value) -> String {
     let (text, marks) = crate::serial::parse_cell(v);
     let chars: Vec<char> = text.chars().collect();
     let (code_ranges, fmt, links) = bucket_marks(&marks, 0, chars.len(), true);
-    let (md, _) = render_marked_core(&chars, &code_ranges, &fmt, &links, None, false, true, |_| None);
+    let esc = Esc { frag: Frag::Cell, dollar: escapes_dollar(text.matches('$').count(), 0) };
+    let (md, _) = render_marked_core(&chars, &code_ranges, &fmt, &links, None, false, esc, "", |_| None);
     match crate::carrier::cell::pair(v) {
         Some(pair) => pair.wrap_inline(&md),
         None => md,
     }
+}
+
+/// A footnote's note as the text of its definition: a cell's sweep on one
+/// source line, opening a block as a paragraph line does.
+fn render_note_md(v: &serde_json::Value) -> String {
+    let (text, marks) = crate::serial::parse_cell(v);
+    let chars: Vec<char> = text.chars().collect();
+    let (code_ranges, fmt, links) = bucket_marks(&marks, 0, chars.len(), true);
+    let esc = Esc { frag: Frag::Note, dollar: escapes_dollar(text.matches('$').count(), 0) };
+    let punct = list_marker_punct(&chars);
+    render_marked_core(&chars, &code_ranges, &fmt, &links, punct, true, esc, "", |_| None).0
+}
+
+/// What a fragment [`render_marked_core`] renders is, and so the escapes it
+/// takes and how its net reads it back.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Frag {
+    Prose,
+    /// A table cell: `|` escaped, a `\n` a `<br>`.
+    Cell,
+    /// A footnote's note: a `\n` a `<br>`.
+    Note,
+}
+
+/// The escapes a fragment's text takes: its [`Frag`]'s, and `$` as `\$`
+/// where `dollar`.
+#[derive(Clone, Copy)]
+struct Esc {
+    frag: Frag,
+    dollar: bool,
 }
 
 /// Which of markdown's two spellings each asterisk-family kind is emitted with.
@@ -1410,20 +1630,20 @@ fn push_piped(s: &str, escape_pipe: bool, out: &mut String) {
     }
 }
 
-fn escape_run(chars: &[char], escape_pipe: bool) -> String {
+fn escape_run(chars: &[char], esc: Esc) -> String {
     let mut s = String::new();
     for (i, c) in chars.iter().enumerate() {
-        escape_char_into(*c, i == 0, escape_pipe, &mut s);
+        escape_char_into(*c, i == 0, esc, &mut s);
     }
     s
 }
 
 /// Push `c` into `out` escaped so it re-imports as literal text: the char
 /// verbatim, or a `&'static str` escape. `leading` also escapes block-starter
-/// chars that would otherwise open a heading/list/quote; `escape_pipe` adds
-/// `|`→`\|` and `\n`→`<br>`, so a table cell survives `pulldown`'s pipe split
-/// on its one source line.
-fn escape_char_into(c: char, leading: bool, escape_pipe: bool, out: &mut String) {
+/// chars that would otherwise open a heading/list/quote. A cell adds
+/// `|`→`\|`, and a cell or note `\n`→`<br>`, so each survives on its one
+/// source line; `esc.dollar` adds `$`→`\$`.
+fn escape_char_into(c: char, leading: bool, esc: Esc, out: &mut String) {
     let esc: &str = match c {
         '\\' => "\\\\",
         '*' => "\\*",
@@ -1437,8 +1657,9 @@ fn escape_char_into(c: char, leading: bool, escape_pipe: bool, out: &mut String)
         // `&word;`-shaped text would collapse to the entity's character. Always
         // escaped: detecting "would form an entity" is not worth the fragility.
         '&' => "\\&",
-        '|' if escape_pipe => "\\|",
-        '\n' if escape_pipe => "<br>",
+        '|' if esc.frag == Frag::Cell => "\\|",
+        '\n' if esc.frag != Frag::Prose => "<br>",
+        '$' if esc.dollar => "\\$",
         '#' if leading => "\\#",
         '>' if leading => "\\>",
         '-' if leading => "\\-",
@@ -1447,6 +1668,8 @@ fn escape_char_into(c: char, leading: bool, escape_pipe: bool, out: &mut String)
         // heading, so only a continuation line can start one. One escaped `=`
         // defeats the whole underline.
         '=' if leading => "\\=",
+        // A paragraph's line opening `: ` is a description of the one above.
+        ':' if leading => "\\:",
         other => {
             out.push(other);
             return;
@@ -1542,6 +1765,103 @@ mod tests {
         }]
     }
 
+    fn note(text: &str, id: &str) -> Island {
+        Island::new(id.into(), IslandType::Footnote).with_props(serde_json::json!({ "text": text, "marks": [] }))
+    }
+
+    fn math(tex: &str, display: bool, id: &str) -> Island {
+        let props = if display {
+            serde_json::json!({ "tex": tex, "display": true })
+        } else {
+            serde_json::json!({ "tex": tex })
+        };
+        Island::new(id.into(), IslandType::Math).with_props(props)
+    }
+
+    /// A reference abutting what would read it as a link or a definition
+    /// escapes that char; a note opening on what would open a block escapes
+    /// it, its edge line breaks dropping and an inner one written as `<br>`.
+    #[test]
+    fn a_footnote_reference_and_its_note_round_trip() {
+        let rt = Content::new(
+            "\u{FFFC}: a\u{FFFC}(b)\n\u{FFFC}".into(),
+            vec![Line::new(LineKind::Para), Line::new(LineKind::Heading { level: 2 })],
+        )
+        .with_islands(vec![note("\n# x\ny\n", "isl-0"), note("1. z", "isl-1"), note("", "isl-2")])
+        .into_normalized();
+        rt.validate().expect("validates");
+        assert_eq!(crate::serial::parse_cell(&rt.islands[0].props).0, "# x\ny");
+        let md = to_markdown(&rt);
+        assert_eq!(
+            md,
+            "[^1]\\: a[^2]\\(b)\n\n## [^3]\n\n[^1]: \\# x<br>y\n\n[^2]: 1\\. z\n\n[^3]: "
+        );
+        assert_eq!(from_markdown(&md).unwrap().content, rt);
+    }
+
+    /// Link text holds no footnote reference, so a link over one parts around
+    /// it: the text and the note come back, the link as two.
+    #[test]
+    fn a_link_over_a_footnote_reference_parts_around_it() {
+        let rt = Content::new("a\u{FFFC}b".into(), vec![Line::new(LineKind::Para)])
+            .with_marks(vec![Mark::new(0, 3, MarkKind::Link { url: "u".into() })])
+            .with_islands(vec![note("n", "isl-0")])
+            .into_normalized();
+        let md = to_markdown(&rt);
+        assert_eq!(md, "[a](u)[^1]<!---->[b](u)\n\n[^1]: n");
+        let back = from_markdown(&md).unwrap().content;
+        assert_eq!((&back.text, &back.islands), (&rt.text, &rt.islands));
+        assert_eq!(back.marks.len(), 2);
+    }
+
+    /// An equation writes between its delimiters, and a `$` of the text
+    /// escapes only where another `$` or an equation could pair with it.
+    #[test]
+    fn math_and_the_dollars_beside_it_round_trip() {
+        let cases: &[(&str, Vec<Island>, &str)] = &[
+            ("a\u{FFFC} costs $5", vec![math("x^2", false, "isl-0")], "a$x^2$ costs \\$5"),
+            ("$5 or $6", vec![], "\\$5 or \\$6"),
+            ("$5", vec![], "$5"),
+            ("\u{FFFC}", vec![math("\\frac{a}{b}", true, "isl-0")], "$$\\frac{a}{b}$$"),
+            ("p\u{FFFC}q", vec![math("\\{a\\} \\$", false, "isl-0")], "p$\\{a\\} \\$$q"),
+        ];
+        for (text, islands, md) in cases {
+            let rt = Content::new((*text).into(), vec![Line::new(LineKind::Para)])
+                .with_islands(islands.clone())
+                .into_normalized();
+            assert_eq!(to_markdown(&rt), *md, "{text:?}");
+            assert_eq!(from_markdown(md).unwrap().content, rt, "{md:?}");
+        }
+        let cell = Content::new("\u{FFFC}".into(), vec![Line::new(LineKind::Para)])
+            .with_islands(vec![Island::new("isl-0".into(), IslandType::Table).with_props(serde_json::json!({
+                "header": [{"text": "$a$", "marks": []}],
+                "aligns": ["none"],
+                "rows": [],
+            }))])
+            .into_normalized();
+        let md = to_markdown(&cell);
+        assert!(md.starts_with("| \\$a\\$ |"), "{md:?}");
+        assert_eq!(from_markdown(&md).unwrap().content, cell);
+    }
+
+    /// TeX reads back between its delimiters only where it opens and closes
+    /// on no space, holds no bare `$`, and balances its braces.
+    #[test]
+    fn tex_is_writable_where_its_delimiters_read_it_back() {
+        for (tex, display, writable) in [
+            ("x", false, true),
+            ("a \\$ b", false, true),
+            ("\\{", false, true),
+            ("", false, false),
+            ("", true, true),
+            ("a$b", false, false),
+            ("{a", false, false),
+            ("a}", true, false),
+        ] {
+            assert_eq!(tex_is_writable(tex, display), writable, "{tex:?} {display}");
+        }
+    }
+
     /// A task marker opens its item's paragraph: an item opening on any other
     /// block writes the marker alone above it, and an empty one ends on a
     /// space, the marker reading as one only before whitespace.
@@ -1628,6 +1948,32 @@ mod tests {
             rt, rt2,
             "content not a fixed point.\n  in:  {md:?}\n  mid: {md2:?}"
         );
+    }
+
+    #[test]
+    fn a_definition_list_round_trips_and_its_halves_alone_take_an_empty_other() {
+        for md in [
+            "T\n: d",
+            "T\n: a\n\n  b\n\n: c",
+            "T\n: U\n  : d",
+            "- T\n  : d",
+            "> T\n> : d",
+            "T\n: d\n\nU\n: e",
+            "[]()\n: d",
+            "\\: d",
+            "P\\\n\\: d",
+        ] {
+            round_trips(md);
+            assert_eq!(to_markdown(&from_markdown(md).unwrap().content), md);
+        }
+        let description = vec![Container::Description { instance: 0 }];
+        let rt = Content::new("P\nd\nT".into(), vec![
+            Line::new(LineKind::Para),
+            Line::new(LineKind::Para).with_containers(description),
+            Line::new(LineKind::Term),
+        ])
+        .into_normalized();
+        assert_eq!(to_markdown(&rt), "P\n\n[]()\n: d\n\nT\n:");
     }
 
     /// A `!` before a link stays text, not the `!` of an image.

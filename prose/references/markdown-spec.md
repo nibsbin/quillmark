@@ -312,6 +312,13 @@ rule (D2). A *column-zero* `~~~` can never be block-scalar content (YAML
 requires scalar content to be indented past its key), so the closer is
 unambiguous.
 
+Outside a card-yaml block, the detector reads ordinary fenced code blocks as
+CommonMark does, containers included: a `~~~` line inside one is code, not an
+opener. A fenced code block inside a list item or block quote closes when its
+container does, without a closing fence and without the unclosed-fence warning.
+A column-zero line ends every container, so such a block never covers a
+column-zero `~~~` below it; only a code block opened at the top level does.
+
 Failure of D0, D1, or D2 delegates the `~~~` line to CommonMark (an unclosed
 `~~~` opener becomes a code block to EOF, with a non-fatal unclosed-fence
 warning). A document with no closed root block fails with `MissingQuill`
@@ -372,6 +379,9 @@ Body regions (the root body and every card body) are rendered as CommonMark
 | Pipe tables | GFM pipe-table syntax with alignment rows | Supports `:---`, `:---:`, `---:` alignment. |
 | Underline (HTML) | `<u>text</u>` | Allowlisted HTML (see §6.2). The only syntax for underline; handles intraword and arbitrary-range cases. |
 | Task lists | `- [ ] open`, `- [x] done` | GFM rules: the marker opens a list item's first paragraph. A list item's `checked`. |
+| Footnotes | `text[^1]` and a `[^1]: note` definition | GFM rules. A `footnote` island at the reference, holding the note (§6.5). |
+| Math | `$tex$` inline, `$$tex$$` display | pulldown-cmark's math rules. A `math` island holding the TeX (§6.6). |
+| Definition lists | `Term` and a `: description` line under it | pulldown-cmark's rules. A `term` line and a `description` container (§6.7). |
 
 ### 6.2 Declared Deviations from CommonMark
 
@@ -445,13 +455,6 @@ handles them, but produce limited or no Quillmark-specific output:
   across the versions its `$quill` selector admits and declares every other
   thing it references, so a path into one quill's file tree is not a binding a
   document may take.
-- Math (`$…$`, `$$…$$`), definition lists: not supported; each imports as the
-  literal text it is. In markdown body text `$` is literal; inside a `~~~`
-  card-yaml payload `$` is reserved as the prefix for system-metadata keys
-  (§3.3).
-- Footnotes: not supported. A definition (`[^1]: Word`) drops whole, reported
-  under `parse::dropped_construct` as `footnote`, and a reference to one
-  imports as its text, `[^1]`.
 - HTML comments: accepted syntactically, not rendered (see §6.2).
 - `<br>` (any case, with attributes or a closing `/`) inside a paragraph or a
   table cell: a hard break. In a paragraph, one at its block's start or right
@@ -627,6 +630,65 @@ each anchor's start:
 ```markdown
 A <qm-anchor ref="c1"></qm-anchor>**flagged** phrase.
 ```
+
+### 6.5 Footnotes
+
+A footnote reference imports as a `footnote` island at its slot, inline in its
+paragraph, holding its definition's note as one table cell: `{text, marks}`,
+with the note's paragraphs and line breaks joined by `\n`. Each reference holds
+its own copy, so a note cited twice is two footnotes. A label matches its
+definition as GFM matches it, case-insensitively.
+
+What the island cannot hold drops, reported under `parse::dropped_construct`:
+
+| Spelling | Reported as |
+|---|---|
+| A definition nothing references, or a second definition of one label | `footnote` |
+| A reference in a table cell, an image's alt text or a note | `footnote` |
+| A heading, list, code block, block quote, table, rule or definition list in a note, which keeps its text as lines of the note | `footnote[<block>]`: `heading`, `list`, `code`, `quote`, `table`, `rule`, `definition list` |
+
+Export numbers the references `[^1]`, `[^2]`, … in reading order and writes
+each note as a definition after the body, a line break as `<br>`. Link text
+holds no reference, so a link over one writes as two links, one each side of
+it.
+
+### 6.6 Math
+
+`$tex$` is an inline equation and `$$tex$$` a display one, each a `math`
+island at its slot holding the TeX between the dollars as written, a display
+one with `display: true`. The rules are pulldown-cmark's: an opening `$` is
+not followed by whitespace and a closing `$` not preceded by it, the braces
+inside balance, and `\$` is a dollar sign that opens nothing, so
+`$5 and $10` is text. A `%` opens a TeX comment, which storage drops to the
+end of its line. Inside a `~~~` card-yaml payload `$` is reserved as the
+prefix for system-metadata keys (§3.3).
+
+An equation in a table cell, an image's alt text or a footnote's note keeps its
+source as text, reported under `parse::dropped_construct` as `math`.
+
+Export writes `$tex$` or `$$tex$$`, and writes each `$` of the text in a
+paragraph, cell, note or alt text as `\$` wherever another `$` or an equation
+there could pair with it, so a lone `$5` stays as written. A `tex` the dollars
+cannot read back as itself (an unescaped `$`, unbalanced braces, an empty inline
+equation) the authored lanes refuse. Import keeps such an equation's source as
+text, reported as `math`, where the TeX left once its edge whitespace drops is
+one: `$ $` around a Unicode space reads empty.
+
+### 6.7 Definition Lists
+
+A paragraph followed by a line opening `: ` is a term and its description. The
+term imports as a `term` line, a paragraph's inline text across its hard
+breaks; the description as a `description` container around its blocks, which
+indent two spaces under the `: `. Several `: ` lines under one term are several
+descriptions, adjacent runs of the container, and a term after a description
+starts the next definition. Where one list ends and the next begins is not
+kept, and neither is whether a description is tight.
+
+Export writes a term, then each description on the line under it or after a
+blank line, then a blank line before the next term. A paragraph line opening
+`:` writes it `\:`. A term with no description writes `:` under it, which
+re-imports with an empty description, and a description with no term above it
+writes the empty term `[]()`, which re-imports as an empty term.
 
 ## 7. Input Normalization
 

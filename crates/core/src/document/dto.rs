@@ -32,6 +32,9 @@ use crate::version::QuillReference;
 /// The wire key is spelled `schema` though it names a storage version, not a
 /// field schema: it is the serde tag [`StoredDocument`] dispatches on, and
 /// retagging it would break the versioning it exists to serve.
+pub const STORAGE_V0_129_0: &str = "quillmark/document@0.129.0";
+
+/// The tag before [`STORAGE_V0_129_0`], still read.
 pub const STORAGE_V0_124_0: &str = "quillmark/document@0.124.0";
 
 /// The tag before [`STORAGE_V0_124_0`], still read.
@@ -68,6 +71,8 @@ pub fn peek_storage_version(json: &str) -> Option<String> {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "schema")]
 pub enum StoredDocument {
+    #[serde(rename = "quillmark/document@0.129.0")]
+    V0_129_0(DocumentV0_129_0),
     #[serde(rename = "quillmark/document@0.124.0")]
     V0_124_0(DocumentV0_124_0),
     #[serde(rename = "quillmark/document@0.116.0")]
@@ -118,9 +123,33 @@ impl std::fmt::Display for StorageError {
 
 impl std::error::Error for StorageError {}
 
+/// Frozen `0.129.0` representation of a [`Document`]: the V0_124_0 tree over
+/// the content vocabulary holding the `footnote` and `math` islands, the
+/// `term` line kind and the `description` container.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DocumentV0_129_0 {
+    pub main: CardV0_129_0,
+    #[serde(default)]
+    pub cards: Vec<CardV0_129_0>,
+}
+
+/// Frozen `0.129.0` representation of a [`Card`]. The `body` is the canonical
+/// content embedded structurally (see [`CanonicalContent`]).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CardV0_129_0 {
+    pub payload: PayloadV0_129_0,
+    pub body: CanonicalContent,
+}
+
+/// The V0_129_0 payload shape: identical to V0_116_0.
+pub type PayloadV0_129_0 = PayloadV0_116_0;
+
 /// Frozen `0.124.0` representation of a [`Document`]: the V0_116_0 tree over
 /// the content vocabulary holding the `element` container and a list item's
-/// `checked`.
+/// `checked`. Read-only, and its `body` is raw JSON for the reason
+/// [`DocumentV0_93_0`] states.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DocumentV0_124_0 {
@@ -129,13 +158,13 @@ pub struct DocumentV0_124_0 {
     pub cards: Vec<CardV0_124_0>,
 }
 
-/// Frozen `0.124.0` representation of a [`Card`]. The `body` is the canonical
-/// content embedded structurally (see [`CanonicalContent`]).
+/// Frozen `0.124.0` representation of a [`Card`]. See [`DocumentV0_93_0`] for
+/// why `body` is raw.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CardV0_124_0 {
     pub payload: PayloadV0_124_0,
-    pub body: CanonicalContent,
+    pub body: serde_json::Value,
 }
 
 /// The V0_124_0 payload shape: identical to V0_116_0.
@@ -393,23 +422,23 @@ pub enum CommentPathSegmentV0_92_0 {
 
 impl From<Document> for StoredDocument {
     fn from(doc: Document) -> Self {
-        StoredDocument::V0_124_0(DocumentV0_124_0::from(&doc))
+        StoredDocument::V0_129_0(DocumentV0_129_0::from(&doc))
     }
 }
 
-impl From<&Document> for DocumentV0_124_0 {
+impl From<&Document> for DocumentV0_129_0 {
     fn from(doc: &Document) -> Self {
-        DocumentV0_124_0 {
-            main: CardV0_124_0::from(doc.main()),
-            cards: doc.cards().iter().map(CardV0_124_0::from).collect(),
+        DocumentV0_129_0 {
+            main: CardV0_129_0::from(doc.main()),
+            cards: doc.cards().iter().map(CardV0_129_0::from).collect(),
         }
     }
 }
 
-impl From<&Card> for CardV0_124_0 {
+impl From<&Card> for CardV0_129_0 {
     fn from(card: &Card) -> Self {
-        CardV0_124_0 {
-            payload: PayloadV0_124_0::from(card.payload()),
+        CardV0_129_0 {
+            payload: PayloadV0_129_0::from(card.payload()),
             body: CanonicalContent(card.body().clone()),
         }
     }
@@ -497,46 +526,51 @@ impl TryFrom<StoredDocument> for Document {
 
     fn try_from(stored: StoredDocument) -> Result<Self, Self::Error> {
         // Only the newest DTO converts to the live model; older versions migrate
-        // forward (V0_81 → V0_82 → V0_92 → V0_124, with V0_93 → V0_112 →
-        // V0_115 → V0_116 → V0_124 beside it). The hops into V0_116 are
-        // retags: every tree up to it spells `body` as raw JSON, and the decode
-        // they defer is the V0_116 → V0_124 hop's.
+        // forward (V0_81 → V0_82 → V0_92 → V0_129, with V0_93 → V0_112 →
+        // V0_115 → V0_116 → V0_124 → V0_129 beside it). The hops into V0_124
+        // are retags: every tree up to it spells `body` as raw JSON, and the
+        // decode they defer is the V0_124 → V0_129 hop's.
         //
-        // The V0_92 chain lands on V0_124 rather than passing through V0_116: a
+        // The V0_92 chain lands on V0_129 rather than passing through V0_124: a
         // cold import yields the live content, and re-spelling it *back* to a
         // raw `body` only to read it forward again would need an encoder for
         // that form, which this crate does not have.
         match stored {
-            StoredDocument::V0_124_0(payload) => Document::try_from(payload),
-            StoredDocument::V0_116_0(payload) => {
-                Document::try_from(DocumentV0_124_0::try_from(payload)?)
+            StoredDocument::V0_129_0(payload) => Document::try_from(payload),
+            StoredDocument::V0_124_0(payload) => {
+                Document::try_from(DocumentV0_129_0::try_from(payload)?)
             }
-            StoredDocument::V0_115_0(payload) => Document::try_from(DocumentV0_124_0::try_from(
-                DocumentV0_116_0::from(payload),
+            StoredDocument::V0_116_0(payload) => Document::try_from(DocumentV0_129_0::try_from(
+                DocumentV0_124_0::from(payload),
             )?),
-            StoredDocument::V0_112_0(payload) => Document::try_from(DocumentV0_124_0::try_from(
-                DocumentV0_116_0::from(DocumentV0_115_0::from(payload)),
+            StoredDocument::V0_115_0(payload) => Document::try_from(DocumentV0_129_0::try_from(
+                DocumentV0_124_0::from(DocumentV0_116_0::from(payload)),
             )?),
-            StoredDocument::V0_93_0(payload) => Document::try_from(DocumentV0_124_0::try_from(
-                DocumentV0_116_0::from(DocumentV0_115_0::from(DocumentV0_112_0::from(payload))),
+            StoredDocument::V0_112_0(payload) => Document::try_from(DocumentV0_129_0::try_from(
+                DocumentV0_124_0::from(DocumentV0_116_0::from(DocumentV0_115_0::from(payload))),
+            )?),
+            StoredDocument::V0_93_0(payload) => Document::try_from(DocumentV0_129_0::try_from(
+                DocumentV0_124_0::from(DocumentV0_116_0::from(DocumentV0_115_0::from(
+                    DocumentV0_112_0::from(payload),
+                ))),
             )?),
             StoredDocument::V0_92_0(payload) => {
-                Document::try_from(DocumentV0_124_0::try_from(payload)?)
+                Document::try_from(DocumentV0_129_0::try_from(payload)?)
             }
-            StoredDocument::V0_82_0(payload) => Document::try_from(DocumentV0_124_0::try_from(
+            StoredDocument::V0_82_0(payload) => Document::try_from(DocumentV0_129_0::try_from(
                 DocumentV0_92_0::from(payload),
             )?),
-            StoredDocument::V0_81_0(payload) => Document::try_from(DocumentV0_124_0::try_from(
+            StoredDocument::V0_81_0(payload) => Document::try_from(DocumentV0_129_0::try_from(
                 DocumentV0_92_0::from(DocumentV0_82_0::from(payload)),
             )?),
         }
     }
 }
 
-impl TryFrom<DocumentV0_124_0> for Document {
+impl TryFrom<DocumentV0_129_0> for Document {
     type Error = StorageError;
 
-    fn try_from(payload: DocumentV0_124_0) -> Result<Self, Self::Error> {
+    fn try_from(payload: DocumentV0_129_0) -> Result<Self, Self::Error> {
         let mut main = Card::try_from(payload.main)?;
         if main.quill().is_none() {
             return Err(StorageError::Malformed(
@@ -721,6 +755,7 @@ fn append_block(mut dst: Content, mut src: Content) -> Content {
             match top {
                 Container::ListItem { instance, .. }
                 | Container::Quote { instance }
+                | Container::Description { instance }
                 | Container::Element { instance, .. } => {
                     *instance += lift;
                 }
@@ -743,10 +778,10 @@ fn append_block(mut dst: Content, mut src: Content) -> Content {
     dst
 }
 
-impl TryFrom<CardV0_124_0> for Card {
+impl TryFrom<CardV0_129_0> for Card {
     type Error = StorageError;
 
-    fn try_from(card: CardV0_124_0) -> Result<Self, Self::Error> {
+    fn try_from(card: CardV0_129_0) -> Result<Self, Self::Error> {
         let payload = Payload::try_from(card.payload)?;
         validate_dto_payload(&payload)?;
         // `CanonicalContent`'s Deserialize already normalized and validated it.
@@ -754,37 +789,55 @@ impl TryFrom<CardV0_124_0> for Card {
     }
 }
 
-// The hop into V0_124 decodes the raw `body` the older trees defer, which is
+// The hop into V0_129 decodes the raw `body` the older trees defer, which is
 // also where an invalid legacy body is caught, `CanonicalContent`'s parse-time
 // check not being available to a raw field. The content decoder reads every
 // retired spelling (an `island` line as `para`, an island's `loss` ignored),
 // and the row rewrites under the new tag without them.
 
-impl TryFrom<DocumentV0_116_0> for DocumentV0_124_0 {
+impl TryFrom<DocumentV0_124_0> for DocumentV0_129_0 {
     type Error = StorageError;
 
-    fn try_from(d: DocumentV0_116_0) -> Result<Self, Self::Error> {
-        Ok(DocumentV0_124_0 {
-            main: CardV0_124_0::try_from(d.main)?,
+    fn try_from(d: DocumentV0_124_0) -> Result<Self, Self::Error> {
+        Ok(DocumentV0_129_0 {
+            main: CardV0_129_0::try_from(d.main)?,
             cards: d
                 .cards
                 .into_iter()
-                .map(CardV0_124_0::try_from)
+                .map(CardV0_129_0::try_from)
                 .collect::<Result<_, _>>()?,
         })
     }
 }
 
-impl TryFrom<CardV0_116_0> for CardV0_124_0 {
+impl TryFrom<CardV0_124_0> for CardV0_129_0 {
     type Error = StorageError;
 
-    fn try_from(card: CardV0_116_0) -> Result<Self, Self::Error> {
+    fn try_from(card: CardV0_124_0) -> Result<Self, Self::Error> {
         let body = quillmark_content::serial::from_canonical_value(&card.body)
             .map_err(|e| StorageError::Malformed(format!("card body: {e}")))?;
-        Ok(CardV0_124_0 {
+        Ok(CardV0_129_0 {
             payload: card.payload,
             body: CanonicalContent(body),
         })
+    }
+}
+
+impl From<DocumentV0_116_0> for DocumentV0_124_0 {
+    fn from(d: DocumentV0_116_0) -> Self {
+        DocumentV0_124_0 {
+            main: CardV0_124_0::from(d.main),
+            cards: d.cards.into_iter().map(CardV0_124_0::from).collect(),
+        }
+    }
+}
+
+impl From<CardV0_116_0> for CardV0_124_0 {
+    fn from(card: CardV0_116_0) -> Self {
+        CardV0_124_0 {
+            payload: card.payload,
+            body: card.body,
+        }
     }
 }
 
@@ -853,29 +906,29 @@ impl From<CardV0_93_0> for CardV0_112_0 {
 // renderable. Byte-stability of a *migrated* row is therefore conditional on
 // `pulldown-cmark` (DOCUMENT_STORAGE.md § byte stability).
 
-impl TryFrom<DocumentV0_92_0> for DocumentV0_124_0 {
+impl TryFrom<DocumentV0_92_0> for DocumentV0_129_0 {
     type Error = StorageError;
 
     fn try_from(d: DocumentV0_92_0) -> Result<Self, Self::Error> {
-        Ok(DocumentV0_124_0 {
-            main: CardV0_124_0::try_from(d.main)?,
+        Ok(DocumentV0_129_0 {
+            main: CardV0_129_0::try_from(d.main)?,
             cards: d
                 .cards
                 .into_iter()
-                .map(CardV0_124_0::try_from)
+                .map(CardV0_129_0::try_from)
                 .collect::<Result<_, _>>()?,
         })
     }
 }
 
-impl TryFrom<CardV0_92_0> for CardV0_124_0 {
+impl TryFrom<CardV0_92_0> for CardV0_129_0 {
     type Error = StorageError;
 
     fn try_from(card: CardV0_92_0) -> Result<Self, Self::Error> {
         let body = super::import_body(&card.body)
             .map_err(|e| StorageError::Malformed(format!("card body: {e}")))?;
-        Ok(CardV0_124_0 {
-            payload: PayloadV0_124_0::from(card.payload),
+        Ok(CardV0_129_0 {
+            payload: PayloadV0_129_0::from(card.payload),
             body: CanonicalContent(body),
         })
     }
@@ -1411,7 +1464,7 @@ This body and the metadata above are an indorsement card.
         let rewritten = serde_json::to_string(&doc).unwrap();
         assert_eq!(
             peek_storage_version(&rewritten).as_deref(),
-            Some(STORAGE_V0_124_0)
+            Some(STORAGE_V0_129_0)
         );
         assert!(!rewritten.contains("fill"), "{rewritten}");
     }
@@ -1520,7 +1573,27 @@ This body and the metadata above are an indorsement card.
         let doc: Document = serde_json::from_value(row.into()).unwrap();
         assert_eq!(doc.main().body().lines[0].containers[0].tag(), "element");
         let rewritten = serde_json::to_string(&doc).unwrap();
-        assert_eq!(peek_storage_version(&rewritten).as_deref(), Some(STORAGE_V0_124_0));
+        assert_eq!(peek_storage_version(&rewritten).as_deref(), Some(STORAGE_V0_129_0));
+    }
+
+    /// The `0.124.0` hop decodes its raw body with the live decoder.
+    #[test]
+    fn a_0_124_0_row_reads_through_the_body_decode() {
+        let mut row = row_0_116_0(
+            serde_json::json!({ "type": "field", "key": "a", "value": [1] }),
+            serde_json::json!([]),
+        );
+        row.insert("schema".into(), serde_json::json!(STORAGE_V0_124_0));
+        row["main"]["body"] = serde_json::json!({
+            "islands": [],
+            "lines": [{"containers": [{"attrs": {"$name": "keep"}, "container": "element"}], "kind": "para"}],
+            "marks": [],
+            "text": "a",
+        });
+        let doc: Document = serde_json::from_value(row.into()).unwrap();
+        assert_eq!(doc.main().body().lines[0].containers[0].tag(), "element");
+        let rewritten = serde_json::to_string(&doc).unwrap();
+        assert_eq!(peek_storage_version(&rewritten).as_deref(), Some(STORAGE_V0_129_0));
     }
 
     #[test]
@@ -1529,7 +1602,7 @@ This body and the metadata above are an indorsement card.
             .unwrap()
             .document;
         let stored = serde_json::to_string(&doc).unwrap();
-        assert_eq!(peek_storage_version(&stored).as_deref(), Some(STORAGE_V0_124_0));
+        assert_eq!(peek_storage_version(&stored).as_deref(), Some(STORAGE_V0_129_0));
         assert!(stored.contains(r#""checked":true"#), "{stored}");
         assert!(stored.contains(r#""checked":false"#), "{stored}");
         let back: Document = serde_json::from_str(&stored).unwrap();
@@ -1589,7 +1662,7 @@ This body and the metadata above are an indorsement card.
         let rewritten = serde_json::to_string(&doc).unwrap();
         assert_eq!(
             peek_storage_version(&rewritten).as_deref(),
-            Some(STORAGE_V0_124_0)
+            Some(STORAGE_V0_129_0)
         );
         assert!(!rewritten.contains(r#""kind":"island""#), "{rewritten}");
     }
@@ -1643,7 +1716,7 @@ This body and the metadata above are an indorsement card.
         let rewritten = serde_json::to_string(&doc).unwrap();
         assert_eq!(
             peek_storage_version(&rewritten).as_deref(),
-            Some(STORAGE_V0_124_0)
+            Some(STORAGE_V0_129_0)
         );
         assert!(rewritten.contains(r#""attrs":{"level":2}"#), "{rewritten}");
     }
@@ -1694,7 +1767,7 @@ This body and the metadata above are an indorsement card.
     fn peek_storage_version_reads_field_without_full_parse() {
         let doc = sample();
         let json = serde_json::to_string(&doc).unwrap();
-        assert_eq!(peek_storage_version(&json).as_deref(), Some(STORAGE_V0_124_0));
+        assert_eq!(peek_storage_version(&json).as_deref(), Some(STORAGE_V0_129_0));
 
         let future = r#"{"schema":"quillmark/document@0.99.0","main":{}}"#;
         assert_eq!(
@@ -1746,7 +1819,7 @@ title: Hi
         let reser = serde_json::to_string(&doc).unwrap();
         assert_eq!(
             peek_storage_version(&reser).as_deref(),
-            Some(STORAGE_V0_124_0)
+            Some(STORAGE_V0_129_0)
         );
     }
 
@@ -1866,7 +1939,7 @@ title: Hi
         let reser = serde_json::to_string(&doc).unwrap();
         assert_eq!(
             peek_storage_version(&reser).as_deref(),
-            Some(STORAGE_V0_124_0)
+            Some(STORAGE_V0_129_0)
         );
     }
 
@@ -2268,9 +2341,9 @@ title: Hi
         let second = serde_json::to_string(&restored).unwrap();
         assert_eq!(
             first, second,
-            "V0_124_0 serialize→deserialize is a byte-fixed point"
+            "V0_129_0 serialize→deserialize is a byte-fixed point"
         );
-        assert_eq!(peek_storage_version(&first).as_deref(), Some(STORAGE_V0_124_0));
+        assert_eq!(peek_storage_version(&first).as_deref(), Some(STORAGE_V0_129_0));
     }
 
     #[test]
@@ -2305,19 +2378,19 @@ title: Hi
         );
         assert_eq!(body.text, "\u{FFFC}");
         let reser = serde_json::to_string(&doc).unwrap();
-        assert_eq!(peek_storage_version(&reser).as_deref(), Some(STORAGE_V0_124_0));
+        assert_eq!(peek_storage_version(&reser).as_deref(), Some(STORAGE_V0_129_0));
     }
 
     #[test]
     fn over_nested_legacy_body_is_malformed() {
-        // An over-nested legacy body never rendered; the 92→124 hop maps
+        // An over-nested legacy body never rendered; the 92→129 hop maps
         // `NestingTooDeep` to `Malformed` rather than dropping structure.
         let deep = ">".repeat(crate::error::MAX_NESTING_DEPTH + 5);
         let card = CardV0_92_0 {
             payload: PayloadV0_92_0::default(),
             body: format!("{deep} too deep"),
         };
-        let err = CardV0_124_0::try_from(card).unwrap_err();
+        let err = CardV0_129_0::try_from(card).unwrap_err();
         assert!(matches!(err, StorageError::Malformed(_)), "got: {err:?}");
         assert!(err.to_string().contains("card body"));
     }
@@ -2327,7 +2400,7 @@ title: Hi
     /// older ones, whose frozen trees carry the body raw.
     #[test]
     fn deserialize_rejects_invalid_content_body() {
-        for schema in [STORAGE_V0_124_0, STORAGE_V0_116_0, STORAGE_V0_115_0, STORAGE_V0_112_0, STORAGE_V0_93_0] {
+        for schema in [STORAGE_V0_129_0, STORAGE_V0_124_0, STORAGE_V0_116_0, STORAGE_V0_115_0, STORAGE_V0_112_0, STORAGE_V0_93_0] {
             let blob = format!(
                 r#"{{
                 "schema": "{schema}",

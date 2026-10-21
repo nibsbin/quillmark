@@ -17,7 +17,7 @@ this page documents how the backend lowers the content it produces.
 
 ```
 emit_content(&Normalized) -> Result<Emission, EmitError>
-  ├─ block walk    lines → headings, paragraphs, code fences, lists, quotes, elements, islands
+  ├─ block walk    lines → headings, paragraphs, code fences, lists, quotes, terms, elements, islands
   ├─ mark sweep    anchored marks → nested #strong[…] / #emph[…] / #link(…)[…] / …
   └─ source map    per-segment (content ↔ gen) windows + one (content, gen) pair per run
 ```
@@ -32,7 +32,7 @@ A **segment** is a maximal run of lines joined by `Line::continues`: one
 paragraph, one heading, one whole code fence, one block island's line. It is what
 "paragraph-level" means against the content, and the unit a region keys on.
 
-Only a `para` or `code` block takes continuations
+Only a `para`, `term` or `code` block takes continuations
 (`LineKind::takes_continuations`), and a continuation stays inside one container
 path. A heading and a rule are one line, and so is a `para` whose sole content
 is a block island's slot — the kind cannot tell that one from prose, so
@@ -122,6 +122,7 @@ is a lowering bug, never a document's.
 | `LineKind::Para` | inline content; a hard break (a `continues` line join) emits `#linebreak()`, a soft break is a space (both settled at import). A slot alone on the line is the island's block, lowered by the island dispatch below |
 | `LineKind::Code{lang}` (code fence) | `#raw(block: true, lang: "…", "…")`; `lang:` emitted only when the language tag is non-empty |
 | `LineKind::Rule` (thematic break) | `#line(length: 100%)` |
+| `LineKind::Term` | `#terms.item[…][…]`, the term's inline content, then every `Container::Description` run adjacent below it lowered under the block-level discipline, one after another |
 | `MarkKind::Strong` | `#strong[…]` |
 | `MarkKind::Emph` | `#emph[…]` |
 | `MarkKind::Underline` | `#underline[…]` |
@@ -133,9 +134,12 @@ is a lowering bug, never a document's.
 | `Container::ListItem` (ordered) | `+ ` auto-numbered; the run's first item emits `N. `, which restarts Typst's running counter so an adjacent list numbers from its own `start` |
 | `Container::ListItem{checked}` (task) | the item's marker, then `#_qm-task(done)[…]` around its body (see [Tasks](#tasks)) |
 | `Container::Quote` | `#quote(block: true)[…]` |
+| `Container::Description` | the description of the term line above its run (see `LineKind::Term`); a run with none above lowers as `#terms.item[][…]` |
 | `Container::Element{element}` | `#_qm-element("name", (…))[…]` (see [Elements](#elements)) |
 | `image` island | nothing, plus one `backend::declined_construct` warning per field (see [Declined images](#declined-images)) |
 | `table` island | `#table(columns: N, align: (…), table.header(…), …)` |
+| `footnote` island | `#footnote[…]`, the note lowered as a table cell is |
+| `math` island | `$…$`, or `$ … $` where `display` (see [Equations](#equations)) |
 
 Table alignment maps `none→auto`, `left`, `center`, `right`; the `align:`
 argument is emitted only when at least one column is non-default.
@@ -165,8 +169,7 @@ leaves and containers alike: what the content nests, the markup nests.
 Anchor marks emit nothing; an `image` island emits nothing (see
 [Declined images](#declined-images)).
 Raw HTML other than an inline `<u>`, `<br>` (a hard break) and the `qm-*`
-carrier (markdown-spec §6.4) never enters the content, so it is absent here; math and definition lists
-enter it as literal text (markdown-spec §6.2, §6.3).
+carrier (markdown-spec §6.4) never enters the content, so it is absent here.
 
 ### Elements
 
@@ -214,6 +217,36 @@ read:
 The call opens on the marker's line and closes after the item's last block, so
 an item's later blocks and nested lists stay in it.
 
+### Equations
+
+A `math` island's `tex` lowers to Typst math through a translator of its own
+(`crates/backends/typst/src/tex.rs`), never a package. Each atom it writes is
+one character, a number, a string or a call, space-separated, so no run of
+letters reads as a Typst identifier and no run of punctuation as a shorthand.
+A symbol command lowers to its Unicode character rather than a Typst symbol
+name, ASCII punctuation is escaped, and a non-ASCII character is a `\u{…}`
+escape, one token whatever grapheme rules would join it to. Fractions, roots,
+scripts, accents, font commands, `\left…\right`, spacing, operator names,
+`\text`, and the `matrix` family, `cases` and `aligned` environments lower to
+the Typst calls that draw them.
+
+A command outside that vocabulary draws as its own name, and the compile
+carries one [`typst::unsupported_tex`](ERROR.md#warning-flow) warning per
+content field naming each, as does a `\not` with no negated form or a
+`\left` delimiter outside the vocabulary, both of which draw nothing. A `%`
+comment runs to its line's end, and storage drops it before it spaces the
+lines. Groups and arguments nest 32 deep; past that the lowering draws their
+characters and symbols flat and warns once per field. Whatever the TeX, the
+lowering parses, and no line of it ends on the bare `\` of a linebreak, which
+would escape what follows.
+
+Typst sets an equation in the family `New Computer Modern Math` unless a plate
+names another with `show math.equation: set text(font: ..)`, and lays one out
+only in a face with an OpenType `MATH` table. A quill shipping no face of that
+family has the embedded Noto Sans Math, cut to the blocks an equation commonly
+draws from, answer to the name and to its own, so an equation draws whatever
+text fonts the quill ships.
+
 ### Declined images
 
 An `image` island lowers to nothing, and the compile that dropped it carries one
@@ -246,10 +279,14 @@ reads and the shape the WASM boundary pins:
   auto-fit, at the plate's placement, in the column's alignment, under a header row.
 - **`image`** → `{ url, alt }`; `alt` is the empty string when the source omits
   it. No backend resolves `url` (see [Declined images](#declined-images)).
+- **`footnote`** → `Cell`, the note, with no `\n` at either edge. Its `\n` is
+  a line break, as a cell's is.
+- **`math`** → `{ tex, display? }`: the TeX as written between the dollars,
+  and `display: true` on a `$$…$$` equation (see [Equations](#equations)).
 
 The `IslandType` dispatch (`crates/content/src/island.rs`) owns these shapes
 Rust-side; the WASM surface pins them as `TableProps` / `ImageProps` /
-`TableCell` and types `ContentIsland.props` per the closed `type`
+`FootnoteProps` / `MathProps` / `TableCell` and types `ContentIsland.props` per the closed `type`
 (`crates/bindings/wasm/src/engine.rs`).
 
 ## Mark sweep

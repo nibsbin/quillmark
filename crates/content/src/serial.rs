@@ -343,6 +343,7 @@ pub fn line_kind_from_value(v: &Value) -> Result<LineKind, ParseError> {
         // the name and the kind it decodes to spell one line.
         "island" | "para" => Ok(LineKind::Para),
         "rule" => Ok(LineKind::Rule),
+        "term" => Ok(LineKind::Term),
         other => Err(ParseError::UnknownName {
             axis: "line kind",
             name: other.to_string(),
@@ -424,6 +425,7 @@ pub fn container_from_value(v: &Value) -> Result<Container, ParseError> {
             instance,
         }),
         "quote" => Ok(Container::Quote { instance }),
+        "description" => Ok(Container::Description { instance }),
         "element" => {
             let element = element_payload(o)?;
             Ok(Container::Element { element, instance })
@@ -606,6 +608,7 @@ pub(crate) fn reject_unreadable_mark(v: &Value) -> Result<(), ParseError> {
 /// rule [`line_kind_from_authored_value`] carries for a code fence's `lang`.
 pub(crate) fn island_from_authored_value(v: &Value) -> Result<Island, ParseError> {
     reject_unwritable_image_url(v)?;
+    reject_unwritable_tex(v)?;
     island_from_value(v)
 }
 
@@ -643,6 +646,23 @@ fn reject_unwritable_image_url(v: &Value) -> Result<(), ParseError> {
             .and_then(Value::as_str),
         "image url",
     )
+}
+
+/// A `math` island whose `tex` the markdown projection cannot write between
+/// its delimiters ([`crate::export::tex_is_writable`]), read as it rests once
+/// settled. A `tex` that is no string is the props carrier's to hold.
+fn reject_unwritable_tex(v: &Value) -> Result<(), ParseError> {
+    if v.get("type").and_then(Value::as_str) != Some(crate::island::IslandType::Math.as_str()) {
+        return Ok(());
+    }
+    let props = v.get("props");
+    let display = props.and_then(|p| p.get("display")) == Some(&Value::Bool(true));
+    match props.and_then(|p| p.get("tex")).and_then(Value::as_str) {
+        Some(tex) if !crate::export::tex_is_writable(&settle_tex(tex), display) => {
+            Err(ParseError::Shape("math tex"))
+        }
+        _ => Ok(()),
+    }
 }
 
 fn reject_unwritable_url(url: Option<&str>, err: &'static str) -> Result<(), ParseError> {
@@ -711,8 +731,14 @@ fn authored_lane_scan(v: &Value) -> Result<(), ParseError> {
                     }
                 }
             }
+            Some(crate::island::IslandType::Footnote) => {
+                if let Some(props) = island.get("props") {
+                    arr_or_empty(props, "marks").iter().try_for_each(reject_unreadable_mark)?;
+                }
+            }
             // No cells; the one prop the projection writes is the url.
             Some(crate::island::IslandType::Image) => reject_unwritable_image_url(island)?,
+            Some(crate::island::IslandType::Math) => reject_unwritable_tex(island)?,
             // This scan reads raw JSON; an unknown type is the decode's to refuse.
             None => {}
         }
@@ -921,7 +947,7 @@ fn is_cell_break(c: char) -> bool {
 /// Space a cell's stray line-break chars (1:1, so mark offsets hold) and
 /// re-normalize its marks. Writes back into the cell's **own** object rather
 /// than minting a fresh one, so a key this build does not recognize survives.
-fn canon_cell(cell: &mut Value) {
+pub(crate) fn canon_cell(cell: &mut Value) {
     let (text, mut marks) = parse_cell(cell);
     let text = if text.contains(is_cell_break) {
         text.replace(is_cell_break, " ")
@@ -942,6 +968,73 @@ fn canon_cell(cell: &mut Value) {
         // A non-object cell holds no keys to preserve.
         (_, canon) => *cell = canon,
     }
+}
+
+/// Repair a footnote's props in place: [`canon_cell`], then the note's edge
+/// line breaks dropped, a note opening or closing on one having nothing there
+/// to break.
+pub(crate) fn normalize_note_props(props: &mut Value) {
+    canon_cell(props);
+    let (text, marks) = parse_cell(props);
+    if !text.starts_with('\n') && !text.ends_with('\n') {
+        return;
+    }
+    let chars: Vec<char> = text.chars().collect();
+    let lead = chars.iter().take_while(|&&c| c == '\n').count();
+    let end = lead.max(chars.len() - chars.iter().rev().take_while(|&&c| c == '\n').count());
+    let clip = |at: Usv| at.clamp(lead, end) - lead;
+    let marks: Vec<Mark> = marks
+        .into_iter()
+        .map(|m| Mark::new(clip(m.start), clip(m.end), m.kind))
+        .collect();
+    let text: String = chars[lead..end].iter().collect();
+    if let (Some(o), Value::Object(fields)) =
+        (props.as_object_mut(), cell_to_value(&text, &crate::model::normalize_marks(marks)))
+    {
+        o.extend(fields);
+    }
+}
+
+/// Repair an equation's props in place: `tex` settled by [`settle_tex`], and
+/// `display: false` absent. A `tex` that is no string rides as written.
+pub(crate) fn normalize_math_props(props: &mut Value) {
+    let Some(o) = props.as_object_mut() else {
+        return;
+    };
+    if let Some(Value::String(tex)) = o.get_mut("tex") {
+        let settled = settle_tex(tex);
+        if settled != *tex {
+            *tex = settled;
+        }
+    }
+    if o.get("display") == Some(&Value::Bool(false)) {
+        o.remove("display");
+    }
+}
+
+/// TeX source as an equation stores it: each `%` comment dropped to the end
+/// of its line, each line break or other control char a space, which TeX
+/// reads it as, and the whitespace at either edge dropped.
+pub fn settle_tex(tex: &str) -> String {
+    let mut uncommented = String::with_capacity(tex.len());
+    let (mut comment, mut escaped) = (false, false);
+    for c in tex.chars() {
+        let ends_line = c == '\n' || c == '\r' || crate::normalize::is_line_separator(c);
+        comment &= !ends_line;
+        if !comment && c == '%' && !escaped {
+            comment = true;
+        }
+        if !comment {
+            uncommented.push(c);
+        }
+        escaped = c == '\\' && !escaped;
+    }
+    let spaced: String = uncommented
+        .chars()
+        .map(|c| if c.is_control() || crate::normalize::is_line_separator(c) { ' ' } else { c })
+        .filter(|&c| c != crate::model::ISLAND_SLOT)
+        .collect();
+    spaced.trim().to_string()
 }
 
 pub(crate) fn island_to_value(island: &Island) -> Value {
@@ -976,7 +1069,7 @@ pub(crate) fn island_from_value(v: &Value) -> Result<Island, ParseError> {
     })
 }
 
-/// The mark vocabulary's verdict on a table island's cells, for
+/// The mark vocabulary's verdict on an island's cells, for
 /// [`crate::island::IslandType::reject_unknown_cell_mark`].
 ///
 /// A cell mark reaches no other strict decode: [`parse_cell`] reads them
@@ -985,8 +1078,10 @@ pub(crate) fn island_from_value(v: &Value) -> Result<Island, ParseError> {
 /// refusing the row. A *malformed* cell mark stays skipped — that is the split
 /// canon § "an unreadable table-cell mark" sets, and it is about shape, not
 /// names.
-pub(crate) fn reject_unknown_cell_mark_name(props: &Value) -> Result<(), ParseError> {
-    for cell in table_cell_values(props) {
+pub(crate) fn reject_unknown_cell_mark_name<'a>(
+    cells: impl IntoIterator<Item = &'a Value>,
+) -> Result<(), ParseError> {
+    for cell in cells {
         for m in arr_or_empty(cell, "marks") {
             if let Err(e @ ParseError::UnknownName { .. }) = mark_from_value(m) {
                 return Err(e);

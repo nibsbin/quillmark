@@ -115,6 +115,9 @@ pub enum LineKind {
     },
     /// A thematic break (`---`/`***`/`___`). The line carries no text.
     Rule,
+    /// A definition list's term: one paragraph, which the
+    /// [`Container::Description`] runs beside it below describe.
+    Term,
 }
 
 impl LineKind {
@@ -128,7 +131,7 @@ impl LineKind {
     /// island's slot also renders one line, which
     /// [`Content::block_island_at`] answers off the island the kind cannot see.
     pub fn takes_continuations(&self) -> bool {
-        matches!(self, LineKind::Para | LineKind::Code { .. })
+        matches!(self, LineKind::Para | LineKind::Term | LineKind::Code { .. })
     }
 
     /// The wire `kind` name.
@@ -138,13 +141,14 @@ impl LineKind {
             LineKind::Heading { .. } => "heading",
             LineKind::Code { .. } => "code",
             LineKind::Rule => "rule",
+            LineKind::Term => "term",
         }
     }
 
     /// The payload bag, one spelling for every member of the vocabulary.
     pub fn attrs(&self) -> Cow<'_, JsonValue> {
         match self {
-            LineKind::Para | LineKind::Rule => Cow::Owned(JsonValue::Null),
+            LineKind::Para | LineKind::Rule | LineKind::Term => Cow::Owned(JsonValue::Null),
             LineKind::Heading { level } => Cow::Owned(bag([("level", (*level).into())])),
             LineKind::Code { lang } => Cow::Owned(match lang {
                 Some(l) => bag([("lang", l.as_str().into())]),
@@ -203,6 +207,9 @@ pub enum Container {
     /// A block quote. Adjacent lines sharing one `Quote` are one
     /// multi-paragraph quote; two adjacent quotes differ in `instance`.
     Quote { instance: u64 },
+    /// A definition list's description of the [`LineKind::Term`] line above
+    /// its run. Two adjacent descriptions of one term differ in `instance`.
+    Description { instance: u64 },
     /// A `qm-*` carrier element around blocks (markdown-spec §6.4). The
     /// member is closed and its names open: any element name the carrier
     /// does not reserve is one, so a new name is no storage event.
@@ -233,6 +240,7 @@ impl Container {
         match self {
             Container::ListItem { instance, .. }
             | Container::Quote { instance }
+            | Container::Description { instance }
             | Container::Element { instance, .. } => *instance,
         }
     }
@@ -242,6 +250,7 @@ impl Container {
         match self {
             Container::ListItem { .. } => "list_item",
             Container::Quote { .. } => "quote",
+            Container::Description { .. } => "description",
             Container::Element { .. } => "element",
         }
     }
@@ -261,7 +270,7 @@ impl Container {
                 ("ordinal", (*ordinal).into()),
                 ("start", (*start).into()),
             ]))),
-            Container::Quote { .. } => Cow::Owned(JsonValue::Null),
+            Container::Quote { .. } | Container::Description { .. } => Cow::Owned(JsonValue::Null),
             Container::Element { element, .. } => Cow::Owned(bag(
                 std::iter::once((ELEMENT_NAME, element.name().into()))
                     .chain(element.attrs().iter().map(|(k, v)| (k.as_str(), v.as_str().into()))),
@@ -273,6 +282,7 @@ impl Container {
         match self {
             Container::ListItem { instance, .. }
             | Container::Quote { instance }
+            | Container::Description { instance }
             | Container::Element { instance, .. } => *instance = n,
         }
     }
@@ -297,7 +307,8 @@ impl Container {
                     ordered: c, start: d, ..
                 },
             ) => a == c && b == d,
-            (Container::Quote { .. }, Container::Quote { .. }) => true,
+            (Container::Quote { .. }, Container::Quote { .. })
+            | (Container::Description { .. }, Container::Description { .. }) => true,
             (Container::Element { element: a, .. }, Container::Element { element: b, .. }) => a == b,
             _ => false,
         }

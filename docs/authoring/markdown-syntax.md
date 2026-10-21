@@ -23,8 +23,70 @@ Quillmark enables a small, stable subset of GFM:
 | Pipe tables | `\| col \| col \|` with alignment row | Supports `:---`, `:---:`, `---:` alignment. |
 | Underline | `<u>text</u>` | An allow-listed raw-HTML tag (see [the deviation below](#raw-html-is-not-rendered-except-u-and-br)). |
 | Task lists | `- [ ] open`, `- [x] done` | A checkbox before the item's text, ticked for `[x]`. |
+| Footnotes | `text[^1]` and a `[^1]: note` definition | The note at the foot of the page, numbered. See [Footnotes](#footnotes). |
+| Math | `$x^2$` inline, `$$\frac{a}{b}$$` on its own line | TeX math. See [Math](#math). |
+| Definition lists | `Term` and `: description` on the line under it | A term and what describes it. See [Definition lists](#definition-lists). |
 
 Autolinks beyond CommonMark's and other GFM features are **not** enabled.
+
+## Footnotes
+
+A reference `[^label]` in prose and one definition `[^label]: note` anywhere in the body make a footnote, the note drawn at the foot of the page. Labels match case-insensitively, and the number drawn is the footnote's place in the document, not its label.
+
+```markdown
+The figure comes from the 2024 survey.[^src]
+
+[^src]: Office of Budget, *Annual Survey*, 2024.
+```
+
+A note is inline text. A paragraph, list item or other block inside a definition becomes a line of the note and warns under `parse::dropped_construct` (`footnote[list]`, `footnote[quote]`, …). A definition nothing references, a second definition of one label, and a reference inside a table cell, an image's alt text or another note drop, warning `footnote`. A reference with no definition stays as the text written.
+
+## Math
+
+`$…$` sets an equation inside a line and `$$…$$` one on its own line, both written in TeX:
+
+```markdown
+The area is $\pi r^2$, and
+
+$$\sum_{i=1}^{n} i = \frac{n(n+1)}{2}$$
+```
+
+The opening `$` takes no space after it and the closing `$` none before it, and braces inside balance, so `$5 and $10` stays text. Write `\$` for a dollar sign that should never open an equation. A `%` comments out the rest of its line, as in TeX. An equation in a table cell, an image's alt text or a footnote stays as its source text and warns under `parse::dropped_construct` (`math`).
+
+The Typst backend draws:
+
+| Kind | TeX |
+|---|---|
+| Scripts and primes | `x^2`, `x_i`, `x_i^2`, `f'`, `{}^{14}C` |
+| Fractions, binomials, roots | `\frac`, `\dfrac`, `\tfrac`, `\binom`, `\sqrt{x}`, `\sqrt[n]{x}` |
+| Greek | `\alpha` … `\omega`, `\Gamma` … `\Omega`, the `\var` forms |
+| Operators and relations | `\pm`, `\times`, `\cdot`, `\leq`, `\neq`, `\approx`, `\equiv`, `\in`, `\subseteq`, `\to`, `\Rightarrow`, `\iff`, … and `\not` before a relation |
+| Large operators | `\sum`, `\prod`, `\int`, `\iint`, `\oint`, `\bigcup`, `\bigcap`, …, with `\limits` and `\nolimits` |
+| Function names | `\sin`, `\cos`, `\log`, `\exp`, `\lim`, `\max`, `\min`, `\det`, … and `\operatorname{name}` |
+| Accents | `\hat`, `\bar`, `\vec`, `\dot`, `\ddot`, `\tilde`, `\check`, `\breve`, `\overline`, `\underline`, `\overbrace`, `\underbrace` |
+| Fonts | `\mathbf`, `\boldsymbol`, `\mathrm`, `\mathit`, `\mathbb`, `\mathcal`, `\mathscr`, `\mathfrak`, `\mathsf`, `\mathtt` |
+| Text | `\text{…}`, `\textbf`, `\textit`, `\mbox` |
+| Delimiters | `\left( … \right)`, `\middle\|`, `\big(` and its sizes, `\langle`, `\lfloor`, `\lceil`, `\{`, `\\|` |
+| Spacing | `\,`, `\:`, `\;`, `\!`, `\quad`, `\qquad`, `~` |
+| Environments | `matrix`, `pmatrix`, `bmatrix`, `Bmatrix`, `vmatrix`, `Vmatrix`, `cases`, `aligned`, `gathered`, `array` |
+| Other | `\dots`, `\cdots`, `\infty`, `\partial`, `\nabla`, `\forall`, `\exists`, `\emptyset`, `\pmod`, `\bmod`, `\displaystyle` |
+
+A command outside these draws as its own name and warns `typst::unsupported_tex`, naming it.
+
+## Definition lists
+
+A paragraph with a line opening `: ` under it is a term and its description:
+
+```markdown
+Plate
+: The Typst file a quill renders through.
+
+Card
+: A block of structured data.
+: Its body, the prose after it.
+```
+
+A term takes several descriptions, one `: ` line each. A description holding more than one block indents the rest two spaces under its `: `. A line of prose that should open with a colon writes it `\:`.
 
 ## Table layout and elements: `qm-*` tags
 
@@ -152,12 +214,6 @@ Consequences:
   a CommonMark code block.
 
 ## Out of scope
-
-The following are not supported:
-
-- **Math** (`$…$`, `$$…$$`): `$` is treated as a literal character.
-- **Definition lists**: they render as the literal text written.
-- **Footnotes**: a `[^1]: Note` definition drops with its note and warns once under `parse::dropped_construct` (`footnote`), a tag inside it drawing no warning of its own; `[^1]` stays as the text written. Put the note in the prose instead.
 
 A link's title (`[text](url "Title")`) drops at import, with no warning. A construct the active backend has no target for, such as an image under Typst, drops at render with a `backend::declined_construct` warning; see each backend's documentation.
 

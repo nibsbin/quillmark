@@ -83,8 +83,10 @@ fn inline_token() -> impl Strategy<Value = String> {
         // A link over an image: a mark over an island slot.
         (special_alt(), special_url(), clean_word())
             .prop_map(|(a, u, l)| format!("[![{a}](<{u}>)](https://ex.com/{l})")),
-        // A footnote reference, text once `document()`'s definitions drop.
+        // A footnote reference, read off one of `document()`'s definitions.
         prop::sample::select(vec!["[^a]", "[^B]"]).prop_map(String::from),
+        // An equation, inline or display, and a `$` that is text.
+        prop::sample::select(vec!["$x^2$", "$\\{a\\}$", "$$\\frac{a}{b}$$", "\\$5", "$5"]).prop_map(String::from),
     ]
 }
 
@@ -170,6 +172,17 @@ fn block() -> impl Strategy<Value = String> {
             "<qm-keep>\n\n{a}\n\n</qm-keep>\n\n<qm-keep>\n\n{b}\n\n</qm-keep>"
         )),
         Just("<qm-sig></qm-sig>".to_string()),
+        // Definition lists: tight and loose, two descriptions of one term,
+        // two terms, a term across a hard break, an empty description, and a
+        // list, a nested definition and a list item each holding one.
+        (prose(), prose()).prop_map(|(t, d)| format!("{t}\n: {d}")),
+        (prose(), prose(), prose()).prop_map(|(t, a, b)| format!("{t}\n: {a}\n\n  {b}\n: {a}")),
+        (prose(), prose(), prose()).prop_map(|(t, d, u)| format!("{t}\n: {d}\n\n{u}\n: {d}")),
+        (hard_break_prose(), prose()).prop_map(|(t, d)| format!("{t}\n: {d}")),
+        prose().prop_map(|t| format!("{t}\n:")),
+        (prose(), prose(), prose()).prop_map(|(t, a, b)| format!("{t}\n: {a}\n  - {b}\n  - {a}")),
+        (prose(), prose(), prose()).prop_map(|(t, u, d)| format!("{t}\n: {u}\n  : {d}")),
+        (prose(), prose()).prop_map(|(t, d)| format!("- {t}\n  : {d}")),
         (clean_word(), clean_word())
             .prop_map(|(a, b)| format!("| {a} | {b} |\n| --- | --- |\n| 1 | 2 |")),
         (clean_word(), clean_word(), 1u64..9).prop_map(|(a, b, w)| format!(
@@ -254,10 +267,10 @@ proptest! {
     fn edge_whitespace_and_block_markers_round_trip(
         lead in prop::collection::vec(prop::sample::select(vec![' ', '\t']), 0..5),
         body in prop::sample::select(vec![
-            "foo", "- item", "# h", "1. x", "> q", "===", "+ p", "***", "a b",
+            "foo", "- item", "# h", "1. x", "> q", "===", "+ p", "***", "a b", ": d", ":",
         ]),
         trail in prop::collection::vec(prop::sample::select(vec![' ', '\t']), 0..5),
-        second in prop::option::of(prop::sample::select(vec!["===", "---", "  x", "y  "])),
+        second in prop::option::of(prop::sample::select(vec!["===", "---", "  x", "y  ", ": d"])),
     ) {
         let mut text: String = lead.into_iter().collect();
         text.push_str(body);
@@ -669,7 +682,7 @@ proptest! {
         md in document(),
         pos_seed in 0usize..4096,
         line_seed in 0usize..64,
-        which in 0u8..6,
+        which in 0u8..7,
     ) {
         let mut rt = from_markdown(&md).unwrap().content;
         let len = rt.len_usv();
@@ -682,6 +695,7 @@ proptest! {
             2 => kind(LineKind::Heading { level: 2 }),
             3 => kind(LineKind::Rule),
             4 => kind(LineKind::Code { lang: None }),
+            5 => kind(LineKind::Term),
             _ => LineOp::SetContinues { line, continues: true },
         };
         if rt.apply_line_ops(&[op]).is_ok() {

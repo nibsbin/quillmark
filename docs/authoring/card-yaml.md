@@ -29,6 +29,12 @@ The rules a writer meets first:
 - A code block in the prose takes a backtick fence: a `~~~` at column zero
   after a blank line opens a card-yaml block.
 
+!!! warning "Prettier breaks cards"
+    Prettier reprints every `~~~` fence as a backtick fence, which opens no
+    card, so a formatted document fails to parse. Keep Quillmark documents
+    out of prettier with a `.prettierignore` line naming their directory, such
+    as `quills/` in a quiver.
+
 ## Block Structure
 
 A card-yaml block has three parts, in order:
