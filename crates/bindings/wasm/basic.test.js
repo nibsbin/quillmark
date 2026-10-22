@@ -141,9 +141,9 @@ describe('Document JSON DTO: toStored / fromStored', () => {
 
   it('storageVersionOf reads the schema tag off any payload, or undefined', () => {
     // A future version reads back as-is, though fromStored rejects it.
-    const future = '{"schema":"quillmark/document@0.99.0","main":{}}'
+    const future = '{"schema":"quillmark/document@9.0.0","main":{}}'
     expect(() => Document.fromStored(future)).toThrow()
-    expect(Document.storageVersionOf(future)).toBe('quillmark/document@0.99.0')
+    expect(Document.storageVersionOf(future)).toBe('quillmark/document@9.0.0')
 
     expect(Document.storageVersionOf('{"foo":"bar"}')).toBeUndefined()
     expect(Document.storageVersionOf(TEST_MARKDOWN)).toBeUndefined()

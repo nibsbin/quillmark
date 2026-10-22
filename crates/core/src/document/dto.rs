@@ -41,7 +41,8 @@ pub const STORAGE_V0_124_0: &str = "quillmark/document@0.124.0";
 ///
 /// `None` when `json` is not valid JSON, not an object, or carries no version
 /// tag. The returned string is **not** validated against the supported set:
-/// callers use it to tell "unknown future version" from "corrupt payload".
+/// callers use it to tell a version this build does not read, newer or
+/// retired, from a corrupt payload.
 pub fn peek_storage_version(json: &str) -> Option<String> {
     #[derive(Deserialize)]
     struct Peek {
@@ -349,8 +350,6 @@ impl TryFrom<StoredDocument> for Document {
     type Error = StorageError;
 
     fn try_from(stored: StoredDocument) -> Result<Self, Self::Error> {
-        // Only the newest DTO converts to the live model; the one older version
-        // migrates forward through the V0_124 → V0_129 body decode.
         match stored {
             StoredDocument::V0_129_0(payload) => Document::try_from(payload),
             StoredDocument::V0_124_0(payload) => {
@@ -793,8 +792,16 @@ This body and the metadata above are an indorsement card.
         item: serde_json::Value,
         nested: serde_json::Value,
     ) -> serde_json::Map<String, serde_json::Value> {
+        row(STORAGE_V0_124_0, item, nested)
+    }
+
+    fn row(
+        schema: &str,
+        item: serde_json::Value,
+        nested: serde_json::Value,
+    ) -> serde_json::Map<String, serde_json::Value> {
         let serde_json::Value::Object(row) = serde_json::json!({
-            "schema": "quillmark/document@0.124.0",
+            "schema": schema,
             "main": {
                 "payload": { "items": [
                     { "type": "quill", "value": "q@1.0" },
@@ -812,27 +819,33 @@ This body and the metadata above are an indorsement card.
     }
 
     #[test]
-    fn a_0_124_0_row_with_an_unknown_key_fails_the_load() {
+    fn a_row_with_an_unknown_key_fails_the_load() {
         let field = serde_json::json!({ "type": "field", "key": "a", "value": [1] });
-        let with_fill = row_0_124_0(
-            serde_json::json!({ "type": "field", "key": "a", "value": 1, "fill": true }),
-            serde_json::json!([]),
-        );
-        let mut at_root = row_0_124_0(field.clone(), serde_json::json!([]));
-        at_root.insert("extra".into(), serde_json::json!(1));
-        let mut at_card = row_0_124_0(field.clone(), serde_json::json!([]));
-        at_card["main"]["extra"] = serde_json::json!(1);
-        let mut at_payload = row_0_124_0(field, serde_json::json!([]));
-        at_payload["main"]["payload"]["extra"] = serde_json::json!(1);
+        for schema in [STORAGE_V0_129_0, STORAGE_V0_124_0] {
+            let with_fill = row(
+                schema,
+                serde_json::json!({ "type": "field", "key": "a", "value": 1, "fill": true }),
+                serde_json::json!([]),
+            );
+            let mut at_root = row(schema, field.clone(), serde_json::json!([]));
+            at_root.insert("extra".into(), serde_json::json!(1));
+            let mut at_card = row(schema, field.clone(), serde_json::json!([]));
+            at_card["main"]["extra"] = serde_json::json!(1);
+            let mut at_payload = row(schema, field.clone(), serde_json::json!([]));
+            at_payload["main"]["payload"]["extra"] = serde_json::json!(1);
 
-        for (row, key) in [
-            (with_fill, "fill"),
-            (at_root, "extra"),
-            (at_card, "extra"),
-            (at_payload, "extra"),
-        ] {
-            let err = serde_json::from_value::<Document>(row.into()).unwrap_err();
-            assert!(err.to_string().contains(&format!("unknown field `{key}`")), "{err}");
+            for (row, key) in [
+                (with_fill, "fill"),
+                (at_root, "extra"),
+                (at_card, "extra"),
+                (at_payload, "extra"),
+            ] {
+                let err = serde_json::from_value::<Document>(row.into()).unwrap_err();
+                assert!(
+                    err.to_string().contains(&format!("unknown field `{key}`")),
+                    "{schema}: {err}"
+                );
+            }
         }
     }
 

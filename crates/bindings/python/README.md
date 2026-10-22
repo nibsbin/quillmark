@@ -144,7 +144,7 @@ emitted = doc.to_markdown()
 stored   = doc.to_stored()
 restored = Document.from_stored(stored)
 
-Document.storage_version_of(blob)                # raw tag (incl. unknown futures); None when not a DTO
+Document.storage_version_of(blob)                # raw tag, even one this build does not read; None when not a DTO
 Document.current_storage_version()               # what this build writes
 
 Document.markdown_rules()                        # Quillmark Markdown rules (static text)
