@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.130.0 - 2026-10-22
+
+- docs(core): say an unread storage tag can be retired, not only newer
+- refactor(core)!: retire storage tags @0.81.0 through @0.116.0
+
 ## v0.129.0 - 2026-10-21
 
 Upgrade path: [0.128 → 0.129](docs/migrations/0.128-to-0.129.md). Footnotes,
