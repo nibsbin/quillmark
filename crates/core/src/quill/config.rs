@@ -2090,8 +2090,11 @@ impl QuillConfig {
         .with_hint(
             "Make each group an `object` field keyed by its id, in `ui.groups` order: \
              `<group>: { type: object, title: <group title>, properties: { <field>: … } }`. \
-             A group holding one `object` alone needs no wrapper: give that object the \
-             group's title. Ungrouped fields stay beside them; drop `ui.group` and \
+             A group holding one `object` or variant-bearing `enum` alone needs no \
+             wrapper: give that field the group's title. A variant-bearing `enum` \
+             stays at card level in any group, a panel of its own, where a host's enum \
+             policy reaches it. Ungrouped fields stay beside \
+             them; drop `ui.group` and \
              `ui.groups`. Documents then nest each group's keys under its id."
                 .to_string(),
         )
@@ -2114,12 +2117,13 @@ impl QuillConfig {
     }
 
     /// The first card-level field standing after a panel, a panel being a
-    /// top-level `object` or a `ui.group`, where the field is neither. An
-    /// editor draws such a field above every panel, so declaration order and
-    /// display order part.
+    /// top-level `object`, a top-level variant-bearing `enum` or a `ui.group`,
+    /// where the field is none of them. An editor draws such a field above
+    /// every panel, so declaration order and display order part.
     fn field_after_object(label: &str, card: &CardSchema) -> Option<Diagnostic> {
         let panel = |field: &FieldSchema| {
             field.r#type == FieldType::Object
+                || field.is_variant_bearing()
                 || field.ui.as_ref().is_some_and(|ui| ui.group.is_some())
         };
         let first = card.fields.iter().position(|(_, field)| panel(field))?;
@@ -2133,14 +2137,14 @@ impl QuillConfig {
             Diagnostic::new(
                 Severity::Warning,
                 format!(
-                    "Field '{after}' on '{label}' is declared after the object '{before}', \
+                    "Field '{after}' on '{label}' is declared after the panel '{before}', \
                      but draws above every panel."
                 ),
             )
             .with_code("quill::field_after_object".to_string())
             .with_hint(
-                "Declare a card's fields outside any object before its first top-level \
-                 object, or move the field into one."
+                "Declare a card's fields outside any panel before its first top-level \
+                 object or variant enum, or move the field into an object."
                     .to_string(),
             ),
         )

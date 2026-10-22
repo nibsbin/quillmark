@@ -677,6 +677,35 @@ fn a_loose_field_after_a_top_level_object_warns() {
     .is_empty());
 }
 
+/// A top-level variant-bearing enum is a panel as an object is: a loose field
+/// after it warns, and it may follow the objects without warning.
+#[test]
+fn a_top_level_variant_enum_is_a_panel() {
+    let warned = |main: &str| {
+        let (_, warnings) =
+            QuillConfig::from_yaml_with_warnings(&with_header(&format!("main:\n{main}"))).unwrap();
+        warnings
+            .into_iter()
+            .filter(|d| d.code.as_deref() == Some("quill::field_after_object"))
+            .collect::<Vec<_>>()
+    };
+    let marking = "    marking:\n      type: enum\n      values: [A, B]\n      \
+                   variants:\n        A:\n          note: { type: text }\n";
+    let letterhead = "    letterhead:\n      type: object\n      properties:\n        \
+                      title: { type: text }\n";
+
+    let [diag] = warned(&format!("  fields:\n{marking}    signature: {{ type: text }}\n"))
+        .try_into()
+        .unwrap_or_else(|w: Vec<_>| panic!("one warning expected, got {w:?}"));
+    assert!(diag.message.contains("'signature'") && diag.message.contains("'marking'"), "{diag:?}");
+
+    assert!(warned(&format!("  fields:\n    subject: {{ type: text }}\n{letterhead}{marking}")).is_empty());
+    assert!(warned(
+        "  fields:\n    level: { type: enum, values: [A, B] }\n    subject: { type: text }\n"
+    )
+    .is_empty());
+}
+
 #[test]
 fn a_legacy_registry_naming_no_field_leaves_no_ui() {
     let yaml = "main:\n  ui: { groups: [unused] }\n  fields:\n    a: { type: text }\n";

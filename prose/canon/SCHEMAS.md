@@ -424,9 +424,14 @@ main:
 - **The group is data.** The document stores `letterhead: { letterhead_title: … }`
   and a plate reads `data.letterhead.letterhead_title`, so moving a field
   between groups is an address change, the same MINOR bump a rename is.
+- **A top-level namespace is a panel.** The two
+  [namespaces](#cells-and-namespaces), an `object` and a variant-bearing
+  `enum`, each frame as a group of their own; a variant enum's header names
+  its discriminant, and the document stores it at its own card-level key. A
+  cell, `array` and `matrix` included, never frames.
 - **Fields outside every group lead.** An editor draws them above the groups,
-  so a card-level field that is no `object` and joins no `ui.group`, declared
-  after a top-level `object` or a grouped field, warns
+  so a card-level cell that joins no `ui.group`, declared after a top-level
+  namespace or a grouped field, warns
   `quill::field_after_object`, naming the first: the order declared and the
   order drawn would part.
 - **`sections:` is not a card key** (`quill::invalid_card_schema`, its hint

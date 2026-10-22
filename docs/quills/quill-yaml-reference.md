@@ -770,7 +770,11 @@ addressing:
 ~~~
 ```
 
-So moving a field between groups is an address change, a MINOR bump like a rename. Fields beside the objects stay ungrouped, and an editor draws them above every group: one declared after a top-level `object` warns `quill::field_after_object`, since the order it was declared in is not the order it draws in. Nothing requires grouping: a flat questionnaire stays a flat `fields:` map. A card has no `sections:` key; one is `quill::invalid_card_schema`, its hint naming this form.
+So moving a field between groups is an address change, a MINOR bump like a rename.
+
+A top-level `enum` with `variants:` is a group too: a group is a namespace, a field whose keys the schema fixes, and a variant enum's value is one, `{value, …cells}`. An editor frames it as its own section, headed by its title, at its own card-level key; an `array` or `matrix` is not a namespace and stays among the loose fields. Keep it there rather than inside an `object`: a host's enum policy reaches a card-level enum only.
+
+Fields beside the groups stay ungrouped, and an editor draws them above every group: one declared after a top-level `object` or variant enum warns `quill::field_after_object`, since the order it was declared in is not the order it draws in. Nothing requires grouping: a flat questionnaire stays a flat `fields:` map. A card has no `sections:` key; one is `quill::invalid_card_schema`, its hint naming this form.
 
 #### Legacy `ui.group`
 
@@ -792,9 +796,9 @@ main:
       ui: { group: letterhead }
 ```
 
-A group here is a frame, not data: the document stores `memo_for:` and a plate reads `data.memo_for`. It warns `quill::deprecated_groups` and loads with ungrouped fields first, then each group's fields in registry order, whatever order they were declared in. To rewrite it as [Grouping](#grouping), make each group an `object` keyed by its id, in registry order, carrying the registry `title:`; move each grouped field into its `properties`; and drop `ui.group` and `ui.groups`.
+A group here is a frame, not data: the document stores `memo_for:` and a plate reads `data.memo_for`. It warns `quill::deprecated_groups` and loads with ungrouped fields first, then each group's fields in registry order, whatever order they were declared in. To rewrite it as [Grouping](#grouping), make each group an `object` keyed by its id, in registry order, carrying the registry `title:`; move each grouped field into its `properties`; and drop `ui.group` and `ui.groups`. A variant-bearing `enum` stays at card level whatever its group, a panel of its own.
 
-A group holding one `object` and nothing else needs no wrapper: that object carries the group's `title:` and stands at the top level itself, its value and addresses unchanged. Documents then nest each group's keys under its id, and plates gain the one path segment.
+A group holding one `object` or variant-bearing `enum` and nothing else needs no wrapper: that field carries the group's `title:` and stands at the top level itself, its value and addresses unchanged. Documents then nest each group's keys under its id, and plates gain the one path segment.
 
 The registry's own checks still apply to the legacy spelling: a reference the registry does not declare (`quill::unknown_group`), a reference with no registry (`quill::implicit_group`), a repeated id (`quill::duplicate_group`), an id that is not snake_case (`quill::invalid_group_id`), and a `ui.group` below card level (`quill::nested_group_not_supported`). The registry is also read from `quill.ui` when `main.ui` is absent.
 

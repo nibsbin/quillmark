@@ -130,8 +130,9 @@ families:
     its id ([SCHEMAS.md](SCHEMAS.md#grouping)).
   - `quill::deprecated_flat`: a field asking `ui.layout: flat`, which no
     editor honors ([SCHEMAS.md](SCHEMAS.md#schema-emission)).
-  - `quill::field_after_object`: a card-level field outside every group
-    declared after one, which draws above the groups instead
+  - `quill::field_after_object`: a card-level field outside every panel
+    (a top-level `object`, a top-level variant-bearing `enum`, a `ui.group`)
+    declared after one, which draws above the panels instead
     ([SCHEMAS.md](SCHEMAS.md#grouping)).
 - **Parse warnings**: the `warnings` on the `Parsed` that `Document::parse`
   returns (e.g. a `~~~` opener missing its blank line), which both bindings

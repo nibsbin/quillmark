@@ -70,35 +70,6 @@ main:
         compact: true
       description: "Organizational motto at the bottom of the page. Supports Markdown emphasis (e.g. *italics*, **bold**)."
 
-    classification:
-      type: enum
-      values:
-        - UNCLASSIFIED
-        - CUI
-        - CONFIDENTIAL
-        - SECRET
-        - TOP SECRET
-      default: ""
-      ui:
-        compact: true
-      description: "Select the classification marking shown in the header and footer banner. Unclassified documents typically omit this banner entirely, leave blank unless the document is CUI or classified. Mark per DAFI 16-1404 (DoDM 5200.48 for CUI) and applicable DoD guidance."
-      variants:
-        CUI:
-          controlled_by:
-            type: text
-            description: "Office or organization that designated this information as CUI. Required by DoDM 5200.48."
-          poc:
-            type: text
-            description: "Point of contact for CUI questions, as in Capt J. Smith, DSN 555-1234, john.smith@us.af.mil. Required by DoDM 5200.48."
-          category:
-            type: text
-            default: ""
-            description: "CUI category from the DoD CUI Registry (e.g., 'Privacy/MED', 'CTI', 'PRVCY'). Leave blank to omit."
-          limited_dissemination:
-            type: text
-            default: ""
-            description: "Limited dissemination control shown in the indicator block (e.g., 'FEDONLY', 'NOFORN'). Independent from the banner suffix."
-
     dissemination:
       type: text
       default: ""
@@ -158,6 +129,35 @@ main:
       ui:
         compact: true
       description: YYYY-MM-DD. Leave blank to render a fill-in field for the signer to date by hand.
+
+    classification:
+      type: enum
+      values:
+        - UNCLASSIFIED
+        - CUI
+        - CONFIDENTIAL
+        - SECRET
+        - TOP SECRET
+      default: ""
+      ui:
+        compact: true
+      description: "Select the classification marking shown in the header and footer banner. Unclassified documents typically omit this banner entirely, leave blank unless the document is CUI or classified. Mark per DAFI 16-1404 (DoDM 5200.48 for CUI) and applicable DoD guidance."
+      variants:
+        CUI:
+          controlled_by:
+            type: text
+            description: "Office or organization that designated this information as CUI. Required by DoDM 5200.48."
+          poc:
+            type: text
+            description: "Point of contact for CUI questions, as in Capt J. Smith, DSN 555-1234, john.smith@us.af.mil. Required by DoDM 5200.48."
+          category:
+            type: text
+            default: ""
+            description: "CUI category from the DoD CUI Registry (e.g., 'Privacy/MED', 'CTI', 'PRVCY'). Leave blank to omit."
+          limited_dissemination:
+            type: text
+            default: ""
+            description: "Limited dissemination control shown in the indicator block (e.g., 'FEDONLY', 'NOFORN'). Independent from the banner suffix."
 
 card_kinds:
   indorsement:
