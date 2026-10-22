@@ -2,8 +2,25 @@
 
 ## v0.130.0 - 2026-10-22
 
-- docs(core): say an unread storage tag can be retired, not only newer
-- refactor(core)!: retire storage tags @0.81.0 through @0.116.0
+Upgrade path: [0.129 → 0.130](docs/migrations/0.129-to-0.130.md). A stored row
+tagged older than `quillmark/document@0.124.0` fails to load, so resave every
+such row with a 0.124 to 0.129 build before upgrading, client-side copies and
+backups included.
+
+### Storage
+
+- refactor(core)!: **a row tagged `quillmark/document@0.81.0`, `@0.82.0`,
+  `@0.92.0`, `@0.93.0`, `@0.112.0`, `@0.115.0` or `@0.116.0` fails to load as
+  an unknown schema version**: 0.130 reads `@0.124.0` and `@0.129.0` only, and
+  the forward migrations from the seven older tags are gone. `fromStored` /
+  `from_stored` refuses such a row as it refuses a tag newer than the build,
+  and `storageVersionOf` / `storage_version_of` still returns its tag. In
+  Rust, `StoredDocument` loses the `V0_116_0` through `V0_81_0` variants,
+  `STORAGE_V0_116_0`, `STORAGE_V0_115_0`, `STORAGE_V0_112_0` and
+  `STORAGE_V0_93_0` are gone, and the payload types `@0.124.0` and `@0.129.0`
+  share are `PayloadV0_124_0`, `PayloadItemV0_124_0`, `NestedCommentV0_124_0`
+  and `CommentPathSegmentV0_124_0`. The legacy content spellings a `richtext`
+  field can hold still decode. (#2266)
 
 ## v0.129.0 - 2026-10-21
 
