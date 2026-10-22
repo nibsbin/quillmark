@@ -184,25 +184,27 @@ const doc = Document.storageVersionOf(content)
 
 The `schema` value (`quillmark/document@0.129.0`) is the **model version**,
 not the running crate version. It is a hand-set constant, bumped only when
-the `Document` model itself changes, so every `0.124.x` patch release reads
+the `Document` model itself changes, so every `0.129.x` patch release reads
 and writes that same value.
 
 - **Upgrading is safe.** A newer build reads documents an older build's
   *writer* produced. Each schema version's wire format is frozen and never
   changes; when the model does change, the new build ships a migration that
   converts old payloads on `fromStored`. A document you commit as your
-  canonical on-disk format keeps loading across crate upgrades: there is no
-  need to pin old wasm to read old data. The exception is a row a host
-  authored a content construct of its own into — a line `kind`, container,
-  mark `type` or island `type` outside the vocabulary. Those are refused from
-  0.113 on; see that release's migration guide. An island `loss` is not one of
-  them: 0.115 drops the key, so a row spelling one opens whatever the class and
+  canonical on-disk format keeps loading across crate upgrades until its tag
+  is retired: 0.130 reads `@0.124.0` and `@0.129.0` only, so resave an older
+  row with a 0.124 to 0.129 build before taking 0.130, as that release's
+  migration guide shows. The other exception is a row a host authored a
+  content construct of its own into — a line `kind`, container, mark `type`
+  or island `type` outside the vocabulary. Those are refused from 0.113 on;
+  see that release's migration guide. An island `loss` is not one of them:
+  0.115 drops the key, so a row spelling one opens whatever the class and
   comes back without it. From 0.126 on, a row whose `$quill` is a lone major,
   `memo@1`, or whose body nests past 12 levels is refused too; rewrite it
   before upgrading, as that release's migration guide shows.
-- **Downgrading is not.** `fromStored` rejects an *unknown* (i.e. newer)
-  `schema` version rather than guessing at a format it predates. Don't feed
-  documents written by a newer build back into an older one.
+- **Downgrading is not.** `fromStored` rejects a `schema` version it does not
+  read, newer than the build or retired, rather than guessing at its format.
+  Don't feed documents written by a newer build back into an older one.
 
 To detect a version mismatch before parsing, use the static accessors:
 
@@ -218,9 +220,9 @@ if (v && v !== Document.currentStorageVersion()) {
 payloads that don't carry one. Use it to distinguish "wrong version" from
 "corrupt" when `fromStored` throws.
 
-In short: persist the `toStored` string, upgrade freely, never downgrade. The
-full design (including how migrations are added) is in
-`prose/canon/DOCUMENT_STORAGE.md`.
+In short: persist the `toStored` string, resave rows under a retired tag
+before upgrading past it, never downgrade. The full design (including how
+migrations are added) is in `prose/canon/DOCUMENT_STORAGE.md`.
 
 ### Cards, seeds, and addresses
 

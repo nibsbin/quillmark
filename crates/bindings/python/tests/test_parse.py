@@ -38,7 +38,7 @@ def test_json_dto_round_trip(taro_md):
 def test_json_dto_rejects_invalid_input():
     """from_stored rejects an unknown schema tag and malformed JSON."""
     with pytest.raises(QuillmarkError):
-        Document.from_stored('{"schema":"quillmark/document@0.99.0","main":{}}')
+        Document.from_stored('{"schema":"quillmark/document@9.0.0","main":{}}')
     with pytest.raises(QuillmarkError):
         Document.from_stored("not json at all")
 
@@ -46,8 +46,8 @@ def test_json_dto_rejects_invalid_input():
 def test_storage_version_of():
     """A future tag is returned so callers can tell "build too old" from
     "payload corrupt"; a non-DTO input is None."""
-    future = '{"schema":"quillmark/document@0.99.0"}'
-    assert Document.storage_version_of(future) == "quillmark/document@0.99.0"
+    future = '{"schema":"quillmark/document@9.0.0"}'
+    assert Document.storage_version_of(future) == "quillmark/document@9.0.0"
     assert Document.storage_version_of("not json") is None
     assert Document.storage_version_of('{"foo":"bar"}') is None
 

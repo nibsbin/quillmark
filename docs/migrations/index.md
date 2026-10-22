@@ -12,9 +12,10 @@ Each guide covers one step. To cross several versions, work through them in
 order; each states its own breaks in full. The rows below name the step's
 headline break, enough to pick the guide.
 
-A stored row loads across every step but two: 0.112 → 0.113 refuses a
-host-authored content name, and 0.125 → 0.126 a body nested past 12 levels or a
-`$quill` its narrowed grammar refuses, such as the lone major `memo@1`. Each
+A stored row loads across every step but three: 0.112 → 0.113 refuses a
+host-authored content name, 0.125 → 0.126 a body nested past 12 levels or a
+`$quill` its narrowed grammar refuses, such as the lone major `memo@1`, and
+0.129 → 0.130 a row under any tag older than `quillmark/document@0.124.0`. Each
 guide says how to rewrite such a row before upgrading. The storage DTO's bytes
 and tag hold across every step here except 0.111 → 0.112, 0.114 → 0.115,
 0.115 → 0.116, 0.123 → 0.124 and 0.128 → 0.129, where canonical bytes move
@@ -28,6 +29,7 @@ the newer build has rewritten.
 
 | Step | What changes |
 |---|---|
+| [0.129 → 0.130](0.129-to-0.130.md) | A stored row tagged `quillmark/document@0.81.0` through `@0.116.0` fails to load as an unknown schema version: only `@0.124.0` and `@0.129.0` are read. Resave every older row with a 0.124 to 0.129 build before upgrading. |
 | [0.128 → 0.129](0.128-to-0.129.md) | A footnote reference and its definition render a footnote, where the definition dropped and the reference stayed text, and `$…$` and `$$…$$` render equations, where they were text: each imports as an island, `footnote` and `math`, so a save writes `quillmark/document@0.129.0` and a 0.128 build refuses the row. Escape a dollar, `\$`, to keep it text. A paragraph with a `: description` line under it renders a definition list, a `term` line and a `description` container; escape the colon, `\:`, to keep it text. The Typst backend translates TeX to Typst math, warning `typst::unsupported_tex` for a command it does not lower, and embeds Noto Sans Math for a quill shipping no math font. `schema()` no longer writes `ui.layout: flat` on an object alone in a legacy `ui.group`, `ui.layout: flat` warns `quill::deprecated_flat`, and a card-level field outside every group declared after a top-level `object` warns `quill::field_after_object`. |
 | [0.127 → 0.128](0.127-to-0.128.md) | A quill whose `requires` floor is above the running release fails to load as `quill::requires_unmet`, where it failed as `quill::engine_too_old`, and a host matching the old code stops matching. The Rust struct and Python class `Quillmark` are `Engine`, the name JavaScript already carries, with no alias, so `use quillmark::Quillmark` fails to compile and `from quillmark import Quillmark` fails to import. |
 | [0.126 → 0.127](0.126-to-0.127.md) | An acroform quill's field spec is `Form.yaml`: one holding `form.yaml` fails to open as `acroform::legacy_form_yaml`, so no acroform quill opens on both releases. An acroform quill whose `Form.yaml` gives a field a box with no width or height, or one wholly off its page, fails to open as `acroform::invalid_field_rect`, where it opened and showed that field's value nowhere. |

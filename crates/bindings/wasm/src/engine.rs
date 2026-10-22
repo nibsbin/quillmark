@@ -944,9 +944,9 @@ impl Document {
     }
 
     /// Read the storage version tag from a raw storage DTO string without a full
-    /// parse, or `undefined`. Unknown future versions come back as-is, which
-    /// distinguishes "build too old" from "payload corrupt" when `fromStored`
-    /// throws. This is the storage version, not a field schema, though the JSON
+    /// parse, or `undefined`. A tag this build does not read, newer or retired,
+    /// comes back as-is, which tells a version mismatch from a corrupt payload
+    /// when `fromStored` throws. This is the storage version, not a field schema, though the JSON
     /// key is spelled `"schema"`: that is the DTO's serde tag.
     #[wasm_bindgen(js_name = storageVersionOf)]
     pub fn storage_version_of(json: &str) -> Option<String> {

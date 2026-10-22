@@ -905,7 +905,7 @@ fn test_wire_refuses_payload_level_violations() {
 fn storage_dto_refuses_what_the_parser_refuses() {
     let load = |items: serde_json::Value| {
         serde_json::from_value::<crate::document::Document>(serde_json::json!({
-            "schema": "quillmark/document@0.112.0",
+            "schema": "quillmark/document@0.129.0",
             "main": {"payload": {"items": items}, "body": {"islands": [], "lines": [{"containers": [], "kind": "para"}], "marks": [], "text": ""}},
             "cards": []
         }))
