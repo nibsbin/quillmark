@@ -5,9 +5,10 @@ Schema-driven document framework: Markdown + YAML card metadata → rendered PDF
 - Crate layout: [`ARCHITECTURE.md`](prose/canon/ARCHITECTURE.md) §"Crate Structure". Design docs: [`prose/canon/INDEX.md`](prose/canon/INDEX.md).
 - Commit subjects, the `!` break marker, and what earns a test a place: [`CONTRIBUTING.md`](CONTRIBUTING.md).
 - Comments: none by default; keep one only where the code cannot carry the fact. Present tense, no history or changelog narration.
+- A change that makes a canon doc stale updates it. [`prose/README.md`](prose/README.md) is normative for canon structure; `node scripts/check-canon.mjs` enforces it in CI.
 - The `Cargo.toml` version is the last *released* one; CI bumps it on release.
 - `CHANGELOG.md` is `merge=union` in `.gitattributes`, so merge `main` with local git, not GitHub's "Update branch".
-- Don't run `cargo fmt`: the tree is not rustfmt-formatted.
+- Don't run `cargo fmt` ([`CONTRIBUTING.md`](CONTRIBUTING.md) § Pull requests).
 
 ## Tests
 
