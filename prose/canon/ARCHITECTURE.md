@@ -69,7 +69,7 @@ core.
 
 ### `backends/quillmark-typst`
 
-Implements `Backend` for PDF, SVG, and PNG. Lowers each content field's `Content` value to Typst markup at codegen (`emit::emit_content`), recording a per-segment source map. Resolves fonts and assets. `workspace::workspace` exports the generated helper, the vendored packages and the fonts for Typst's own tooling ([CLI.md](CLI.md)). See [CONVERT.md](CONVERT.md) and [PLATE_DATA.md](PLATE_DATA.md).
+Implements `Backend` for PDF, SVG, and PNG. Lowers each content field's `Content` value to Typst markup at codegen (`emit::emit_content`), recording a per-segment source map. Resolves fonts ([Fonts](#fonts)) and assets. `workspace::workspace` exports the generated helper, the vendored packages and the fonts for Typst's own tooling ([CLI.md](CLI.md)). See [CONVERT.md](CONVERT.md) and [PLATE_DATA.md](PLATE_DATA.md).
 
 ### `backends/quillmark-acroform`
 
@@ -112,9 +112,9 @@ Test resources under `resources/`, the parity corpus among them
 
 ## Core Interfaces
 
-- **`Engine`**: a backend registry + render dispatcher. Auto-registers one backend per enabled feature (`TypstBackend` under `typst`, `AcroformBackend` under `acroform`; both are default). Resolves a quill's declared backend at render time (erroring `engine::backend_not_found` on no match) and owns the backend-dependent surface: `render`, `open`, `supported_formats(&quill)`. It does not construct quills.
+- **`Engine`**: a backend registry + render dispatcher. Auto-registers one backend per enabled feature (`TypstBackend` under `typst`, `AcroformBackend` under `acroform`; both are default). `Engine::with_fonts` builds one over a host font library ([Fonts](#fonts)), and `Engine::new` is one with none. Resolves a quill's declared backend at render time (erroring `engine::backend_not_found` on no match) and owns the backend-dependent surface: `render`, `open`, `supported_formats(&quill)`, `font_faces(&quill)`. It does not construct quills.
 - **`Quill`**, The single quill type in `quillmark-core`: declarative data (file bundle + config, tagged with a declared backend id), held by value and carrying the pure config-read operations (`validate`, `schema`, `blueprint`, `seed_*`, `compile_data`, `dry_run`). Construct with `Quill::from_tree` or `quillmark::quill_from_path`; see [QUILL.md](QUILL.md)
-- **`Backend`**, Trait for output formats (`Send + Sync`): `id()`, `supported_formats()`, `open(&Quill, json, today)`. There is no universal template input: a backend reads whatever static inputs it needs (a Typst plate, a `form.pdf`) from the quill's own files. No canvas-capability method: canvas is required of the session seam (`SessionHandle::page_size_pt` / `render_rgba`), not declared by the backend
+- **`Backend`**, Trait for output formats (`Send + Sync`): `id()`, `supported_formats()`, `open(&Quill, json, today)`, and `font_faces(&Quill)`, the text faces a session over the quill sets type in, empty by default. There is no universal template input: a backend reads whatever static inputs it needs (a Typst plate, a `form.pdf`) from the quill's own files. No canvas-capability method: canvas is required of the session seam (`SessionHandle::page_size_pt` / `render_rgba`), not declared by the backend
 - **`LiveSession`**, Opaque live session returned by `Backend::open()`: a persistent compiler whose reads serve its current compile and whose `update(&Document)` recompiles in place, transactionally, returning a `ChangeSet` of dirty pages. Born bound to the `QuillConfig` it was opened against, so the edit verb checks the `$quill` pairing and compiles through the same door as the first compile (`QuillConfig::compile_checked`) rather than trusting a caller to have done both. The canvas seam lives on `SessionHandle` (`page_size_pt`/`render_rgba`), both required, so the WASM painter dispatches generically over any session; see [PREVIEW.md](PREVIEW.md)
 - **`Document`**: Typed in-memory representation of a Quillmark Markdown file (root block, body, cards). Serializes via `serde` to a versioned JSON envelope (`StoredDocument`) for database persistence, decoupled from the evolving Markdown syntax; see [DOCUMENT_STORAGE.md](DOCUMENT_STORAGE.md)
 - **`Diagnostic`**: Structured error with severity, code, message, location, hint, source chain
@@ -128,6 +128,33 @@ Test resources under `resources/`, the parity corpus among them
 - `today`: the render date `json_data` was compiled with, which a Typst plate's `datetime.today()` returns ([SCHEMAS.md](SCHEMAS.md#the-render-date-today))
 
 See [PLATE_DATA.md](PLATE_DATA.md) for the Typst helper package.
+
+## Fonts
+
+A Typst session sets type in fonts from three tiers, highest first:
+
+| Tier | Source | Supplied by |
+|---|---|---|
+| 1 | the quill | `.ttf`, `.otf`, `.ttc` and `.otc` files under `assets/fonts/` and inside vendored `packages/` |
+| 2 | the host library | the host, at `Engine::with_fonts`, shared by every session of the engine |
+| 3 | the fallback | embedded: Roboto, only for a quill shipping no fonts, and Noto Sans Math answering to `New Computer Modern Math` |
+
+- **A tier excludes by family.** A family a higher tier holds drops every face
+  of it from the tiers below before the font book is built, families compared
+  lowercased. A host therefore never fills in or restyles a quill's family:
+  Typst picks a face by variant distance across every face of a family, so
+  load order alone could not keep a host's bold out of a quill's family.
+- **The library is frozen at construction.** `FontLibrary::new` parses each
+  file once and refuses the whole set if any file fails: one
+  `engine::font_unsupported` per file in another format, WOFF and WOFF2
+  included, and one `engine::font_unreadable` per file holding no face Typst
+  reads. Sessions share its parsed faces.
+- **No system font is read**, and the acroform backend reads none of this.
+- **A family resolves at compile.** Every family a font run names is checked
+  against the session's book, and one no face holds sets nothing and warns
+  `typst::unknown_font_family` ([CONVERT.md](CONVERT.md#font-runs)).
+  `Engine::font_faces` lists the faces, each with its family, weight, style
+  and file bytes, so an editor can draw text in the face a render would use.
 
 ## Backend Implementation
 

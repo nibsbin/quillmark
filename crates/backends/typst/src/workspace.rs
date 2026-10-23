@@ -8,9 +8,10 @@ use quillmark_core::{
 };
 
 use typst::syntax::package::PackageSpec;
+use typst::text::{Font, FontInfo};
 
 use crate::helper::{self, HELPER_NAME, HELPER_NAMESPACE, HELPER_VERSION};
-use crate::{world, SchemaMeta};
+use crate::{world, FontLibrary, SchemaMeta};
 
 /// The workspace directory `--package-path` names.
 pub const PACKAGES_DIR: &str = "packages";
@@ -48,13 +49,19 @@ pub struct Workspace {
 ///
 /// The generated helper package lands under `packages/` beside every vendored
 /// package, at the `{namespace}/{name}/{version}` path Typst's package
-/// resolution reads. `fonts/` holds the faces the backend loads: the quill's
-/// own, or the embedded fallback when it ships none. A vendored package whose
-/// manifest names no valid package spec, or names the helper's, is skipped.
+/// resolution reads. `fonts/` holds each file the session sets type from: the
+/// quill's own, then each fallback and `library` file holding a face no higher
+/// tier shadows. A collection goes whole, so a face of it the session drops is
+/// back in the workspace. A vendored package whose manifest names no valid
+/// package spec, or names the helper's, is skipped.
 ///
 /// Fails with `typst::wrong_backend` for a quill of another backend, and with
 /// each plate refusal a render's `open` raises.
-pub fn workspace(source: &Quill, json_data: &serde_json::Value) -> Result<Workspace, RenderError> {
+pub fn workspace(
+    source: &Quill,
+    json_data: &serde_json::Value,
+    library: &FontLibrary,
+) -> Result<Workspace, RenderError> {
     if source.backend_id() != "typst" {
         return Err(RenderError::coded(
             "typst::wrong_backend",
@@ -66,12 +73,12 @@ pub fn workspace(source: &Quill, json_data: &serde_json::Value) -> Result<Worksp
         ));
     }
     let plate = crate::read_plate(source)?;
-    let world = crate::quill_world(source, &plate)?;
+    let world = crate::quill_world(source, &plate, library)?;
     crate::check_helper_imports(&world)?;
     let warnings = world.load_warnings().to_vec();
 
     let meta = SchemaMeta::from_config(source.config());
-    let (lib_typ, _) = helper::generate_lib_typ(json_data, &meta)
+    let (lib_typ, _) = helper::generate_lib_typ(json_data, &meta, world.families())
         .map_err(|e| RenderError::coded(e.code(), e.to_string()))?;
     let helper_dir = PathBuf::from(PACKAGES_DIR)
         .join(HELPER_DIR)
@@ -115,16 +122,16 @@ pub fn workspace(source: &Quill, json_data: &serde_json::Value) -> Result<Worksp
         }
     }
 
-    let fonts = world::quill_fonts(source);
-    if fonts.is_empty() {
-        for (name, contents) in world::FALLBACK_FONTS {
+    let kept = world::session_fonts(source, library, &mut Vec::new());
+    for (path, contents) in world::quill_fonts(source) {
+        files.push((PathBuf::from(FONTS_DIR).join(path), contents.to_vec()));
+    }
+    for (name, contents) in world::FALLBACK_FONTS {
+        if kept.iter().any(|(_, font)| std::ptr::eq(font.data().as_slice(), contents)) {
             files.push((PathBuf::from(FONTS_DIR).join(name), contents.to_vec()));
         }
-    } else {
-        for (path, contents) in fonts {
-            files.push((PathBuf::from(FONTS_DIR).join(path), contents.to_vec()));
-        }
     }
+    files.extend(host_fonts(library, &kept));
 
     files.retain(|(path, _)| {
         path.components()
@@ -135,4 +142,25 @@ pub fn workspace(source: &Quill, json_data: &serde_json::Value) -> Result<Worksp
         plate_file: plate.file,
         warnings,
     })
+}
+
+/// Each file of `library` holding a face the session keeps, as `host-<n>`.
+fn host_fonts(library: &FontLibrary, kept: &[(FontInfo, Font)]) -> Vec<(PathBuf, Vec<u8>)> {
+    let mut held: Vec<&typst::foundations::Bytes> = Vec::new();
+    for face in library.faces() {
+        if kept.iter().any(|(_, font)| font == face) && !held.contains(&face.data()) {
+            held.push(face.data());
+        }
+    }
+    held.into_iter()
+        .enumerate()
+        .map(|(i, data)| {
+            let ext = match data.first_chunk::<4>() {
+                Some(b"ttcf") => "ttc",
+                Some(b"OTTO") => "otf",
+                _ => "ttf",
+            };
+            (PathBuf::from(FONTS_DIR).join(format!("host-{i}.{ext}")), data.to_vec())
+        })
+        .collect()
 }

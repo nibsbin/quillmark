@@ -32,6 +32,9 @@ use crate::version::QuillReference;
 /// The wire key is spelled `schema` though it names a storage version, not a
 /// field schema: it is the serde tag [`StoredDocument`] dispatches on, and
 /// retagging it would break the versioning it exists to serve.
+pub const STORAGE_V0_131_0: &str = "quillmark/document@0.131.0";
+
+/// The tag before [`STORAGE_V0_131_0`], still read.
 pub const STORAGE_V0_129_0: &str = "quillmark/document@0.129.0";
 
 /// The tag before [`STORAGE_V0_129_0`], still read.
@@ -60,6 +63,8 @@ pub fn peek_storage_version(json: &str) -> Option<String> {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "schema")]
 pub enum StoredDocument {
+    #[serde(rename = "quillmark/document@0.131.0")]
+    V0_131_0(DocumentV0_131_0),
     #[serde(rename = "quillmark/document@0.129.0")]
     V0_129_0(DocumentV0_129_0),
     #[serde(rename = "quillmark/document@0.124.0")]
@@ -97,6 +102,10 @@ impl std::fmt::Display for StorageError {
 }
 
 impl std::error::Error for StorageError {}
+
+/// Frozen `0.131.0` representation of a [`Document`]: the V0_129_0 tree over
+/// the content vocabulary holding the `font_family` and `font_size` marks.
+pub type DocumentV0_131_0 = DocumentV0_129_0;
 
 /// Frozen `0.129.0` representation of a [`Document`]: the V0_124_0 tree over
 /// the content vocabulary holding the `footnote` and `math` islands, the
@@ -247,7 +256,7 @@ pub enum CommentPathSegmentV0_124_0 {
 
 impl From<Document> for StoredDocument {
     fn from(doc: Document) -> Self {
-        StoredDocument::V0_129_0(DocumentV0_129_0::from(&doc))
+        StoredDocument::V0_131_0(DocumentV0_131_0::from(&doc))
     }
 }
 
@@ -351,7 +360,7 @@ impl TryFrom<StoredDocument> for Document {
 
     fn try_from(stored: StoredDocument) -> Result<Self, Self::Error> {
         match stored {
-            StoredDocument::V0_129_0(payload) => Document::try_from(payload),
+            StoredDocument::V0_131_0(payload) | StoredDocument::V0_129_0(payload) => Document::try_from(payload),
             StoredDocument::V0_124_0(payload) => {
                 Document::try_from(DocumentV0_129_0::try_from(payload)?)
             }
@@ -904,7 +913,7 @@ This body and the metadata above are an indorsement card.
         let doc: Document = serde_json::from_value(row.into()).unwrap();
         assert_eq!(doc.main().body().lines[0].containers[0].tag(), "element");
         let rewritten = serde_json::to_string(&doc).unwrap();
-        assert_eq!(peek_storage_version(&rewritten).as_deref(), Some(STORAGE_V0_129_0));
+        assert_eq!(peek_storage_version(&rewritten).as_deref(), Some(STORAGE_V0_131_0));
     }
 
     #[test]
@@ -913,7 +922,7 @@ This body and the metadata above are an indorsement card.
             .unwrap()
             .document;
         let stored = serde_json::to_string(&doc).unwrap();
-        assert_eq!(peek_storage_version(&stored).as_deref(), Some(STORAGE_V0_129_0));
+        assert_eq!(peek_storage_version(&stored).as_deref(), Some(STORAGE_V0_131_0));
         assert!(stored.contains(r#""checked":true"#), "{stored}");
         assert!(stored.contains(r#""checked":false"#), "{stored}");
         let back: Document = serde_json::from_str(&stored).unwrap();
@@ -973,7 +982,7 @@ This body and the metadata above are an indorsement card.
     fn peek_storage_version_reads_field_without_full_parse() {
         let doc = sample();
         let json = serde_json::to_string(&doc).unwrap();
-        assert_eq!(peek_storage_version(&json).as_deref(), Some(STORAGE_V0_129_0));
+        assert_eq!(peek_storage_version(&json).as_deref(), Some(STORAGE_V0_131_0));
 
         let future = r#"{"schema":"quillmark/document@0.99.0","main":{}}"#;
         assert_eq!(
@@ -1335,9 +1344,9 @@ title: Hi
         let second = serde_json::to_string(&restored).unwrap();
         assert_eq!(
             first, second,
-            "V0_129_0 serialize→deserialize is a byte-fixed point"
+            "V0_131_0 serialize→deserialize is a byte-fixed point"
         );
-        assert_eq!(peek_storage_version(&first).as_deref(), Some(STORAGE_V0_129_0));
+        assert_eq!(peek_storage_version(&first).as_deref(), Some(STORAGE_V0_131_0));
     }
 
     /// Both tags refuse it, by two machineries: `CanonicalContent`'s

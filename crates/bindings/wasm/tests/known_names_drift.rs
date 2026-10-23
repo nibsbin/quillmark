@@ -68,6 +68,8 @@ fn mark_type_tags() -> Vec<&'static str> {
         MarkKind::Code,
         MarkKind::Link { url: String::new() },
         MarkKind::Anchor { id: String::new() },
+        MarkKind::FontFamily { name: String::new() },
+        MarkKind::FontSize { step: quillmark_content::model::FontStep::Small },
     ];
     for k in &all {
         match k {
@@ -77,7 +79,9 @@ fn mark_type_tags() -> Vec<&'static str> {
             | MarkKind::Strike
             | MarkKind::Code
             | MarkKind::Link { .. }
-            | MarkKind::Anchor { .. } => {}
+            | MarkKind::Anchor { .. }
+            | MarkKind::FontFamily { .. }
+            | MarkKind::FontSize { .. } => {}
         }
     }
     all.iter().map(MarkKind::tag).collect()
