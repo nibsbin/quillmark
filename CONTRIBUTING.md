@@ -20,7 +20,7 @@ cargo test --workspace
 
 - Every commit lands on `main` and seeds the changelog, so each subject reads `type(scope): summary`, or `type(scope)!: summary` for a break. `type` is one of `feat`, `fix`, `refactor`, `perf`, `docs`, `test`, `ci`, `chore`; the scope is optional.
 - Don't run `cargo fmt`, and turn off format-on-save for this repository. The tree is not rustfmt-formatted, so formatting a file rewrites lines the change never touched.
-- Comments and docs follow the `dense-prose` skill (`.claude/skills/dense-prose/`): none by default, present tense, no history. Design docs start at [`prose/canon/INDEX.md`](prose/canon/INDEX.md); a change that makes a canon doc stale updates it (`maintain-canon`).
+- Comments: none by default, and one only where the code cannot carry the fact. Docs and comments state what is, in the present tense, with no history. Design docs start at [`prose/canon/INDEX.md`](prose/canon/INDEX.md); a change that makes a canon doc stale updates it (`maintain-canon`).
 
 ## AI-assisted work
 

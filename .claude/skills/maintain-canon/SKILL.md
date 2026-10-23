@@ -10,8 +10,6 @@ high level: enough that a human or AI can get the gist without reading the
 whole codebase. Canon describes *what is* and points into the code; it does not
 re-document implementation detail that the code already carries.
 
-For comment and doc *content* (density, tense, voice) use **`dense-prose`**.
-
 ## Structure
 
 `prose/README.md` is normative for structure: the four tiers, the canon doc
