@@ -8,7 +8,7 @@ use quillmark_content::island::IslandType;
 use quillmark_content::delta::{diff_import, Delta, Op};
 use quillmark_content::export::{to_markdown, to_markdown_annotated};
 use quillmark_content::import::from_markdown;
-use quillmark_content::model::{Content, Island, Line, LineKind, Mark, MarkKind, Normalized};
+use quillmark_content::model::{Content, FontStep, Island, Line, LineKind, Mark, MarkKind, Normalized};
 use quillmark_content::ops::{IslandOp, LineOp, MarkOp};
 use serde_json::{json, Value};
 
@@ -77,6 +77,11 @@ fn inline_token() -> impl Strategy<Value = String> {
         clean_word().prop_map(|w| format!("~~{w}~~")),
         code_span(),
         clean_word().prop_map(|w| format!("<u>{w}</u>")),
+        clean_word().prop_map(|w| format!("<qm-font family=\"Carlito\">{w}</qm-font>")),
+        clean_word().prop_map(|w| format!("<qm-font size=\"large\">{w}</qm-font>")),
+        (clean_word(), clean_word()).prop_map(|(w, v)| format!(
+            "<qm-font family=\"Noto Serif\">{w} <qm-font size=\"small\">**{v}**</qm-font></qm-font>"
+        )),
         (clean_word(), clean_word()).prop_map(|(t, u)| format!("[{t}](https://ex.com/{u})")),
         (clean_word(), special_url()).prop_map(|(t, u)| format!("[{t}](<{u}>)")),
         (special_alt(), special_url()).prop_map(|(a, u)| format!("![{a}](<{u}>)")),
@@ -219,12 +224,19 @@ fn delimiter_run() -> impl Strategy<Value = String> {
     .prop_map(|toks| toks.concat())
 }
 
+/// The formatting kinds an editor can lay over a span, keyed ones included.
+const OV_KINDS: u8 = 8;
+
 fn ov_kind(i: u8) -> MarkKind {
-    match i % 4 {
+    match i % OV_KINDS {
         0 => MarkKind::Strong,
         1 => MarkKind::Emph,
         2 => MarkKind::Strike,
-        _ => MarkKind::Underline,
+        3 => MarkKind::Underline,
+        4 => MarkKind::FontFamily { name: "Carlito".into() },
+        5 => MarkKind::FontFamily { name: "Noto Serif".into() },
+        6 => MarkKind::FontSize { step: FontStep::Large },
+        _ => MarkKind::FontSize { step: FontStep::Small },
     }
 }
 
@@ -301,7 +313,7 @@ proptest! {
     fn overlapping_marks_export_is_text_safe(
         raw in "[a-z]{4,8}",
         x in 0usize..64, y in 0usize..64, z in 0usize..64,
-        k1i in 0u8..5, k2i in 0u8..5,
+        k1i in 0u8..OV_KINDS, k2i in 0u8..OV_KINDS,
     ) {
         let text = raw;
         let n = text.chars().count();
@@ -354,7 +366,7 @@ proptest! {
             ]),
             2..10,
         ),
-        specs in prop::collection::vec((0usize..64, 0usize..64, 0u8..5), 0..4),
+        specs in prop::collection::vec((0usize..64, 0usize..64, 0u8..OV_KINDS), 0..4),
     ) {
         // Word-char edges keep the mark-free baseline a round-trip fixed point;
         // the mixed chars live in the interior, where marks clash with flanking
@@ -822,7 +834,7 @@ proptest! {
             prop::sample::select(vec!['a', 'b', '9', '\n', ' ']),
             1..10,
         ),
-        specs in prop::collection::vec((0usize..64, 0usize..64, 0u8..6), 0..4),
+        specs in prop::collection::vec((0usize..64, 0usize..64, 0u8..=OV_KINDS), 0..4),
     ) {
         let text: String = chars.into_iter().collect();
         let n = text.chars().count();
@@ -830,7 +842,7 @@ proptest! {
             .iter()
             .map(|&(a, b, k)| {
                 let (s, e) = (a % (n + 1), b % (n + 1));
-                let kind = if k == 5 { MarkKind::Code } else { ov_kind(k) };
+                let kind = if k == OV_KINDS { MarkKind::Code } else { ov_kind(k) };
                 quillmark_content::serial::mark_to_value(&Mark::new(s.min(e), s.max(e), kind))
             })
             .collect();

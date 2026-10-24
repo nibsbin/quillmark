@@ -408,6 +408,8 @@ impl Mark {
 /// [`ParseError::UnknownName`](crate::serial::ParseError::UnknownName). Two
 /// algebra classes: formatting is a property of a range (two coincident are
 /// redundant); identity is a handle (two over the same range are two things).
+/// Keyed formatting is formatting whose tag holds one value per character:
+/// two marks of one keyed tag never overlap ([`is_keyed`](Self::is_keyed)).
 #[derive(Debug, Clone, PartialEq)]
 pub enum MarkKind {
     // Formatting: round-trippable projection marks. `is_formatting()`.
@@ -419,6 +421,17 @@ pub enum MarkKind {
     Link {
         url: String,
     },
+    // Keyed formatting. `is_keyed()`.
+    /// The font family a run sets in, stored as written and matched against a
+    /// font book lowercased. [`is_font_family_name`] is the spelling every
+    /// decoder admits.
+    FontFamily {
+        name: String,
+    },
+    /// The size a run sets in, a step from the surrounding text's.
+    FontSize {
+        step: FontStep,
+    },
     // Identity: a handle, not a property. Never merged, may be zero-width.
     /// A comment thread or stable anchor, carried by id and rebased across
     /// edits like any position. The id is caller-supplied, unique per `Content`,
@@ -429,6 +442,41 @@ pub enum MarkKind {
     Anchor {
         id: String,
     },
+}
+
+/// A [`MarkKind::FontSize`] step. The surrounding text's own size is the absence
+/// of the mark, so it has no member.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum FontStep {
+    Small,
+    Large,
+}
+
+impl FontStep {
+    pub const ALL: [FontStep; 2] = [FontStep::Small, FontStep::Large];
+
+    /// The wire and markdown spelling.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            FontStep::Small => "small",
+            FontStep::Large => "large",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<FontStep> {
+        FontStep::ALL.into_iter().find(|step| step.as_str() == s)
+    }
+}
+
+/// Whether `name` is a family a [`MarkKind::FontFamily`] may carry: not empty,
+/// no whitespace at either edge, and no character the content text refuses or
+/// that a font book could not hold in a name.
+pub fn is_font_family_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.trim() == name
+        && !name
+            .chars()
+            .any(|c| c.is_control() || is_bidi_char(c) || is_line_separator(c) || c == ISLAND_SLOT)
 }
 
 /// A structured object with no honest text encoding (a table, figure, or future
@@ -479,7 +527,20 @@ impl MarkKind {
                 | MarkKind::Strike
                 | MarkKind::Code
                 | MarkKind::Link { .. }
+                | MarkKind::FontFamily { .. }
+                | MarkKind::FontSize { .. }
         )
+    }
+
+    /// Keyed formatting: two marks of this tag over one character are a
+    /// contradiction, not a nesting, so [`Content::normalize`] clips the earlier
+    /// of two that overlap to the later, whatever their attrs. Equal attrs
+    /// union as any formatting does.
+    ///
+    /// Class membership is stored meaning on [`is_formatting`](Self::is_formatting)'s
+    /// terms: moving a member in clips ranges documents already hold.
+    pub fn is_keyed(&self) -> bool {
+        matches!(self, MarkKind::FontFamily { .. } | MarkKind::FontSize { .. })
     }
 
     /// The wire `type` name.
@@ -491,6 +552,8 @@ impl MarkKind {
             MarkKind::Strike => "strike",
             MarkKind::Code => "code",
             MarkKind::Link { .. } => "link",
+            MarkKind::FontFamily { .. } => "font_family",
+            MarkKind::FontSize { .. } => "font_size",
             MarkKind::Anchor { .. } => "anchor",
         }
     }
@@ -504,6 +567,8 @@ impl MarkKind {
             | MarkKind::Strike
             | MarkKind::Code => Cow::Owned(JsonValue::Null),
             MarkKind::Link { url } => Cow::Owned(bag([("url", url.as_str().into())])),
+            MarkKind::FontFamily { name } => Cow::Owned(bag([("name", name.as_str().into())])),
+            MarkKind::FontSize { step } => Cow::Owned(bag([("step", step.as_str().into())])),
             MarkKind::Anchor { id } => Cow::Owned(bag([("id", id.as_str().into())])),
         }
     }
@@ -846,6 +911,22 @@ impl Content {
                 .lines
                 .iter()
                 .any(|l| l.containers.iter().any(|c| matches!(c, Container::Element { .. })))
+    }
+
+    /// Every family a `font_family` mark names, over the text and then each
+    /// island's cells and notes, in mark order with repeats.
+    pub fn font_families(&self) -> Vec<String> {
+        let family = |m: &Mark| match &m.kind {
+            MarkKind::FontFamily { name } => Some(name.clone()),
+            _ => None,
+        };
+        let mut out: Vec<String> = self.marks.iter().filter_map(family).collect();
+        for island in &self.islands {
+            for (_, marks) in island.island_type.cell_marks(&island.props) {
+                out.extend(marks.iter().filter_map(family));
+            }
+        }
+        out
     }
 
     /// Number of `\n`-separated segments: the required `lines.len()`.
@@ -1217,21 +1298,28 @@ pub(crate) fn trim_marks_off_newlines(chars: &[char], marks: &mut [Mark]) {
     }
 }
 
-/// Apply the three merge rules and the canonical sort to a flat mark list:
+/// Apply the merge rules and the canonical sort to a flat mark list:
 /// same-kind formatting marks union when adjacent *or* overlapping, different
-/// kinds overlap freely (never split into runs), and an identity mark never
-/// merges. Zero-width formatting is dropped; zero-width anchors survive.
+/// kinds overlap freely (never split into runs), two marks of one keyed tag
+/// never overlap, the later in `marks` clipping the earlier, and an identity
+/// mark never merges. Zero-width formatting is dropped; zero-width anchors
+/// survive.
 pub(crate) fn normalize_marks(marks: Vec<Mark>) -> Vec<Mark> {
     use std::collections::BTreeMap;
 
     let mut groups: BTreeMap<(String, String), Vec<(Usv, Usv)>> = BTreeMap::new();
     let mut kind_of: BTreeMap<(String, String), MarkKind> = BTreeMap::new();
     let mut passthrough: Vec<Mark> = Vec::new();
+    let mut keyed: BTreeMap<&'static str, KeyedRuns> = BTreeMap::new();
 
     for m in marks {
         if m.kind.is_formatting() {
             if m.start >= m.end {
                 continue; // drop zero-width / inverted formatting
+            }
+            if m.kind.is_keyed() {
+                keyed.entry(m.kind.tag()).or_default().paint(m);
+                continue;
             }
             let key = m.kind.sort_key();
             kind_of.entry(key.clone()).or_insert_with(|| m.kind.clone());
@@ -1239,6 +1327,11 @@ pub(crate) fn normalize_marks(marks: Vec<Mark>) -> Vec<Mark> {
         } else {
             passthrough.push(m);
         }
+    }
+    for (start, (end, kind)) in keyed.into_values().flat_map(|runs| runs.0) {
+        let key = kind.sort_key();
+        groups.entry(key.clone()).or_default().push((start, end));
+        kind_of.entry(key).or_insert(kind);
     }
 
     let mut out: Vec<Mark> = Vec::new();
@@ -1274,6 +1367,36 @@ pub(crate) fn normalize_marks(marks: Vec<Mark>) -> Vec<Mark> {
     // redundant bytes, not two handles. The sort makes any such pair adjacent.
     out.dedup();
     out
+}
+
+/// One keyed tag's marks as disjoint runs keyed by start, each painted over
+/// whatever it lands on.
+#[derive(Default)]
+struct KeyedRuns(std::collections::BTreeMap<Usv, (Usv, MarkKind)>);
+
+impl KeyedRuns {
+    fn paint(&mut self, m: Mark) {
+        let straddling = self
+            .0
+            .range(..m.start)
+            .next_back()
+            .filter(|(_, (end, _))| *end > m.start)
+            .map(|(&start, _)| start);
+        let covered: Vec<Usv> = straddling
+            .into_iter()
+            .chain(self.0.range(m.start..m.end).map(|(&start, _)| start))
+            .collect();
+        for start in covered {
+            let (end, kind) = self.0.remove(&start).expect("a listed run");
+            if start < m.start {
+                self.0.insert(start, (m.start, kind.clone()));
+            }
+            if end > m.end {
+                self.0.insert(m.end, (end, kind));
+            }
+        }
+        self.0.insert(m.start, (m.end, m.kind));
+    }
 }
 
 #[cfg(test)]
@@ -1464,6 +1587,42 @@ mod tests {
             f(4, 6, b.clone()),
         ]);
         assert_eq!(got, vec![f(0, 4, a), f(4, 6, b)]);
+    }
+
+    /// Two values of one keyed tag never share a character: the later clips the
+    /// earlier wherever they meet, inside, across an edge or over it whole, and
+    /// pieces left at one value union again. Another tag is untouched.
+    #[test]
+    fn a_keyed_tag_holds_one_value_per_character() {
+        let family = |name: &str| MarkKind::FontFamily { name: name.into() };
+        let large = MarkKind::FontSize { step: FontStep::Large };
+        let small = MarkKind::FontSize { step: FontStep::Small };
+        let cases = [
+            (
+                vec![f(0, 10, family("A")), f(3, 6, family("B"))],
+                vec![f(0, 3, family("A")), f(3, 6, family("B")), f(6, 10, family("A"))],
+            ),
+            (
+                vec![f(3, 6, family("B")), f(0, 10, family("A"))],
+                vec![f(0, 10, family("A"))],
+            ),
+            (
+                vec![f(0, 5, family("A")), f(3, 8, family("B")), f(7, 9, family("A"))],
+                vec![f(0, 3, family("A")), f(3, 7, family("B")), f(7, 9, family("A"))],
+            ),
+            (
+                vec![f(0, 4, small.clone()), f(4, 8, small.clone()), f(2, 3, large.clone()), f(2, 3, small.clone())],
+                vec![f(0, 8, small.clone())],
+            ),
+            (
+                vec![f(0, 6, large.clone()), f(2, 4, family("A")), f(1, 2, small.clone())],
+                vec![f(0, 1, large.clone()), f(1, 2, small), f(2, 4, family("A")), f(2, 6, large)],
+            ),
+        ];
+        for (input, want) in cases {
+            assert_eq!(normalize_marks(input.clone()), want, "{input:?}");
+            assert_eq!(normalize_marks(want.clone()), want, "a fixed point");
+        }
     }
 
     #[test]

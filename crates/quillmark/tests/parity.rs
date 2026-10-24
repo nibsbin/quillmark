@@ -449,7 +449,7 @@ fn lowering(quill: &Quill, doc: &Document) -> Result<String, String> {
     let data = quill
         .compile_checked(doc, common::test_date())
         .map_err(|e| format!("compile fails: {e:?}"))?;
-    let workspace = quillmark::typst_workspace::workspace(quill, &data)
+    let workspace = quillmark::typst_workspace::workspace(quill, &data, &Default::default())
         .map_err(|e| format!("workspace fails: {e:?}"))?;
     let lib = workspace
         .files

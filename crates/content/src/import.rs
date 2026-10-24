@@ -239,6 +239,20 @@ struct Inline {
     /// a bare one's start position and tag offset, `None` for one carrying an
     /// attribute, which pairs and underlines nothing.
     underlines: Vec<Option<(usize, usize)>>,
+    /// Each `<qm-font>` this run has read and whose `</qm-font>` it awaits,
+    /// innermost last, `None` for one setting nothing.
+    fonts: Vec<Option<OpenFont>>,
+    /// Each closed `<qm-font>`'s range per keyed tag it set, `size="normal"`
+    /// included: a pair around it sets nothing there.
+    painted: Vec<(&'static str, usize, usize)>,
+}
+
+/// A `<qm-font>` whose `</qm-font>` an inline run awaits.
+struct OpenFont {
+    start: usize,
+    /// The open tag's byte offset.
+    at: usize,
+    font: carrier::font::Font,
 }
 
 impl Inline {
@@ -274,6 +288,13 @@ impl Inline {
         }
         for (start, _) in self.underlines.iter_mut().flatten() {
             *start = (*start).min(pos);
+        }
+        for open in self.fonts.iter_mut().flatten() {
+            open.start = open.start.min(pos);
+        }
+        for (_, start, end) in &mut self.painted {
+            *start = (*start).min(pos);
+            *end = (*end).min(pos);
         }
     }
 
@@ -320,11 +341,54 @@ impl Inline {
         }
     }
 
-    /// End the run: each bare `<u>` still open drops as unclosed.
+    /// Pair one `<qm-font>` tag as [`underline`](Self::underline) pairs a
+    /// `<u>`. A closing pair sets its run's family and size wherever no pair it
+    /// holds already set that tag, so the innermost pair wins.
+    fn font(&mut self, tag: FontTag) {
+        match tag {
+            FontTag::Open { at, font } => self.fonts.push(Some(OpenFont { start: self.pos, at, font })),
+            FontTag::Held => self.fonts.push(None),
+            FontTag::Close => {
+                let Some(Some(OpenFont { start, font, .. })) = self.fonts.pop() else {
+                    return;
+                };
+                let end = self.pos;
+                if start >= end {
+                    return;
+                }
+                for (tag, kind) in font.marks() {
+                    let mut held: Vec<(usize, usize)> = self
+                        .painted
+                        .iter()
+                        .filter(|&&(t, s, e)| t == tag && start <= s && e <= end)
+                        .map(|&(_, s, e)| (s, e))
+                        .collect();
+                    held.sort_unstable();
+                    if let Some(kind) = kind {
+                        let mut at = start;
+                        for (s, e) in held.into_iter().chain([(end, end)]) {
+                            if at < s {
+                                self.marks.push(Mark { start: at, end: s, kind: kind.clone() });
+                            }
+                            at = at.max(e);
+                        }
+                    }
+                    self.painted.push((tag, start, end));
+                }
+            }
+        }
+    }
+
+    /// End the run: each bare `<u>` and each `<qm-font>` setting something
+    /// still open drops as unclosed.
     fn drop_open(&mut self, dropped: &mut Drops) {
         for (_, at) in self.underlines.drain(..).flatten() {
             dropped.add(Dropped::Tag("u".into()), at);
         }
+        for open in self.fonts.drain(..).flatten() {
+            dropped.add(Dropped::Element(carrier::FONT.into()), open.at);
+        }
+        self.painted.clear();
     }
 
     /// One inline event of a flat run, a note's: text and the marks over it,
@@ -762,6 +826,10 @@ impl Builder {
                     self.underline_tag(tag);
                     continue;
                 }
+                Fixed::Font(tag) => {
+                    self.font_tag(tag);
+                    continue;
+                }
                 Fixed::Swallowed(name, at) => {
                     self.swallowed(name, at);
                     continue;
@@ -1173,6 +1241,35 @@ impl Builder {
             self.open_early();
         }
         self.inline.underline(tag);
+    }
+
+    /// Pair one `<qm-font>` tag in the run, table cell or note it stands in,
+    /// as [`Self::underline_tag`] pairs a `<u>`. In a cell it is content, so a
+    /// `qm-cell` pair stays outside it.
+    fn font_tag(&mut self, tag: FontTag) {
+        if let Some(note) = self.note.as_mut() {
+            if note.img_depth == 0 {
+                if matches!(tag, FontTag::Open { .. }) {
+                    note.fill();
+                }
+                note.inline.font(tag);
+            }
+            return;
+        }
+        if self.image_depth > 0 {
+            return;
+        }
+        if let Some(acc) = self.table.as_mut() {
+            if let Some(cell) = acc.cell.as_mut() {
+                acc.pair.content();
+                cell.font(tag);
+            }
+            return;
+        }
+        if matches!(tag, FontTag::Open { .. }) {
+            self.open_early();
+        }
+        self.inline.font(tag);
     }
 
     /// Drop each wrapper still open where its list item, quote or the body
@@ -1625,6 +1722,7 @@ enum Fixed<'a> {
     Event(Event<'a>),
     Carrier(CarrierTag),
     Underline(UTag),
+    Font(FontTag),
     /// A wrapper's close tag in an HTML block of closing tags that drops
     /// markdown with them, at the block's byte offset.
     Swallowed(String, usize),
@@ -1646,6 +1744,16 @@ enum UTag {
     Open { at: usize },
     /// A `<u>` carrying an attribute, or self-closing: it drops, and still
     /// pairs with a `</u>`.
+    Held,
+    Close,
+}
+
+/// An inline `<qm-font>` tag, paired by the builder as a `<u>` is.
+enum FontTag {
+    /// An open tag setting a family or a size, at this byte offset.
+    Open { at: usize, font: carrier::font::Font },
+    /// An open tag setting neither, or self-closing: it drops, and still pairs
+    /// with a `</qm-font>`.
     Held,
     Close,
 }
@@ -1775,8 +1883,8 @@ struct MarkdownFixer<'a, I> {
     /// Open marks, links, images, headings and tables, where a line of carrier
     /// tags stays text.
     depth: usize,
-    /// The `<u>` tags open in the current inline run, where a line of carrier
-    /// tags stays text too.
+    /// The `<u>` and `<qm-font>` tags open in the current inline run, where a
+    /// line of carrier tags stays text too.
     underlines: usize,
 }
 
@@ -1813,6 +1921,26 @@ where
             _ => {}
         }
         Some((event, range))
+    }
+
+    /// One inline `<qm-font>` tag, its refused attributes and a tag setting
+    /// nothing handed on as drops.
+    fn font_tag(&mut self, tag: &html::Tag, at: usize) -> FontTag {
+        if tag.closing {
+            self.underlines = self.underlines.saturating_sub(1);
+            return FontTag::Close;
+        }
+        self.underlines += 1;
+        let (font, refused) = carrier::font::Font::read(&carrier::decode_attrs(&tag.attrs));
+        for attr in refused {
+            let element = carrier::FONT.to_string();
+            self.held.push_back(Fixed::Dropped(Dropped::ElementAttr { element, attr }, at));
+        }
+        if tag.self_closing || !font.sets() {
+            self.drop_tag(tag, at);
+            return FontTag::Held;
+        }
+        FontTag::Open { at, font }
     }
 
     /// Hand on what an opening tag reports where it drops.
@@ -1948,6 +2076,9 @@ where
                 }
                 if tag.name.eq_ignore_ascii_case("br") && !tag.closing {
                     return Some(Fixed::Event(Event::HardBreak));
+                }
+                if carrier::wrapper(tag.name).as_deref() == Some(carrier::FONT) {
+                    return Some(Fixed::Font(self.font_tag(&tag, range.start)));
                 }
                 if let Some(mut carrier) = CarrierTag::of(&tag, false, range.start) {
                     let space = |c: &char| matches!(c, ' ' | '\t');
@@ -2169,6 +2300,67 @@ pub(crate) mod tests {
         );
         assert!(cells[1].1.is_empty());
         assert_eq!(dropped(&imported), [("u", 1)]);
+    }
+
+    /// A `qm-font` pair sets its run's family and step; the innermost pair
+    /// holding a tag wins, `size="normal"` holds the surrounding size, and an
+    /// attribute it cannot read drops alone while the pair keeps the rest.
+    #[test]
+    fn a_qm_font_pair_sets_its_runs_family_and_step() {
+        let family = |name: &str| MarkKind::FontFamily { name: name.into() };
+        let size = |step| MarkKind::FontSize { step };
+        let (small, large) = (crate::model::FontStep::Small, crate::model::FontStep::Large);
+        let cases: Vec<(&str, &str, Vec<Mark>, Vec<(&str, usize)>)> = vec![
+            (
+                "a <qm-font family=\"Carlito\" size=\"large\">b</qm-font> c",
+                "a b c",
+                vec![Mark::new(2, 3, family("Carlito")), Mark::new(2, 3, size(large))],
+                vec![],
+            ),
+            (
+                "<qm-font family=\"A\">a <qm-font family=\"B\" size=\"small\">b</qm-font></qm-font>",
+                "a b",
+                vec![Mark::new(0, 2, family("A")), Mark::new(2, 3, family("B")), Mark::new(2, 3, size(small))],
+                vec![],
+            ),
+            (
+                "**a <qm-font size=\"large\">b** c</qm-font>",
+                "a b c",
+                vec![Mark::new(0, 3, MarkKind::Strong), Mark::new(2, 5, size(large))],
+                vec![],
+            ),
+            (
+                "<qm-font size=\"huge\" family=\"A\" weight=\"700\">a</qm-font>",
+                "a",
+                vec![Mark::new(0, 1, family("A"))],
+                vec![("qm-font[size]", 1), ("qm-font[weight]", 1)],
+            ),
+            ("<qm-font>a</qm-font> <qm-font size=\"huge\">b</qm-font>", "a b", vec![], vec![("qm-font", 2), ("qm-font[size]", 1)]),
+            ("<qm-font family=\" A\">a</qm-font>", "a", vec![], vec![("qm-font[family]", 1), ("qm-font", 1)]),
+            ("<qm-font size=\"small\"/>a", "a", vec![], vec![("qm-font", 1)]),
+            ("<qm-font size=\"normal\">a</qm-font>", "a", vec![], vec![]),
+        ];
+        for (md, text, marks, warned) in cases {
+            let imported = imp_fixed(md);
+            assert_eq!(imported.content.text, text, "{md:?}");
+            assert_eq!(imported.content.marks, marks, "{md:?}");
+            assert_eq!(dropped(&imported), warned, "{md:?}");
+        }
+
+        let imported = imp_fixed("| <qm-font family=\"A\">a **b</qm-font> c** |\n|---|\n\na[^1]\n\n[^1]: <qm-font size=\"small\">n</qm-font>");
+        let cells = crate::serial::table_cells(&imported.content.islands[0].props);
+        assert_eq!(cells[0].1, [Mark::new(0, 3, family("A")), Mark::new(2, 5, MarkKind::Strong)]);
+        let (_, note) = crate::serial::parse_cell(&imported.content.islands[1].props);
+        assert_eq!(note, [Mark::new(0, 1, size(small))]);
+    }
+
+    /// A tag line inside an open `qm-font` pair is its text, as one inside an
+    /// open `<u>` is.
+    #[test]
+    fn a_tag_line_inside_an_open_qm_font_pair_is_text() {
+        let imported = imp_fixed("<qm-font size=\"large\">a\n<qm-keep>\nb</qm-font>");
+        assert_eq!(imported.content.lines.len(), 1);
+        assert!(imported.content.marks.iter().all(|m| m.kind == MarkKind::FontSize { step: crate::model::FontStep::Large }));
     }
 
     #[test]

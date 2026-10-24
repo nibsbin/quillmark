@@ -1,5 +1,5 @@
 use quillmark_core::{
-    backend::Backend,
+    backend::{Backend, FontFace},
     document::Document,
     error::{Diagnostic, RenderError, RenderResult, Severity},
     quill::{CalendarDate, Quill},
@@ -18,8 +18,21 @@ pub struct Engine {
 }
 
 impl Engine {
-    /// An engine with a backend registered per enabled cargo feature.
+    /// An engine with a backend registered per enabled cargo feature and no
+    /// host fonts.
     pub fn new() -> Self {
+        Self::with_fonts(Vec::new()).expect("an empty font library refuses nothing")
+    }
+
+    /// An engine whose sessions also set text in `fonts`, the host's font
+    /// library: each a `.ttf`, `.otf`, `.ttc` or `.otc` file's bytes, parsed
+    /// once here and shared by every session. A family the quill ships
+    /// shadows the library's faces of it, and the library shadows the
+    /// embedded fallback's. Refused whole, one diagnostic per file, when a
+    /// file is another format (`engine::font_unsupported`) or holds no
+    /// readable face (`engine::font_unreadable`). An acroform session reads
+    /// no fonts.
+    pub fn with_fonts(fonts: Vec<Vec<u8>>) -> Result<Self, RenderError> {
         // `mut` is unused when no backend features are enabled (e.g. a
         // Typst-less core build).
         #[allow(unused_mut)]
@@ -29,15 +42,18 @@ impl Engine {
 
         #[cfg(feature = "typst")]
         {
-            engine.register_backend(Box::new(quillmark_typst::TypstBackend));
+            let library = Arc::new(quillmark_typst::FontLibrary::new(fonts)?);
+            engine.register_backend(Box::new(quillmark_typst::TypstBackend::new(library)));
         }
+        #[cfg(not(feature = "typst"))]
+        let _ = fonts;
 
         #[cfg(feature = "acroform")]
         {
             engine.register_backend(Box::new(quillmark_acroform::AcroformBackend));
         }
 
-        engine
+        Ok(engine)
     }
 
     #[cfg(any(feature = "typst", feature = "acroform"))]
@@ -118,6 +134,13 @@ impl Engine {
     /// The output formats `quill`'s backend can emit; compiles nothing.
     pub fn supported_formats(&self, quill: &Quill) -> Result<&'static [OutputFormat], RenderError> {
         Ok(self.resolve_backend(quill)?.supported_formats())
+    }
+
+    /// The text faces a session of `quill` sets a `font_family` mark in, in
+    /// the order its font book holds them: the quill's own, the host's, then
+    /// the embedded fallback. Empty for a backend that reads no fonts.
+    pub fn font_faces(&self, quill: &Quill) -> Result<Vec<FontFace>, RenderError> {
+        Ok(self.resolve_backend(quill)?.font_faces(quill))
     }
 }
 

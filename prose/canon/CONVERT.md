@@ -18,7 +18,7 @@ this page documents how the backend lowers the content it produces.
 ```
 emit_content(&Normalized) -> Result<Emission, EmitError>
   ├─ block walk    lines → headings, paragraphs, code fences, lists, quotes, terms, elements, islands
-  ├─ mark sweep    anchored marks → nested #strong[…] / #emph[…] / #link(…)[…] / …
+  ├─ mark sweep    anchored marks → nested #strong[…] / #emph[…] / #link(…)[…] / #_qm-font(…)[…] / …
   └─ source map    per-segment (content ↔ gen) windows + one (content, gen) pair per run
 ```
 
@@ -130,6 +130,7 @@ is a lowering bug, never a document's.
 | `MarkKind::Code` | `#raw("…")` (inline) |
 | `MarkKind::Link{url}` | `#link("url")[…]` (`escape_string` on the url) |
 | `MarkKind::Anchor` | nothing |
+| `MarkKind::FontFamily{name}`, `MarkKind::FontSize{step}` | `#_qm-font("name", "step")[…]`, one call per stretch of one family and step (see [Font runs](#font-runs)) |
 | `Container::ListItem` (bullet) | `- ` |
 | `Container::ListItem` (ordered) | `+ ` auto-numbered; the run's first item emits `N. `, which restarts Typst's running counter so an adjacent list numbers from its own `start` |
 | `Container::ListItem{checked}` (task) | the item's marker, then `#_qm-task(done)[…]` around its body (see [Tasks](#tasks)) |
@@ -247,6 +248,35 @@ family has the embedded Noto Sans Math, cut to the blocks an equation commonly
 draws from, answer to the name and to its own, so an equation draws whatever
 text fonts the quill ships.
 
+### Font runs
+
+`MarkKind::FontFamily` and `MarkKind::FontSize` lower together. The sweep cuts
+a line at every edge of either and of a code mark, and wraps each stretch of
+one family and step in a call to the helper's `_qm-font`, merging equal
+neighbours:
+
+```typst
+#_qm-font("Carlito", "large")[…]
+#_qm-font(none, "small")[…]
+```
+
+- Codegen writes the session's families, lowercased, into the helper as
+  `_qm-families`, math faces left out. `_qm-font` sets a family
+  only where `_qm-families` holds it, ahead of the font list in force filtered
+  to the same set, so a character the family lacks falls through to the
+  surrounding font and Typst's own "unknown font family" warning never fires.
+- A family the session lacks keeps the surrounding font, and the compile
+  carries one [`typst::unknown_font_family`](ERROR.md#warning-flow) warning per
+  family and content field, `path` the field's `DocPath`.
+- The step reads the helper's `font-steps`, a `state` holding
+  `(small: 0.85em, large: 1.2em)`, at its final value, so a plate's
+  `#qm.font-steps.update(..)` anywhere sets every run's size, merged over
+  the defaults. A stretch carries one step, so steps never compound.
+- A stretch stops at a code span, whose `raw` keeps its own font and size, and
+  at a math or table island's slot. A footnote's slot stays inside it: a
+  footnote entry takes none of its reference's styles, so the note is set by
+  its own runs.
+
 ### Declined images
 
 An `image` island lowers to nothing, and the compile that dropped it carries one
@@ -297,7 +327,8 @@ kind-ord)` and closes-and-reopens deeper survivors at each overlap boundary, so
 free overlap lowers to properly nested markup: `strong[0,4)` over `emph[2,6)`
 on `abcdef` becomes `#strong[ab#emph[cd]]#emph[ef]`, bracket-balanced. `code`
 marks render atomically as `#raw("…")` (their content is a string literal, so no
-inner mark applies).
+inner mark applies). Font marks join the sweep as [font runs](#font-runs),
+already cut so no two overlap.
 
 ## Source map
 

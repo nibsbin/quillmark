@@ -279,7 +279,9 @@ and the failed render carries the warning after that error.
 
 ## Fonts
 
-A quill carries its own fonts. The backend loads every `.ttf`, `.otf`, `.ttc` and `.otc` under `assets/fonts/` and inside vendored `packages/`. A `.ttc` or `.otc` collection loads every face it holds, up to 256; one declaring more loads none and warns `typst::font_collection_skipped`. An asset font wins a family a package also ships. A quill bundling none renders in the embedded Roboto, upright and italic, at any weight from 100 to 900. The host's installed fonts are not among them, so `#set text(font: "Arial")` names a family the compile cannot find. A character no loaded font covers draws as an empty box, and the render warns `typst::missing_glyph` naming it.
+A quill carries its own fonts. The backend loads every `.ttf`, `.otf`, `.ttc` and `.otc` under `assets/fonts/` and inside vendored `packages/`. A `.ttc` or `.otc` collection loads every face it holds, up to 256; one declaring more loads none and warns `typst::font_collection_skipped`. An asset font wins a family a package also ships. A quill bundling none renders in the embedded Roboto, upright and italic, at any weight from 100 to 900. A character no loaded font covers draws as an empty box, and the render warns `typst::missing_glyph` naming it.
+
+An app can add a font library when it builds its engine: `Engine::with_fonts` in Rust, the `fonts` option of `new Engine(..)` in JavaScript, `Engine(fonts=..)` in Python, `--font` on the CLI. Each file is a `.ttf`, `.otf`, `.ttc` or `.otc`; any other format, WOFF and WOFF2 included, fails the engine with `engine::font_unsupported`. A family the quill ships wins over the library's, every face of it, so a library never adds a bold to a quill's family, and the embedded Roboto gives way to a library holding Roboto. The machine's installed fonts are never read, so `#set text(font: "Arial")` names a family the compile cannot find unless the quill or the app supplies it.
 
 Equations draw in the embedded Noto Sans Math unless the quill ships a math font of its own (see [Footnotes, equations and definition lists](#footnotes-equations-and-definition-lists)).
 
@@ -294,6 +296,14 @@ my-quill/
 ```
 
 Then reference them by family name (`#set text(font: "CustomFont")`).
+
+### Font runs in content
+
+Text a writer sets in a family or size, a [`qm-font`](../authoring/markdown-syntax.md#font-family-and-size) pair, lowers through the helper. The family goes ahead of the font list in force, so a character it lacks falls through to the plate's font, and a family no loaded font holds keeps the plate's font and warns `typst::unknown_font_family`. Code spans and equations keep their own font and size. The two size steps are the helper's `qm.font-steps`, `(small: 0.85em, large: 1.2em)`, which a plate sets anywhere; a step it leaves out keeps its default:
+
+```typst
+#qm.font-steps.update((large: 1.25em))
+```
 
 ## Images
 

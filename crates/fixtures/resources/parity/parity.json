@@ -827,6 +827,101 @@
     }
   },
   {
+    "name": "mark.font_family",
+    "markdown": "<qm-font family=\"Roboto\">set</qm-font>",
+    "content": {
+      "islands": [],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "para"
+        }
+      ],
+      "marks": [
+        {
+          "attrs": {
+            "name": "Roboto"
+          },
+          "end": 3,
+          "start": 0,
+          "type": "font_family"
+        }
+      ],
+      "text": "set"
+    },
+    "typst": [
+      "#_qm-font(\"Roboto\", none)[set]"
+    ],
+    "signals": {
+      "import": [],
+      "render": []
+    }
+  },
+  {
+    "name": "mark.font_size",
+    "markdown": "<qm-font size=\"large\">big</qm-font>",
+    "content": {
+      "islands": [],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "para"
+        }
+      ],
+      "marks": [
+        {
+          "attrs": {
+            "step": "large"
+          },
+          "end": 3,
+          "start": 0,
+          "type": "font_size"
+        }
+      ],
+      "text": "big"
+    },
+    "typst": [
+      "#_qm-font(none, \"large\")[big]"
+    ],
+    "signals": {
+      "import": [],
+      "render": []
+    }
+  },
+  {
+    "name": "mark.font_family.unknown",
+    "markdown": "<qm-font family=\"Carlito\">set</qm-font>",
+    "content": {
+      "islands": [],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "para"
+        }
+      ],
+      "marks": [
+        {
+          "attrs": {
+            "name": "Carlito"
+          },
+          "end": 3,
+          "start": 0,
+          "type": "font_family"
+        }
+      ],
+      "text": "set"
+    },
+    "typst": [
+      "set"
+    ],
+    "signals": {
+      "import": [],
+      "render": [
+        "typst::unknown_font_family"
+      ]
+    }
+  },
+  {
     "name": "island.table.aligns",
     "markdown": "| a | b | c |\n| :--- | :---: | ---: |\n| 1 | 2 | 3 |",
     "content": {
@@ -1198,6 +1293,81 @@
     },
     "typst": [
       "table.cell(align: right + horizon)[#strong[1] #emph[2]]"
+    ],
+    "signals": {
+      "import": [],
+      "render": []
+    }
+  },
+  {
+    "name": "island.table.cell.font",
+    "markdown": "| a | b |\n| --- | --- |\n| <qm-cell align=\"center\"><qm-font size=\"small\">1</qm-font></qm-cell> | <qm-font family=\"Roboto\">2</qm-font> |",
+    "content": {
+      "islands": [
+        {
+          "id": "isl-0",
+          "props": {
+            "aligns": [
+              "none",
+              "none"
+            ],
+            "header": [
+              {
+                "marks": [],
+                "text": "a"
+              },
+              {
+                "marks": [],
+                "text": "b"
+              }
+            ],
+            "rows": [
+              [
+                {
+                  "marks": [
+                    {
+                      "attrs": {
+                        "step": "small"
+                      },
+                      "end": 1,
+                      "start": 0,
+                      "type": "font_size"
+                    }
+                  ],
+                  "text": "1",
+                  "align": "center"
+                },
+                {
+                  "marks": [
+                    {
+                      "attrs": {
+                        "name": "Roboto"
+                      },
+                      "end": 1,
+                      "start": 0,
+                      "type": "font_family"
+                    }
+                  ],
+                  "text": "2"
+                }
+              ]
+            ]
+          },
+          "type": "table"
+        }
+      ],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "para"
+        }
+      ],
+      "marks": [],
+      "text": "￼"
+    },
+    "typst": [
+      "table.cell(align: center)[#_qm-font(none, \"small\")[1]]",
+      "[#_qm-font(\"Roboto\", none)[2]]"
     ],
     "signals": {
       "import": [],
@@ -3391,6 +3561,169 @@
       "import": [
         {
           "construct": "qm-cell[valign]",
+          "count": 1
+        }
+      ],
+      "render": []
+    }
+  },
+  {
+    "name": "carrier.font.normal",
+    "markdown": "<qm-font size=\"large\">a <qm-font size=\"normal\">b</qm-font> c</qm-font>",
+    "content": {
+      "islands": [],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "para"
+        }
+      ],
+      "marks": [
+        {
+          "attrs": {
+            "step": "large"
+          },
+          "end": 2,
+          "start": 0,
+          "type": "font_size"
+        },
+        {
+          "attrs": {
+            "step": "large"
+          },
+          "end": 5,
+          "start": 3,
+          "type": "font_size"
+        }
+      ],
+      "text": "a b c"
+    },
+    "typst": [
+      "#_qm-font(none, \"large\")[a ]b",
+      "#_qm-font(none, \"large\")[c]"
+    ],
+    "signals": {
+      "import": [],
+      "render": []
+    }
+  },
+  {
+    "name": "carrier.font.value",
+    "markdown": "a <qm-font family=\"Roboto\" size=\"huge\">b</qm-font> c",
+    "content": {
+      "islands": [],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "para"
+        }
+      ],
+      "marks": [
+        {
+          "attrs": {
+            "name": "Roboto"
+          },
+          "end": 3,
+          "start": 2,
+          "type": "font_family"
+        }
+      ],
+      "text": "a b c"
+    },
+    "typst": [
+      "a #_qm-font(\"Roboto\", none)[b] c"
+    ],
+    "signals": {
+      "import": [
+        {
+          "construct": "qm-font[size]",
+          "count": 1
+        }
+      ],
+      "render": []
+    }
+  },
+  {
+    "name": "carrier.font.unclosed",
+    "markdown": "a <qm-font size=\"large\">b c",
+    "content": {
+      "islands": [],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "para"
+        }
+      ],
+      "marks": [],
+      "text": "a b c"
+    },
+    "typst": [
+      "a b c"
+    ],
+    "signals": {
+      "import": [
+        {
+          "construct": "qm-font",
+          "count": 1
+        }
+      ],
+      "render": []
+    }
+  },
+  {
+    "name": "carrier.cell.in_font",
+    "markdown": "| a |\n| --- |\n| <qm-font size=\"large\"><qm-cell align=\"center\">1</qm-cell></qm-font> |",
+    "content": {
+      "islands": [
+        {
+          "id": "isl-0",
+          "props": {
+            "aligns": [
+              "none"
+            ],
+            "header": [
+              {
+                "marks": [],
+                "text": "a"
+              }
+            ],
+            "rows": [
+              [
+                {
+                  "marks": [
+                    {
+                      "attrs": {
+                        "step": "large"
+                      },
+                      "end": 1,
+                      "start": 0,
+                      "type": "font_size"
+                    }
+                  ],
+                  "text": "1"
+                }
+              ]
+            ]
+          },
+          "type": "table"
+        }
+      ],
+      "lines": [
+        {
+          "containers": [],
+          "kind": "para"
+        }
+      ],
+      "marks": [],
+      "text": "￼"
+    },
+    "typst": [
+      "[#_qm-font(none, \"large\")[1]]"
+    ],
+    "signals": {
+      "import": [
+        {
+          "construct": "qm-cell",
           "count": 1
         }
       ],
